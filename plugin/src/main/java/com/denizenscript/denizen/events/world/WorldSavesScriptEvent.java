@@ -23,25 +23,18 @@ public class WorldSavesScriptEvent extends BukkitScriptEvent implements Listener
     // -->
 
     public WorldSavesScriptEvent() {
-        instance = this;
         registerCouldMatcher("<world> saves");
     }
 
-    public static WorldSavesScriptEvent instance;
     public WorldTag world;
     public WorldSaveEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryWorld(world, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, world)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "WorldSaves";
     }
 
     @Override

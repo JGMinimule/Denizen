@@ -4,6 +4,7 @@ import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.scripts.containers.core.InteractScriptContainer;
 import com.denizenscript.denizen.scripts.containers.core.InteractScriptHelper;
 import com.denizenscript.denizen.utilities.Utilities;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.Settings;
 import com.denizenscript.denizen.nms.NMSHandler;
@@ -16,7 +17,6 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.ArgumentHelper;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ScriptTag;
-import com.denizenscript.denizencore.scripts.commands.queue.DetermineCommand;
 import com.denizenscript.denizencore.tags.TagManager;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.Bukkit;
@@ -41,7 +41,11 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
     // @name Chat Triggers
     // @group NPC Interact Scripts
     // @description
-    // Chat Triggers are triggered when when a player chats to the NPC (usually while standing close to the NPC and facing the NPC).
+    // Chat Triggers are triggered when a player chats to the NPC (usually while standing close to the NPC and facing the NPC).
+    //
+    // They can also be triggered by the command "/denizenclickable chat hello" (where 'hello' is replaced with the chat message). This is used for clickable triggers.
+    // This option enforces all the same limitations as chatting directly, but unlike real chat, won't display the message in global chat when there's no match.
+    // This requires players have the permission "denizen.clickable".
     //
     // Interact scripts are allowed to define a list of possible messages a player may type and the scripts triggered in response.
     //
@@ -49,44 +53,53 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
     // <code>
     // # Some identifier for the trigger, this only serves to make the sub-triggers unique, and sort them (alphabetically).
     // 1:
-    //   # The trigger message written by a player. The text between // must be typed by a player, the other text is filled automatically.
-    //   trigger: /keyword/ othertext
-    //   script:
-    //   # Your code here
-    //   - wait 1
-    //   # use "<context.message>" for the exact text written by the player.
-    //   - chat "<context.message> eh?"
+    //     # The trigger message written by a player. The text between // must be typed by a player, the other text is filled automatically.
+    //     trigger: /keyword/ othertext
+    //     script:
+    //     # Your code here
+    //     - wait 1
+    //     # use "<context.message>" for the exact text written by the player.
+    //     - chat "<context.message> eh?"
     // # You can list as many as you want
     // 2:
-    //   # You can have multi-option triggers, separated by pipes (the "|" symbol). This example matches if player types 'hi', 'hello', OR 'hey'.
-    //   trigger: /hi|hello|hey/
-    //   script:
-    //   - wait 1
-    //   # use "<context.keyword>" for the specific word that was said.
-    //   # this example will respond to players that said 'hi' with "hi there buddy!", 'hello' with "hello there buddy!", etc.
-    //   - chat "<context.keyword> there buddy!"
+    //     # You can have multi-option triggers, separated by pipes (the "|" symbol). This example matches if player types 'hi', 'hello', OR 'hey'.
+    //     trigger: /hi|hello|hey/
+    //     script:
+    //     - wait 1
+    //     # use "<context.keyword>" for the specific word that was said.
+    //     # this example will respond to players that said 'hi' with "hi there buddy!", 'hello' with "hello there buddy!", etc.
+    //     - chat "<context.keyword> there buddy!"
     // 3:
-    //   # You can have regex triggers. This example matches when the player types any numbers.
-    //   trigger: /regex:\d+/
-    //   script:
-    //   - wait 1
-    //   # use "<context.keyword>" for the text matched by the regex matcher.
-    //   - chat "<context.keyword> eh?"
+    //     # You can have regex triggers. This example matches when the player types any numbers.
+    //     trigger: /regex:\d+/
+    //     script:
+    //     - wait 1
+    //     # use "<context.keyword>" for the text matched by the regex matcher.
+    //     - chat "<context.keyword> eh?"
     // 4:
-    //   # Use '*' as the trigger to match anything at all.
-    //   trigger: /*/
-    //   # Add this line to hide the "[Player -> NPC]: hi" initial trigger message.
-    //   hide trigger message: true
-    //   # Add this line to show the player chat message in the normal chat.
-    //   show as normal chat: true
-    //   script:
-    //   # If you hide the trigger message but not show as normal chat, you might want to fill that spot with something else.
-    //   - narrate "[Player -> NPC]: I don't know how to type the right thing"
-    //   - wait 1
-    //   - chat "Well type 'keyword' or any number!"
+    //     # Use '*' as the trigger to match anything at all.
+    //     trigger: /*/
+    //     # Add this line to hide the "[Player -> NPC]: hi" initial trigger message.
+    //     hide trigger message: true
+    //     # Add this line to show the player chat message in the normal chat.
+    //     show as normal chat: true
+    //     script:
+    //     # If you hide the trigger message but not show as normal chat, you might want to fill that spot with something else.
+    //     - narrate "[Player -> NPC]: I don't know how to type the right thing"
+    //     - wait 1
+    //     - chat "Well type 'hello' or any number!"
+    //     - narrate "Click <element[here].on_hover[click me!].on_click[/denizenclickable chat hello]> to auto-activate the 'hello' trigger!"
     // </code>
     //
     // -->
+
+    public static ChatTrigger instance;
+
+    @Override
+    public AbstractTrigger activate() {
+        instance = this;
+        return super.activate();
+    }
 
     @Override
     public void onEnable() {
@@ -111,41 +124,41 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
     // -->
     public ChatContext process(Player player, String message) {
         NPCTag npc = Utilities.getClosestNPC_ChatTrigger(player.getLocation(), 25);
-        if (Debug.verbose) {
+        if (CoreConfiguration.debugVerbose) {
             Debug.log("Processing chat trigger: valid npc? " + (npc != null));
         }
         if (npc == null) {
             return new ChatContext(false);
         }
-        if (Debug.verbose) {
+        if (CoreConfiguration.debugVerbose) {
             Debug.log("Has trait?  " + npc.getCitizen().hasTrait(TriggerTrait.class));
         }
         if (!npc.getCitizen().hasTrait(TriggerTrait.class)) {
             return new ChatContext(false);
         }
-        if (Debug.verbose) {
+        if (CoreConfiguration.debugVerbose) {
             Debug.log("enabled? " + npc.getCitizen().getOrAddTrait(TriggerTrait.class).isEnabled(name));
         }
         if (!npc.getCitizen().getOrAddTrait(TriggerTrait.class).isEnabled(name)) {
             return new ChatContext(false);
         }
         if (npc.getTriggerTrait().getRadius(name) < npc.getLocation().distance(player.getLocation())) {
-            if (Debug.verbose) {
+            if (CoreConfiguration.debugVerbose) {
                 Debug.log("Not in range");
             }
             return new ChatContext(false);
         }
         if (Settings.chatMustSeeNPC()) {
             if (!player.hasLineOfSight(npc.getEntity())) {
-                if (Debug.verbose) {
+                if (CoreConfiguration.debugVerbose) {
                     Debug.log("no LOS");
                 }
                 return new ChatContext(false);
             }
         }
         if (Settings.chatMustLookAtNPC()) {
-            if (!NMSHandler.getEntityHelper().isFacingEntity(player, npc.getEntity(), 45)) {
-                if (Debug.verbose) {
+            if (!NMSHandler.entityHelper.isFacingEntity(player, npc.getEntity(), 45)) {
+                if (CoreConfiguration.debugVerbose) {
                     Debug.log("Not facing");
                 }
                 return new ChatContext(false);
@@ -157,7 +170,7 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
         TriggerTrait.TriggerContext trigger = npc.getTriggerTrait().trigger(ChatTrigger.this, new PlayerTag(player), context);
         if (trigger.hasDetermination()) {
             if (trigger.getDeterminations().containsCaseInsensitive("cancelled")) {
-                if (Debug.verbose) {
+                if (CoreConfiguration.debugVerbose) {
                     Debug.log("Cancelled");
                 }
                 return new ChatContext(true);
@@ -165,7 +178,7 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
         }
         if (!trigger.wasTriggered()) {
             if (Settings.chatGloballyIfUninteractable()) {
-                if (Debug.verbose) {
+                if (CoreConfiguration.debugVerbose) {
                     Debug.log(ChatColor.YELLOW + "Resuming. " + ChatColor.WHITE + "The NPC is currently cooling down or engaged.");
                 }
                 return new ChatContext(false);
@@ -179,7 +192,7 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
         }
         List<InteractScriptContainer> scripts = npc.getInteractScripts(new PlayerTag(player), ChatTrigger.class);
         if (scripts == null) {
-            if (Debug.verbose) {
+            if (CoreConfiguration.debugVerbose) {
                 Debug.log("null scripts");
             }
             return new ChatContext(message, false);
@@ -201,39 +214,28 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
                     + "(" + npc.getTriggerTrait().getRadius(name) + ")")
                     + ArgumentHelper.debugObj("Trigger text", message)
                     + ArgumentHelper.debugObj("LOS", String.valueOf(player.hasLineOfSight(npc.getEntity())))
-                    + ArgumentHelper.debugObj("Facing", String.valueOf(NMSHandler.getEntityHelper().isFacingEntity(player, npc.getEntity(), 45))));
+                    + ArgumentHelper.debugObj("Facing", String.valueOf(NMSHandler.entityHelper.isFacingEntity(player, npc.getEntity(), 45))));
         }
         String step = InteractScriptHelper.getCurrentStep(denizenPlayer, script.getName());
         if (!script.containsTriggerInStep(step, ChatTrigger.class)) {
             if (!Settings.chatGloballyIfNoChatTriggers()) {
-                Debug.echoDebug(script, player.getName() + " says to "
-                        + npc.getNicknameTrait().getNickname() + ", " + message);
-                return;
+                Debug.echoDebug(script, player.getName() + " says to " + npc.getNicknameTrait().getNickname() + ", " + message);
             }
-            else {
-                if (Debug.verbose) {
-                    Debug.log("No trigger in step, chatting globally");
-                }
-                return;
+            else if (CoreConfiguration.debugVerbose) {
+                Debug.log("No trigger in step, chatting globally");
             }
+            return;
         }
         String id = null;
-        boolean matched = false;
         String replacementText = null;
-        String regexId = null;
-        String regexMessage = null;
         String messageLow = CoreUtilities.toLowerCase(message);
         Map<String, String> idMap = script.getIdMapFor(ChatTrigger.class, denizenPlayer);
         if (!idMap.isEmpty()) {
+            mainLoop:
             for (Map.Entry<String, String> entry : idMap.entrySet()) {
-
-                // Check if the chat trigger specified in the specified id's 'trigger:' key
-                // matches the text the player has said
-                // TODO: script arg?
                 String triggerText = TagManager.tag(entry.getValue(), new BukkitTagContext(denizenPlayer, npc, null, false, null));
                 Matcher matcher = triggerPattern.matcher(triggerText);
                 while (matcher.find()) {
-                    // TODO: script arg?
                     String keyword = TagManager.tag(matcher.group().replace("/", ""), new BukkitTagContext(denizenPlayer, npc, null, false, null));
                     String[] split = keyword.split("\\\\\\+REPLACE:", 2);
                     String replace = null;
@@ -242,20 +244,17 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
                         replace = split[1];
                     }
                     String keywordLow = CoreUtilities.toLowerCase(keyword);
-                    // Check if the trigger is REGEX, but only if we don't have a REGEX
-                    // match already (thus using alphabetical priority for triggers)
-                    if (regexId == null && keywordLow.startsWith("regex:")) {
+                    if (keywordLow.startsWith("regex:")) {
                         Pattern pattern = Pattern.compile(keyword.substring(6));
                         Matcher m = pattern.matcher(message);
                         if (m.find()) {
-                            // REGEX matches are left for last, so save it in case non-REGEX
-                            // matches don't exist
-                            regexId = entry.getKey();
-                            regexMessage = triggerText.replace(matcher.group(), m.group());
+                            id = entry.getKey();
+                            replacementText = triggerText.replace(matcher.group(), m.group());
                             context.put("keyword", new ElementTag(m.group()));
                             if (replace != null) {
-                                regexMessage = replace;
+                                replacementText = replace;
                             }
+                            break mainLoop;
                         }
                     }
                     else if (keyword.contains("|")) {
@@ -263,48 +262,40 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
                             if (messageLow.contains(CoreUtilities.toLowerCase(subkeyword))) {
                                 id = entry.getKey();
                                 replacementText = triggerText.replace(matcher.group(), subkeyword);
-                                matched = true;
                                 context.put("keyword", new ElementTag(subkeyword));
                                 if (replace != null) {
                                     replacementText = replace;
                                 }
+                                break mainLoop;
                             }
                         }
                     }
                     else if (keyword.equals("*")) {
                         id = entry.getKey();
                         replacementText = triggerText.replace("/*/", message);
-                        matched = true;
                         if (replace != null) {
                             replacementText = replace;
                         }
+                        break mainLoop;
                     }
                     else if (keywordLow.startsWith("strict:") && messageLow.equals(keywordLow.substring("strict:".length()))) {
                         id = entry.getKey();
                         replacementText = triggerText.replace(matcher.group(), keyword.substring("strict:".length()));
-                        matched = true;
                         if (replace != null) {
                             replacementText = replace;
                         }
+                        break mainLoop;
                     }
                     else if (messageLow.contains(keywordLow)) {
                         id = entry.getKey();
                         replacementText = triggerText.replace(matcher.group(), keyword);
-                        matched = true;
                         if (replace != null) {
                             replacementText = replace;
                         }
+                        break mainLoop;
                     }
                 }
-                if (matched) {
-                    break;
-                }
             }
-        }
-
-        if (!matched && regexId != null) {
-            id = regexId;
-            replacementText = regexMessage;
         }
 
         // If there was a match, the id of the match should have been returned.
@@ -315,7 +306,7 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
                 Utilities.talkToNPC(replacementText, denizenPlayer, npc, Settings.chatToNpcOverhearingRange(), new ScriptTag(script));
             }
             parse(npc, denizenPlayer, script, id, context);
-            if (Debug.verbose) {
+            if (CoreConfiguration.debugVerbose) {
                 Debug.log("chat to NPC");
             }
             if (!showNormalChat.equalsIgnoreCase("true")) {
@@ -326,7 +317,7 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
         else {
             if (!Settings.chatGloballyIfFailedChatTriggers()) {
                 Utilities.talkToNPC(message, denizenPlayer, npc, Settings.chatToNpcOverhearingRange(), new ScriptTag(script));
-                if (Debug.verbose) {
+                if (CoreConfiguration.debugVerbose) {
                     Debug.log("Chat globally");
                 }
                 if (!showNormalChat.equalsIgnoreCase("true")) {
@@ -337,7 +328,7 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
             // No matching chat triggers, and the config.yml says we
             // should just ignore the interaction...
         }
-        if (Debug.verbose) {
+        if (CoreConfiguration.debugVerbose) {
             Debug.log("Finished calculating");
         }
         returnable.changed_text = message;
@@ -345,27 +336,18 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
 
     @EventHandler
     public void asyncChatTrigger(final AsyncPlayerChatEvent event) {
-        if (Debug.verbose) {
-            Debug.log("Chat trigger seen, cancelled: " + event.isCancelled()
-                    + ", chatasync: " + Settings.chatAsynchronous());
-        }
         if (event.isCancelled()) {
             return;
         }
-
-        // Return if "Use asynchronous event" is false in config file
         if (!Settings.chatAsynchronous()) {
             return;
         }
-
         if (!event.isAsynchronous()) {
             syncChatTrigger(new PlayerChatEvent(event.getPlayer(), event.getMessage(), event.getFormat(), event.getRecipients()));
             return;
         }
         FutureTask<ChatContext> futureTask = new FutureTask<>(() -> process(event.getPlayer(), event.getMessage()));
-
         Bukkit.getScheduler().runTask(Denizen.getInstance(), futureTask);
-
         try {
             ChatContext context = futureTask.get();
             if (context.wasTriggered()) {
@@ -381,22 +363,21 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
     }
 
     @EventHandler
-    public void syncChatTrigger(final PlayerChatEvent event) {
+    public void syncChatTrigger(PlayerChatEvent event) {
         if (event.isCancelled()) {
             return;
         }
-
-        // Return if "Use asynchronous event" is true in config file
         if (Settings.chatAsynchronous()) {
             return;
         }
+        chatTriggerInternal(event);
+    }
 
+    public void chatTriggerInternal(PlayerChatEvent event) {
         ChatContext chat = process(event.getPlayer(), event.getMessage());
-
         if (chat.wasTriggered()) {
             event.setCancelled(true);
         }
-
         if (chat.hasChanges()) {
             event.setMessage(chat.getChanges());
         }
@@ -406,7 +387,7 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
      * Contains whether the chat trigger successfully 'triggered' and any context that was
      * available while triggering or attempting to trigger.
      */
-    public class ChatContext {
+    public static class ChatContext {
 
         public ChatContext(boolean triggered) {
             this.triggered = triggered;
@@ -425,7 +406,7 @@ public class ChatTrigger extends AbstractTrigger implements Listener {
         }
 
         public String getChanges() {
-            return changed_text != null ? changed_text : DetermineCommand.DETERMINE_NONE;
+            return changed_text != null ? changed_text : "none";
         }
 
         public boolean wasTriggered() {

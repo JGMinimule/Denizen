@@ -40,19 +40,17 @@ public class LootGenerateScriptEvent extends BukkitScriptEvent implements Listen
     // <context.loot_table_id> returns an element indicating the minecraft key for the loot-table that was generated.
     //
     // @Determine
-    // "LOOT:" + ListTag(ItemTag) to change the list of items that will generate as loot.
+    // "LOOT:<ListTag(ItemTag)>" to change the list of items that will generate as loot.
     //
     // @Player when the linked entity is a player.
     //
     // -->
 
     public LootGenerateScriptEvent() {
-        instance = this;
         registerCouldMatcher("loot generates");
         registerSwitches("for");
     }
 
-    public static LootGenerateScriptEvent instance;
     public LootGenerateEvent event;
 
     @Override
@@ -66,11 +64,6 @@ public class LootGenerateScriptEvent extends BukkitScriptEvent implements Listen
             }
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "LootGenerates";
     }
 
     @Override
@@ -118,7 +111,7 @@ public class LootGenerateScriptEvent extends BukkitScriptEvent implements Listen
     }
 
     @EventHandler
-    public void onLightningStrikes(LootGenerateEvent event) {
+    public void onLootGenerate(LootGenerateEvent event) {
         this.event = event;
         fire(event);
     }

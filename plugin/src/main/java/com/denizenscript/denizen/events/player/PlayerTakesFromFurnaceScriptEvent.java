@@ -3,7 +3,6 @@ package com.denizenscript.denizen.events.player;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.LocationTag;
-import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.ObjectTag;
@@ -39,10 +38,8 @@ public class PlayerTakesFromFurnaceScriptEvent extends BukkitScriptEvent impleme
     // -->
 
     public PlayerTakesFromFurnaceScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerTakesFromFurnaceScriptEvent instance;
     public LocationTag location;
     public ItemTag item;
     public FurnaceExtractEvent event;
@@ -60,9 +57,7 @@ public class PlayerTakesFromFurnaceScriptEvent extends BukkitScriptEvent impleme
 
     @Override
     public boolean matches(ScriptPath path) {
-        String itemTest = path.eventArgLowerAt(2);
-
-        if (!tryItem(item, itemTest)) {
+        if (!path.tryArgObject(2, item)) {
             return false;
         }
         if (!runInCheck(path, location)) {
@@ -72,14 +67,9 @@ public class PlayerTakesFromFurnaceScriptEvent extends BukkitScriptEvent impleme
     }
 
     @Override
-    public String getName() {
-        return "PlayerTakesFromFurnace";
-    }
-
-    @Override
     public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag && ((ElementTag) determinationObj).isInt()) {
-            int xp = ((ElementTag) determinationObj).asInt();
+        if (determinationObj instanceof ElementTag element && element.isInt()) {
+            int xp = element.asInt();
             event.setExpToDrop(xp);
             return true;
         }
@@ -88,7 +78,7 @@ public class PlayerTakesFromFurnaceScriptEvent extends BukkitScriptEvent impleme
 
     @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(PlayerTag.mirrorBukkitPlayer(event.getPlayer()), null);
+        return new BukkitScriptEntryData(event.getPlayer());
     }
 
     @Override
@@ -112,5 +102,4 @@ public class PlayerTakesFromFurnaceScriptEvent extends BukkitScriptEvent impleme
         this.event = event;
         fire(event);
     }
-
 }

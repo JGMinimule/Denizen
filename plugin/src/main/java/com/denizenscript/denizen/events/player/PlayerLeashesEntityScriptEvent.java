@@ -36,10 +36,8 @@ public class PlayerLeashesEntityScriptEvent extends BukkitScriptEvent implements
     // -->
 
     public PlayerLeashesEntityScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerLeashesEntityScriptEvent instance;
     public EntityTag entity;
     public PlayerTag holder;
     public PlayerLeashEntityEvent event;
@@ -57,18 +55,13 @@ public class PlayerLeashesEntityScriptEvent extends BukkitScriptEvent implements
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(2))) {
+        if (!path.tryArgObject(2, entity)) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerLeashesEntity";
     }
 
     @Override

@@ -2,7 +2,7 @@ package com.denizenscript.denizen.scripts.commands.core;
 
 import com.denizenscript.denizen.scripts.containers.core.InteractScriptContainer;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
@@ -11,11 +11,7 @@ import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.objects.core.ScriptTag;
 import com.denizenscript.denizencore.objects.core.TimeTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
-import com.denizenscript.denizencore.scripts.ScriptRegistry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-import com.denizenscript.denizencore.scripts.containers.ScriptContainer;
-
-import java.util.function.Consumer;
 
 public class CooldownCommand extends AbstractCommand {
 
@@ -65,12 +61,8 @@ public class CooldownCommand extends AbstractCommand {
     private enum Type {GLOBAL, PLAYER}
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (ScriptContainer script : ScriptRegistry.scriptContainers.values()) {
-            if (script instanceof InteractScriptContainer) {
-                addOne.accept(script.getName());
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addScriptsOfType(InteractScriptContainer.class);
     }
 
     @Override
@@ -80,7 +72,7 @@ public class CooldownCommand extends AbstractCommand {
                     && arg.matchesArgumentType(ScriptTag.class)) {
                 scriptEntry.addObject("script", arg.asType(ScriptTag.class));
             }
-            else if (arg.matchesEnum(Type.values())) {
+            else if (arg.matchesEnum(Type.class)) {
                 scriptEntry.addObject("type", Type.valueOf(arg.getValue().toUpperCase()));
             }
             else if (!scriptEntry.hasObject("duration")

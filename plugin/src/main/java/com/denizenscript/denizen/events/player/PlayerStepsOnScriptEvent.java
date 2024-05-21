@@ -6,6 +6,7 @@ import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
+import org.bukkit.Location;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -18,8 +19,6 @@ public class PlayerStepsOnScriptEvent extends BukkitScriptEvent implements Liste
     // player steps on block
     // player steps on <material>
     //
-    // @Regex ^on player steps on [^\s]+$
-    //
     // @Group Player
     //
     // @Location true
@@ -28,7 +27,7 @@ public class PlayerStepsOnScriptEvent extends BukkitScriptEvent implements Liste
     //
     // @Cancellable true
     //
-    // @Triggers when a player steps onto a material.
+    // @Triggers when a player steps onto a specific block material.
     //
     // @Context
     // <context.location> returns a LocationTag of the block the player is stepping on.
@@ -40,31 +39,16 @@ public class PlayerStepsOnScriptEvent extends BukkitScriptEvent implements Liste
     // -->
 
     public PlayerStepsOnScriptEvent() {
-        instance = this;
+        registerCouldMatcher("player steps on <block>");
     }
 
-    public static PlayerStepsOnScriptEvent instance;
     public LocationTag location;
-    public LocationTag previous_location;
-    public LocationTag new_location;
     public PlayerMoveEvent event;
-
-    @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventLower.startsWith("player steps on")) {
-            return false;
-        }
-        if (!couldMatchBlock(path.eventArgLowerAt(3))) {
-            return false;
-        }
-        return true;
-    }
+    public MaterialTag material;
 
     @Override
     public boolean matches(ScriptPath path) {
-        String mat = path.eventArgLowerAt(3);
-        MaterialTag material = new MaterialTag(location.getBlock());
-        if (!tryMaterial(material, mat)) {
+        if (!path.tryArgObject(3, material)) {
             return false;
         }
         if (!runInCheck(path, location)) {
@@ -74,26 +58,18 @@ public class PlayerStepsOnScriptEvent extends BukkitScriptEvent implements Liste
     }
 
     @Override
-    public String getName() {
-        return "PlayerStepsOn";
-    }
-
-    @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(PlayerTag.mirrorBukkitPlayer(event.getPlayer()), null);
+        return new BukkitScriptEntryData(event.getPlayer());
     }
 
     @Override
     public ObjectTag getContext(String name) {
-        switch (name) {
-            case "location":
-                return location;
-            case "previous_location":
-                return previous_location;
-            case "new_location":
-                return new_location;
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "location" -> location;
+            case "previous_location" -> new LocationTag(event.getFrom());
+            case "new_location" -> new LocationTag(event.getTo());
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler
@@ -101,15 +77,18 @@ public class PlayerStepsOnScriptEvent extends BukkitScriptEvent implements Liste
         if (EntityTag.isNPC(event.getPlayer())) {
             return;
         }
-        if (LocationTag.isSameBlock(event.getFrom(), event.getTo())) {
+        if (event.getTo() == null) {
             return;
         }
-        location = new LocationTag(event.getTo().clone().subtract(0, 1, 0));
+        Location from = event.getFrom().clone().subtract(0, 0.05, 0), to = event.getTo().clone().subtract(0, 0.05, 0);
+        if (LocationTag.isSameBlock(from, to)) {
+            return;
+        }
+        location = new LocationTag(to);
         if (!Utilities.isLocationYSafe(location)) {
             return;
         }
-        previous_location = new LocationTag(event.getFrom());
-        new_location = new LocationTag(event.getTo());
+        material = new MaterialTag(location.getBlock());
         this.event = event;
         fire(event);
     }
@@ -119,9 +98,6 @@ public class PlayerStepsOnScriptEvent extends BukkitScriptEvent implements Liste
         if (EntityTag.isNPC(event.getPlayer())) {
             return;
         }
-        PlayerMoveEvent evt = new PlayerMoveEvent(event.getPlayer(), event.getFrom(), event.getTo());
-        onPlayerStepsOn(evt);
-        event.setCancelled(evt.isCancelled());
+        onPlayerStepsOn(event);
     }
-
 }

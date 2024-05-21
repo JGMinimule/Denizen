@@ -2,7 +2,8 @@ package com.denizenscript.denizen.objects.properties.item;
 
 import com.denizenscript.denizen.objects.EnchantmentTag;
 import com.denizenscript.denizencore.objects.core.MapTag;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -42,7 +43,7 @@ public class ItemEnchantments implements Property {
             "remove_enchantments", "enchantments"
     };
 
-    private ItemEnchantments(ItemTag _item) {
+    public ItemEnchantments(ItemTag _item) {
         item = _item;
     }
 
@@ -69,7 +70,7 @@ public class ItemEnchantments implements Property {
         }
 
         if (attribute.startsWith("enchantments.with_levels")) {
-            Deprecations.itemEnchantmentTags.warn(attribute.context);
+            BukkitImplDeprecations.itemEnchantmentTags.warn(attribute.context);
             Set<Map.Entry<Enchantment, Integer>> enchantments = getEnchantments();
             ListTag enchants = new ListTag();
             for (Map.Entry<Enchantment, Integer> enchantment : enchantments) {
@@ -78,7 +79,7 @@ public class ItemEnchantments implements Property {
             return enchants.getObjectAttribute(attribute.fulfill(2));
         }
         if (attribute.startsWith("enchantments.levels")) {
-            Deprecations.itemEnchantmentTags.warn(attribute.context);
+            BukkitImplDeprecations.itemEnchantmentTags.warn(attribute.context);
             Set<Map.Entry<Enchantment, Integer>> enchantments = getEnchantments();
             ListTag enchants = new ListTag();
             for (Map.Entry<Enchantment, Integer> enchantment : enchantments) {
@@ -87,7 +88,7 @@ public class ItemEnchantments implements Property {
             return enchants.getObjectAttribute(attribute.fulfill(2));
         }
         if (attribute.startsWith("enchantments.level") && attribute.hasContext(2)) {
-            Deprecations.itemEnchantmentTags.warn(attribute.context);
+            BukkitImplDeprecations.itemEnchantmentTags.warn(attribute.context);
             Set<Map.Entry<Enchantment, Integer>> enchantments = getEnchantments();
             if (enchantments.size() > 0) {
                 for (Map.Entry<Enchantment, Integer> enchantment : enchantments) {
@@ -129,7 +130,7 @@ public class ItemEnchantments implements Property {
         // Deprecated in favor of <@link tag ItemTag.enchantment_types> or <@link tag ItemTag.enchantment_map>
         // -->
         if (attribute.startsWith("enchantments")) {
-            Deprecations.itemEnchantmentsLegacy.warn(attribute.context);
+            BukkitImplDeprecations.itemEnchantmentsLegacy.warn(attribute.context);
             Set<Map.Entry<Enchantment, Integer>> enchantments = getEnchantments();
             ListTag enchants = new ListTag();
             for (Map.Entry<Enchantment, Integer> enchantment : enchantments) {
@@ -175,7 +176,7 @@ public class ItemEnchantments implements Property {
     @Override
     public String getPropertyString() {
         MapTag map = getEnchantmentMap();
-        if (map.map.isEmpty()) {
+        if (map.isEmpty()) {
             return null;
         }
         return map.toString();
@@ -242,6 +243,7 @@ public class ItemEnchantments implements Property {
         // @description
         // Sets the item's enchantments as a map of EnchantmentTags or enchantment names to level.
         // For example: - inventory adjust slot:hand enchantments:sharpness=1
+        // Does not remove existing enchantments, for that use <@link mechanism ItemTag.remove_enchantments>
         // @tags
         // <ItemTag.enchantment_map>
         // -->
@@ -249,9 +251,9 @@ public class ItemEnchantments implements Property {
             String val = mechanism.getValue().asString();
             if (val.startsWith("map@") || val.startsWith("[") || (val.contains("=") && !val.contains(","))) {
                 MapTag map = mechanism.valueAsType(MapTag.class);
-                for (Map.Entry<StringHolder, ObjectTag> enchantments : map.map.entrySet()) {
+                for (Map.Entry<StringHolder, ObjectTag> enchantments : map.entrySet()) {
                     Enchantment ench = EnchantmentTag.valueOf(enchantments.getKey().low, mechanism.context).enchantment;
-                    int level = enchantments.getValue().asType(ElementTag.class, mechanism.context).asInt();
+                    int level = enchantments.getValue().asElement().asInt();
                     if (ench != null) {
                         if (item.getBukkitMaterial() == Material.ENCHANTED_BOOK) {
                             EnchantmentStorageMeta meta = (EnchantmentStorageMeta) item.getItemMeta();
@@ -280,11 +282,11 @@ public class ItemEnchantments implements Property {
                             if (ench != null) {
                                 if (item.getBukkitMaterial() == Material.ENCHANTED_BOOK) {
                                     EnchantmentStorageMeta meta = (EnchantmentStorageMeta) item.getItemMeta();
-                                    meta.addStoredEnchant(ench, Integer.valueOf(data[1]), true);
+                                    meta.addStoredEnchant(ench, Integer.parseInt(data[1]), true);
                                     item.setItemMeta(meta);
                                 }
                                 else {
-                                    item.getItemStack().addUnsafeEnchantment(ench, Integer.valueOf(data[1]));
+                                    item.getItemStack().addUnsafeEnchantment(ench, Integer.parseInt(data[1]));
                                     item.resetCache();
                                 }
                             }
@@ -297,7 +299,7 @@ public class ItemEnchantments implements Property {
                         }
                         catch (NumberFormatException ex) {
                             mechanism.echoError("Cannot apply enchantment '" + data[0] + "': '" + data[1] + "' is not a valid integer!");
-                            if (Debug.verbose) {
+                            if (CoreConfiguration.debugVerbose) {
                                 Debug.echoError(ex);
                             }
                         }

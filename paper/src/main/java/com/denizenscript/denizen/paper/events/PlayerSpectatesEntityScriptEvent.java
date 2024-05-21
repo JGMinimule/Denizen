@@ -34,27 +34,20 @@ public class PlayerSpectatesEntityScriptEvent extends BukkitScriptEvent implemen
     // -->
 
     public PlayerSpectatesEntityScriptEvent() {
-        instance = this;
         registerCouldMatcher("player spectates <entity>");
     }
 
-    public static PlayerSpectatesEntityScriptEvent instance;
     public PlayerStartSpectatingEntityEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(new EntityTag(event.getNewSpectatorTarget()), path.eventArgLowerAt(2))) {
+        if (!path.tryArgObject(2, new EntityTag(event.getNewSpectatorTarget()))) {
             return false;
         }
         if (!runInCheck(path, event.getPlayer().getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerSpectates";
     }
 
     @Override
@@ -65,10 +58,10 @@ public class PlayerSpectatesEntityScriptEvent extends BukkitScriptEvent implemen
     @Override
     public ObjectTag getContext(String name) {
         if (name.equals("entity")) {
-            return new EntityTag(event.getNewSpectatorTarget());
+            return new EntityTag(event.getNewSpectatorTarget()).getDenizenObject();
         }
         else if (name.equals("old_entity")) {
-            return new EntityTag(event.getCurrentSpectatorTarget());
+            return new EntityTag(event.getCurrentSpectatorTarget()).getDenizenObject();
         }
         return super.getContext(name);
     }

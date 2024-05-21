@@ -1,6 +1,5 @@
 package com.denizenscript.denizen.scripts.commands.entity;
 
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.properties.entity.EntityAge;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
@@ -9,6 +8,8 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
+import org.bukkit.entity.Breedable;
 
 import java.util.List;
 
@@ -66,7 +67,7 @@ public class AgeCommand extends AbstractCommand {
                 scriptEntry.addObject("entities", arg.asType(ListTag.class).filter(EntityTag.class, scriptEntry));
             }
             else if (!scriptEntry.hasObject("agetype")
-                    && arg.matchesEnum(AgeType.values())) {
+                    && arg.matchesEnum(AgeType.class)) {
                 scriptEntry.addObject("agetype", AgeType.valueOf(arg.getValue().toUpperCase()));
             }
             else if (!scriptEntry.hasObject("age")
@@ -100,22 +101,24 @@ public class AgeCommand extends AbstractCommand {
         for (EntityTag entity : entities) {
             if (entity.isSpawned()) {
                 if (EntityAge.describes(entity)) {
-                    EntityAge property = EntityAge.getFrom(entity);
+                    EntityAge property = new EntityAge(entity);
                     if (ageType != null) {
                         if (ageType.equals(AgeType.BABY)) {
-                            property.setBaby(true);
+                            property.setAge(-24000);
                         }
                         else {
-                            property.setBaby(false);
+                            property.setAge(0);
                         }
                     }
                     else {
                         property.setAge(age);
                     }
-                    property.setLock(lock);
+                    if (entity instanceof Breedable breedable) {
+                        breedable.setAgeLock(lock);
+                    }
                 }
                 else {
-                    Debug.echoError(scriptEntry.getResidingQueue(), entity.identify() + " is not ageable!");
+                    Debug.echoError(scriptEntry, entity.identify() + " is not ageable!");
                 }
             }
         }

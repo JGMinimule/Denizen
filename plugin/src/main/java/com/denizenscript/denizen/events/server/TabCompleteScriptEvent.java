@@ -21,6 +21,8 @@ public class TabCompleteScriptEvent extends BukkitScriptEvent implements Listene
     //
     // @Group Server
     //
+    // @Switch command:<command_name> to only process the event if the command matches the input name.
+    //
     // @Cancellable true
     //
     // @Triggers when a player or the console is sent a list of available tab completions.
@@ -40,12 +42,19 @@ public class TabCompleteScriptEvent extends BukkitScriptEvent implements Listene
     // -->
 
     public TabCompleteScriptEvent() {
-        instance = this;
         registerCouldMatcher("tab complete");
+        registerSwitches("command");
     }
 
-    public static TabCompleteScriptEvent instance;
     public TabCompleteEvent event;
+
+    @Override
+    public boolean matches(ScriptPath path) {
+        if (!runGenericSwitchCheck(path, "command", getCommand())) {
+            return false;
+        }
+        return super.matches(path);
+    }
 
     public String getCommand() {
         String[] args = event.getBuffer().trim().split(" ");
@@ -59,11 +68,6 @@ public class TabCompleteScriptEvent extends BukkitScriptEvent implements Listene
     public String getCurrentArg() {
         int i = event.getBuffer().lastIndexOf(' ');
         return i > 0 ? event.getBuffer().substring(i + 1) : getCommand();
-    }
-
-    @Override
-    public String getName() {
-        return "TabComplete";
     }
 
     @Override

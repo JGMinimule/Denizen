@@ -36,10 +36,8 @@ public class EntityTransformScriptEvent extends BukkitScriptEvent implements Lis
     // -->
 
     public EntityTransformScriptEvent() {
-        instance = this;
     }
 
-    public static EntityTransformScriptEvent instance;
     public EntityTransformEvent event;
     public EntityTag originalEntity;
 
@@ -62,18 +60,13 @@ public class EntityTransformScriptEvent extends BukkitScriptEvent implements Lis
         if (!runGenericSwitchCheck(path, "because", event.getTransformReason().name())) {
             return false;
         }
-        if (!tryEntity(originalEntity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, originalEntity)) {
             return false;
         }
-        if (path.eventArgLowerAt(2).equals("into") && !tryEntity(new EntityTag(event.getTransformedEntity()), path.eventArgLowerAt(3))) {
+        if (path.eventArgLowerAt(2).equals("into") && !path.tryArgObject(3, new EntityTag(event.getTransformedEntity()))) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityTransforms";
     }
 
     @Override
@@ -88,7 +81,7 @@ public class EntityTransformScriptEvent extends BukkitScriptEvent implements Lis
                 }
                 return output;
             case "cause":
-                return new ElementTag(event.getTransformReason().name());
+                return new ElementTag(event.getTransformReason());
         }
         return super.getContext(name);
     }

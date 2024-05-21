@@ -2,23 +2,24 @@ package com.denizenscript.denizen.scripts.commands;
 
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.nms.NMSVersion;
-import com.denizenscript.denizen.scripts.commands.core.*;
+import com.denizenscript.denizen.scripts.commands.core.CooldownCommand;
+import com.denizenscript.denizen.scripts.commands.core.ResetCommand;
+import com.denizenscript.denizen.scripts.commands.core.ZapCommand;
 import com.denizenscript.denizen.scripts.commands.entity.*;
 import com.denizenscript.denizen.scripts.commands.item.*;
 import com.denizenscript.denizen.scripts.commands.npc.*;
 import com.denizenscript.denizen.scripts.commands.player.*;
 import com.denizenscript.denizen.scripts.commands.server.*;
 import com.denizenscript.denizen.scripts.commands.world.*;
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.depends.Depends;
+import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-import com.denizenscript.denizencore.scripts.commands.CommandRegistry;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 
-public class BukkitCommandRegistry extends CommandRegistry {
-
-    public static BukkitCommandRegistry instance;
+public class BukkitCommandRegistry {
 
     public static class AutoNoCitizensCommand extends AbstractCommand {
 
@@ -32,7 +33,7 @@ public class BukkitCommandRegistry extends CommandRegistry {
             AutoNoCitizensCommand cmd = new AutoNoCitizensCommand();
             cmd.name = name;
             cmd.syntax = "(Citizens Required)";
-            instance.register(cmd.name, cmd);
+            DenizenCore.commandRegistry.register(cmd.name, cmd);
         }
 
         public String name;
@@ -47,13 +48,18 @@ public class BukkitCommandRegistry extends CommandRegistry {
         }
     }
 
-    public void registerCitizensCommands() {
+    public static void registerCommand(Class<? extends AbstractCommand> commandInstance) {
+        DenizenCore.commandRegistry.registerCommand(commandInstance);
+    }
+
+    public static void registerCitizensCommands() {
         // entity
         registerCommand(AnimateCommand.class);
         // npc
         registerCommand(ActionCommand.class);
         registerCommand(AnchorCommand.class);
         registerCommand(AssignmentCommand.class);
+        registerCommand(NPCBossBarCommand.class);
         registerCommand(BreakCommand.class);
         registerCommand(CreateCommand.class);
         registerCommand(DespawnCommand.class);
@@ -75,11 +81,7 @@ public class BukkitCommandRegistry extends CommandRegistry {
         registerCommand(ChatCommand.class);
     }
 
-    public void registerCommands() {
-        instance = this;
-
-        registerCoreCommands();
-
+    public static void registerCommands() {
         //core
         registerCommand(CooldownCommand.class);
         registerCommand(ResetCommand.class);
@@ -92,6 +94,7 @@ public class BukkitCommandRegistry extends CommandRegistry {
         registerCommand(CastCommand.class);
         registerCommand(EquipCommand.class);
         registerCommand(FakeEquipCommand.class);
+        registerCommand(FakeInternalDataCommand.class);
         registerCommand(FeedCommand.class);
         registerCommand(FlyCommand.class);
         registerCommand(FollowCommand.class);
@@ -100,6 +103,7 @@ public class BukkitCommandRegistry extends CommandRegistry {
         registerCommand(HealthCommand.class);
         registerCommand(HurtCommand.class);
         registerCommand(InvisibleCommand.class);
+        registerCommand(KillCommand.class);
         registerCommand(LeashCommand.class);
         registerCommand(LookCommand.class);
         registerCommand(MountCommand.class);
@@ -118,8 +122,6 @@ public class BukkitCommandRegistry extends CommandRegistry {
         registerCommand(GiveCommand.class);
         registerCommand(InventoryCommand.class);
         registerCommand(MapCommand.class);
-        registerCommand(NBTCommand.class);
-        registerCommand(ScribeCommand.class);
         registerCommand(TakeCommand.class);
         // player
         registerCommand(ActionBarCommand.class);
@@ -127,16 +129,10 @@ public class BukkitCommandRegistry extends CommandRegistry {
         registerCommand(BlockCrackCommand.class);
         registerCommand(ClickableCommand.class);
         registerCommand(CompassCommand.class);
-        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_17)) {
-            registerCommand(DebugBlockCommand.class);
-        }
-        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_15)) {
-            registerCommand(DisguiseCommand.class);
-        }
+        registerCommand(DebugBlockCommand.class);
+        registerCommand(DisguiseCommand.class);
         registerCommand(ExperienceCommand.class);
-        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_15)) {
-            registerCommand(FakeSpawnCommand.class);
-        }
+        registerCommand(FakeSpawnCommand.class);
         registerCommand(GlowCommand.class);
         registerCommand(GroupCommand.class);
         registerCommand(ItemCooldownCommand.class);
@@ -150,6 +146,7 @@ public class BukkitCommandRegistry extends CommandRegistry {
         registerCommand(ShowFakeCommand.class);
         registerCommand(SidebarCommand.class);
         registerCommand(StatisticCommand.class);
+        registerCommand(TablistCommand.class);
         registerCommand(TeamCommand.class);
         registerCommand(TitleCommand.class);
         registerCommand(ToastCommand.class);
@@ -178,6 +175,9 @@ public class BukkitCommandRegistry extends CommandRegistry {
         registerCommand(SignCommand.class);
         registerCommand(StrikeCommand.class);
         registerCommand(SwitchCommand.class);
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_20)) {
+            registerCommand(TickCommand.class);
+        }
         registerCommand(TimeCommand.class);
         registerCommand(WeatherCommand.class);
         registerCommand(WorldBorderCommand.class);
@@ -189,7 +189,8 @@ public class BukkitCommandRegistry extends CommandRegistry {
             AutoNoCitizensCommand.registerMany("ACTION", "ANCHOR", "ANIMATE", "ASSIGNMENT", "BREAK", "CHAT", "CREATE", "DESPAWN",
                     "DISENGAGE", "ENGAGE", "FISH", "LOOKCLOSE", "PAUSE", "RESUME", "POSE", "PUSHABLE", "RENAME", "SIT", "STAND", "TRAIT", "TRIGGER", "VULNERABLE");
         }
-
-        Debug.echoApproval("Loaded core commands: " + instances.keySet().toString());
+        if (CoreConfiguration.debugVerbose) {
+            Debug.echoApproval("Loaded core commands: " + DenizenCore.commandRegistry.instances.keySet());
+        }
     }
 }

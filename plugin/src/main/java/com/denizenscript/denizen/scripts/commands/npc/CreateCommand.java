@@ -1,6 +1,6 @@
 package com.denizenscript.denizen.scripts.commands.npc;
 
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.NPCTag;
@@ -16,8 +16,6 @@ import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.api.trait.Trait;
 import org.bukkit.entity.EntityType;
 import org.bukkit.event.player.PlayerTeleportEvent;
-
-import java.util.function.Consumer;
 
 public class CreateCommand extends AbstractCommand {
 
@@ -61,10 +59,8 @@ public class CreateCommand extends AbstractCommand {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (EntityType entity : EntityType.values()) {
-            addOne.accept(entity.name());
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.add(EntityType.values());
     }
 
     @Override
@@ -132,7 +128,7 @@ public class CreateCommand extends AbstractCommand {
             created = new NPCTag(actualRegistry.createNPC(type.getBukkitEntityType(), name.asString()));
         }
         // Add the created NPC into the script entry so it can be utilized if need be.
-        scriptEntry.addObject("created_npc", created);
+        scriptEntry.saveObject("created_npc", created);
         if (created.isSpawned()) {
             if (loc != null) {
                 created.getCitizen().teleport(loc, PlayerTeleportEvent.TeleportCause.PLUGIN);
@@ -153,7 +149,7 @@ public class CreateCommand extends AbstractCommand {
                     created.getCitizen().addTrait(trait);
                 }
                 else {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Could not add trait to NPC: " + trait_name);
+                    Debug.echoError(scriptEntry, "Could not add trait to NPC: " + trait_name);
                 }
             }
         }

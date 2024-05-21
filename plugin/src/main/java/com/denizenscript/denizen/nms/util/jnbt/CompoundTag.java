@@ -53,6 +53,14 @@ public abstract class CompoundTag extends Tag {
         return value.containsKey(key);
     }
 
+    public boolean isEmpty() {
+        return getValue().isEmpty();
+    }
+
+    public int size() {
+        return getValue().size();
+    }
+
     @Override
     public Map<String, Tag> getValue() {
         return value;
@@ -65,7 +73,7 @@ public abstract class CompoundTag extends Tag {
      * @return the new compound tag
      */
     public CompoundTag setValue(Map<String, Tag> value) {
-        return NMSHandler.getInstance().createCompoundTag(value);
+        return NMSHandler.instance.createCompoundTag(value);
     }
 
     /**
@@ -453,5 +461,4 @@ public abstract class CompoundTag extends Tag {
         bldr.append("}");
         return bldr.toString();
     }
-
 }

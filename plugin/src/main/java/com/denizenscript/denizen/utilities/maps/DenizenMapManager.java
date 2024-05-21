@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.utilities.maps;
 
 import com.denizenscript.denizen.Denizen;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.Utilities;
 import com.denizenscript.denizencore.utilities.AsciiMatcher;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
@@ -48,7 +48,7 @@ public class DenizenMapManager {
             return;
         }
         for (String key : mapsSection.getKeys(false)) {
-            int mapId = Integer.valueOf(key);
+            int mapId = Integer.parseInt(key);
             MapView mapView = Bukkit.getServer().getMap((short) mapId); // TODO: ??? (deprecated short method)
             if (mapView == null) {
                 Debug.echoError("Map #" + key + " does not exist. Has it been removed? Deleting from maps.yml...");
@@ -72,32 +72,34 @@ public class DenizenMapManager {
             List<String> objects = new ArrayList<>(objectsData.getKeys(false));
             objects.sort(new NaturalOrderComparator());
             for (String objectKey : objects) {
-                String type = objectsData.getString(objectKey + ".type").toUpperCase();
-                String xTag = objectsData.getString(objectKey + ".x");
-                String yTag = objectsData.getString(objectKey + ".y");
-                String visibilityTag = objectsData.getString(objectKey + ".visibility");
-                boolean debug = objectsData.getString(objectKey + ".debug", "false").equalsIgnoreCase("true");
+                ConfigurationSection objectConfig = objectsData.getConfigurationSection(objectKey);
+                String type = objectConfig.getString("type").toUpperCase();
+                String xTag = objectConfig.getString("x");
+                String yTag = objectConfig.getString("y");
+                String visibilityTag = objectConfig.getString("visibility");
+                boolean debug = objectConfig.getString("debug", "false").equalsIgnoreCase("true");
                 MapObject object = null;
                 switch (type) {
                     case "CURSOR":
-                        object = new MapCursor(xTag, yTag, visibilityTag, debug, objectsData.getString(objectKey + ".direction"), objectsData.getString(objectKey + ".cursor"));
+                        object = new MapCursor(xTag, yTag, visibilityTag, debug, objectConfig.getString("direction"), objectConfig.getString("cursor"));
                         break;
                     case "IMAGE":
-                        String file = objectsData.getString(objectKey + ".image");
-                        int width = objectsData.getInt(objectKey + ".width", 0);
-                        int height = objectsData.getInt(objectKey + ".height", 0);
+                        String file = objectConfig.getString("image");
+                        int width = objectConfig.getInt("width", 0);
+                        int height = objectConfig.getInt("height", 0);
                         object = new MapImage(renderer, xTag, yTag, visibilityTag, debug, file, width, height);
                         break;
                     case "TEXT":
-                        object = new MapText(xTag, yTag, visibilityTag, debug, objectsData.getString(objectKey + ".text"), objectsData.getString(objectKey + ".color"));
+                        object = new MapText(xTag, yTag, visibilityTag, debug, objectConfig.getString("text"), objectConfig.getString("color"),
+                                objectConfig.getString("font"), objectConfig.getString("size"), objectConfig.getString("style"));
                         break;
                     case "DOT":
-                        object = new MapDot(xTag, yTag, visibilityTag, debug, objectsData.getString(objectKey + ".radius"), objectsData.getString(objectKey + ".color"));
+                        object = new MapDot(xTag, yTag, visibilityTag, debug, objectConfig.getString("radius"), objectConfig.getString("color"));
                         break;
                 }
                 if (object != null) {
-                    object.worldCoordinates = objectsData.getString(objectKey + ".world_coordinates", "false").equalsIgnoreCase("true");
-                    object.showPastEdge = objectsData.getString(objectKey + ".show_past_edge", "false").equalsIgnoreCase("true");
+                    object.worldCoordinates = objectConfig.getString("world_coordinates", "false").equalsIgnoreCase("true");
+                    object.showPastEdge = objectConfig.getString("show_past_edge", "false").equalsIgnoreCase("true");
                     renderer.addObject(object);
                 }
             }
@@ -156,7 +158,8 @@ public class DenizenMapManager {
         int mapId = map.getId();
         DenizenMapRenderer dmr;
         if (!mapRenderers.containsKey(mapId)) {
-            dmr = new DenizenMapRenderer(map.getRenderers(), false, false);
+            boolean contextual = map.isTrackingPosition() || map.isUnlimitedTracking();
+            dmr = new DenizenMapRenderer(map.getRenderers(), false, contextual);
             setMap(map, dmr);
         }
         else {
@@ -222,7 +225,7 @@ public class DenizenMapManager {
             BufferedInputStream in = new BufferedInputStream(connection.getInputStream());
             int lastDot = urlString.lastIndexOf('.');
             String fileName = String.format("%0" + (6 - String.valueOf(downloadCount).length()) + "d", downloadCount)
-                    + (lastDot > 0 ? allowedExtensionText.trimToMatches(urlString.substring(lastDot)) : "");
+                    + (lastDot > 0 ? "." + allowedExtensionText.trimToMatches(urlString.substring(lastDot)) : "");
             File output = new File(imageDownloads, fileName);
             FileImageOutputStream out = new FileImageOutputStream(output);
             int i;
@@ -242,5 +245,4 @@ public class DenizenMapManager {
         }
         return null;
     }
-
 }

@@ -6,7 +6,7 @@ import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.scripts.containers.core.AssignmentScriptContainer;
 import com.denizenscript.denizen.utilities.command.manager.messaging.Messaging;
-import com.denizenscript.denizencore.objects.core.ScriptTag;
+import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.scripts.ScriptRegistry;
 import com.denizenscript.denizencore.scripts.containers.ScriptContainer;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
@@ -70,7 +70,6 @@ public class NPCCommandHandler {
     @Requirements(selected = true, ownership = true)
     public void pushable(CommandContext args, CommandSender sender, NPC npc) throws CommandException {
         PushableTrait trait = npc.getOrAddTrait(PushableTrait.class);
-
         if (args.hasFlag('r') && !args.hasFlag('t')) {
             trait.setReturnable(!trait.isReturnable());
             Messaging.sendInfo(sender, npc.getName() + (trait.isReturnable() ? " will " : " will not ") + "return when being pushed"
@@ -79,16 +78,15 @@ public class NPCCommandHandler {
         }
         else if (args.hasValueFlag("delay") && !args.hasFlag('t')) {
             if (args.getFlag("delay").matches("\\d+") && args.getFlagInteger("delay") > 0) {
-                trait.setDelay(Integer.valueOf(args.getFlag("delay")));
+                trait.setDelay(Integer.parseInt(args.getFlag("delay")));
                 trait.setReturnable(true);
                 Messaging.sendInfo(sender, npc.getName() + " will return after '" + args.getFlag("delay") + "' seconds"
                         + (trait.isPushable() ? "." : ", but is currently not pushable."));
-                return;
             }
             else {
                 Messaging.sendError(sender, "Delay must be a valid number of seconds!");
-                return;
             }
+            return;
         }
         else if (args.hasFlag('t') && !args.hasValueFlag("delay") && !args.hasFlag('r')) {
             trait.toggle();
@@ -104,14 +102,11 @@ public class NPCCommandHandler {
             if (args.hasValueFlag("delay") && args.getFlag("delay").matches("\\d+") && args.getFlagInteger("delay") > 0) {
                 trait.setDelay(args.getFlagInteger("delay"));
             }
-            Messaging.sendInfo(sender, npc.getName() + (trait.isPushable() ? " is" : " is not") + " currently pushable" +
-                    (trait.isReturnable() && trait.isPushable() ? " and will return when pushed after '" + trait.getDelay() + "' seconds." : "."));
-            return;
         }
         else if (args.length() > 2) {
             Messaging.send(sender, "");
             Messaging.send(sender, "<f>Use '-t' to toggle pushable state. <b>Example: /npc pushable -t");
-            Messaging.send(sender, "<f>To have the NPC return when pushed, use '-r'.");
+            Messaging.send(sender, "<f>To have the NPC return to their position when pushed, use '-r'.");
             Messaging.send(sender, "<f>Change the return delay with '--delay #'.");
             Messaging.send(sender, "");
         }
@@ -162,7 +157,7 @@ public class NPCCommandHandler {
         }
         else if (args.hasValueFlag("remove")) {
             trait.removeConstant(args.getFlag("remove"));
-            Messaging.sendInfo(sender, npc.getName() + " has removed constant '" + args.getFlag("remove") + "'.");
+            Messaging.sendInfo(sender, "Removed constant '" + args.getFlag("remove") + "' from " + npc.getName() + "<f>.");
             return;
         }
         Messaging.send(sender, "");
@@ -244,7 +239,7 @@ public class NPCCommandHandler {
                 }
             }
             else {
-                Messaging.sendError(sender, "That NPC was already not assigned that script.");
+                Messaging.sendError(sender, npc.getName() + "<f> was already not assigned to " + script + ".");
             }
             return;
         }
@@ -278,7 +273,7 @@ public class NPCCommandHandler {
                 Messaging.sendError(sender, "'" + triggerName.toUpperCase() + "' trigger does not exist.");
                 Messaging.send(sender, "<f>Usage: /npc trigger [trigger_name] [(--cooldown #)|(--radius #)|(-t)]");
                 Messaging.send(sender, "");
-                Messaging.send(sender, "<f>Use '--name trigger_name' to specify a specific trigger, and '-t' to toggle.");
+                Messaging.send(sender, "<f>Use '--name trigger_name' to specify the trigger, and '-t' to toggle it.");
                 Messaging.send(sender, "<b>Example: /npc trigger --name damage -t");
                 Messaging.send(sender, "<f>You may also use '--cooldown #' to specify a new cooldown time, and '--radius #' to specify a specific radius, when applicable.");
                 Messaging.send(sender, "");
@@ -295,7 +290,7 @@ public class NPCCommandHandler {
             // If specifying radius
             if (args.hasValueFlag("radius")) {
                 trait.setLocalRadius(triggerName, args.getFlagInteger("radius"));
-                Messaging.sendInfo(sender, triggerName.toUpperCase() + " trigger radius now " + args.getFlag("radius") + ".");
+                Messaging.sendInfo(sender, triggerName.toUpperCase() + " trigger radius is now " + args.getFlag("radius") + ".");
             }
             // Show current status of the trigger
             Messaging.sendInfo(sender, triggerName.toUpperCase() + " trigger " + (trait.isEnabled(triggerName) ? "is" : "is not") + " currently enabled" +
@@ -319,7 +314,7 @@ public class NPCCommandHandler {
         NicknameTrait trait = npc.getOrAddTrait(NicknameTrait.class);
         if (args.hasValueFlag("set")) {
             trait.setNickname(args.getFlag("set"));
-            Messaging.send(sender, "Nickname set.");
+            Messaging.send(sender, "Nickname set to '" + args.getFlag("set") + "'.");
             return;
         }
         else if (args.hasFlag('r')) {
@@ -368,7 +363,7 @@ public class NPCCommandHandler {
                     return;
                 }
             }
-            Messaging.sendError(sender, "The NPC does not have the specified anchor!");
+            Messaging.sendError(sender, "NPC " + npc.getName() + "<f> does not have the anchor '" + args.getFlag("anchor") + "'!");
             return;
         }
         Location targetLocation;
@@ -479,12 +474,12 @@ public class NPCCommandHandler {
             if (npc.hasTrait(Anchors.class)) {
                 Anchors anchors = npc.getOrAddTrait(Anchors.class);
                 if (anchors.getAnchor(args.getFlag("anchor")) != null) {
-                    trait.toSleep(anchors.getAnchor(args.getFlag("anchor")).getLocation());
+                    trait.toSleep(anchors.getAnchor(args.getFlag("anchor")).getLocation().clone().add(0.5, 0, 0.5));
                     Messaging.send(sender, npc.getName() + " is now sleeping.");
                     return;
                 }
             }
-            Messaging.sendError(sender, "The NPC does not have the specified anchor!");
+            Messaging.sendError(sender, "NPC " + npc.getName() + "<f> does not have the anchor '" + args.getFlag("anchor") + "'!");
             return;
         }
         else {
@@ -514,7 +509,7 @@ public class NPCCommandHandler {
     }
 
     @Command(
-            aliases = {"npc"}, usage = "fish (--location x,y,z,world) (--anchor anchor_name) (-c)",
+            aliases = {"npc"}, usage = "fish (--location x,y,z,world) (--anchor anchor_name) (-c) (--reel_time <duration>) (--cast_time <duration>)",
             desc = "Makes the NPC fish, casting at the given location.", flags = "c", modifiers = {"fish"},
             min = 1, max = 3, permission = "denizen.npc.fish")
     @Requirements(selected = true, ownership = true)
@@ -526,9 +521,30 @@ public class NPCCommandHandler {
         }
         if (args.hasValueFlag("percent")) {
             trait.setCatchPercent(args.getFlagInteger("percent"));
+            Messaging.send(sender, npc.getName() + " will now catch " + args.getFlagInteger("percent") + "% of the fish.");
+        }
+        if (args.hasValueFlag("reel_time")) {
+            DurationTag duration = DurationTag.valueOf(args.getFlag("reel_time"), CoreUtilities.basicContext);
+            if (duration == null) {
+                Messaging.sendError(sender, "Invalid reel duration!");
+                return;
+            }
+            trait.reelTickRate = duration.getTicksAsInt();
+            Messaging.send(sender, "Set reel rate to " + duration.formatted(true));
+        }
+        if (args.hasValueFlag("cast_time")) {
+            DurationTag duration = DurationTag.valueOf(args.getFlag("cast_time"), CoreUtilities.basicContext);
+            if (duration == null) {
+                Messaging.sendError(sender, "Invalid cast duration!");
+                return;
+            }
+            trait.reelTickRate = duration.getTicksAsInt();
+            Messaging.send(sender, "Set cast rate to " + duration.formatted(true) + ".");
         }
         if (args.hasFlag('c')) {
             trait.startFishing(args.getSenderTargetBlockLocation());
+            Messaging.send(sender, npc.getName() + " is now fishing at your cursor.");
+            return;
         }
         else if (args.hasValueFlag("location")) {
             String[] argsArray = args.getFlag("location").split(",");
@@ -543,9 +559,14 @@ public class NPCCommandHandler {
                 Anchors anchors = npc.getOrAddTrait(Anchors.class);
                 if (anchors.getAnchor(args.getFlag("anchor")) != null) {
                     trait.startFishing(anchors.getAnchor(args.getFlag("anchor")).getLocation());
+                } else {
+                    Messaging.sendError(sender, "Anchor '" + args.getFlag("anchor") + "' is invalid! Did you make a typo?");
+                    return;
                 }
+            } else {
+                Messaging.sendError(sender, "NPC " + npc.getName() + "<f> does not have the anchor '" + args.getFlag("anchor") + "'!");
+                return;
             }
-            Messaging.sendError(sender, "The NPC does not have the specified anchor!");
         }
         else {
             trait.startFishing();
@@ -562,7 +583,7 @@ public class NPCCommandHandler {
         FishingTrait trait = npc.getOrAddTrait(FishingTrait.class);
         if (!trait.isFishing()) {
             npc.removeTrait(FishingTrait.class);
-            Messaging.sendError(sender, npc.getName() + " isn't fishing!");
+            Messaging.sendError(sender, npc.getName() + " isn't currently fishing!");
             return;
         }
         trait.stopFishing();
@@ -650,6 +671,29 @@ public class NPCCommandHandler {
     }
 
     @Command(
+            aliases = {"npc"}, usage = "mirrorequipment",
+            desc = "Makes the NPC mirror the equipment of the player looking at it.", modifiers = {"mirrorequipment", "mirrorequip"},
+            min = 1, max = 1, permission = "denizen.npc.mirror")
+    @Requirements(selected = true, ownership = true)
+    public void mirrorEquipment(CommandContext args, CommandSender sender, NPC npc) throws CommandException {
+        if (!npc.hasTrait(MirrorEquipmentTrait.class)) {
+            npc.getOrAddTrait(MirrorEquipmentTrait.class).enableMirror();
+            Messaging.send(sender, npc.getName() + " is now mirroring player equipment.");
+            return;
+        }
+        MirrorEquipmentTrait trait = npc.getOrAddTrait(MirrorEquipmentTrait.class);
+        if (trait.mirror) {
+            trait.disableMirror();
+            npc.removeTrait(MirrorEquipmentTrait.class);
+            Messaging.send(sender, npc.getName() + " is no longer mirroring player equipment.");
+        }
+        else {
+            trait.enableMirror();
+            Messaging.send(sender, npc.getName() + " is now mirroring player equipment.");
+        }
+    }
+
+    @Command(
             aliases = {"npc"}, usage = "invisible",
             desc = "Turns the NPC invisible.", modifiers = {"invisible"},
             min = 1, max = 3, permission = "denizen.npc.invisible")
@@ -671,7 +715,7 @@ public class NPCCommandHandler {
     }
 
     @Command(
-            aliases = {"npc"}, usage = "health --set # (-r)",
+            aliases = {"npc"}, usage = "health (--set #) (--max #) (-r)",
             desc = "Sets the max health for an NPC.", modifiers = {"health", "he", "hp"},
             min = 1, max = 3, permission = "denizen.npc.health", flags = "sra")
     @Requirements(selected = true, ownership = true)

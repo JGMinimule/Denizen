@@ -1,8 +1,8 @@
 package com.denizenscript.denizen.events.entity;
 
-import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.ItemTag;
+import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -10,11 +10,14 @@ import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
+import org.bukkit.block.Block;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByBlockEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.potion.PotionEffectType;
@@ -31,8 +34,8 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
 
     // <--[event]
     // @Events
-    // <entity> damaged (by <'cause'>)
     // <entity> damaged by <entity>
+    // <entity> damaged (by <'cause'>)
     // <entity> damages <entity>
     //
     // @Group Entity
@@ -40,6 +43,8 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
     // @Location true
     //
     // @Switch with:<item> to only process the event when the item used to cause damage (in the damager's hand) is a specified item.
+    // @Switch type:<entity> to only run if the entity damaged matches the entity input.
+    // @Switch block:<block-matcher> to only run if the damage came from a block that matches the given material or location matcher.
     //
     // @Cancellable true
     //
@@ -48,7 +53,8 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
     // @Context
     // <context.entity> returns the EntityTag that was damaged.
     // <context.damager> returns the EntityTag damaging the other entity, if any.
-    // <context.cause> returns the an ElementTag of reason the entity was damaged - see <@link language damage cause> for causes.
+    // <context.damager_block> returns the LocationTag of a block that damaged the entity, if any.
+    // <context.cause> returns an ElementTag of reason the entity was damaged - see <@link language damage cause> for causes.
     // <context.damage> returns an ElementTag(Decimal) of the amount of damage dealt.
     // <context.final_damage> returns an ElementTag(Decimal) of the amount of damage dealt, after armor is calculated.
     // <context.projectile> returns a EntityTag of the projectile, if one caused the event.
@@ -63,20 +69,35 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
     //
     // @NPC when the damager or damaged entity is an NPC. Cannot be both.
     //
+    // @Example
+    // on entity damaged:
+    // - announce "A <context.entity.entity_type> took damage!"
+    //
+    // @Example
+    // on player damages cow:
+    // - announce "<player.name> damaged a cow at <context.entity.location.simple>"
+    //
+    // @Example
+    // on player damages cow|sheep|chicken with:*_hoe:
+    // - narrate "Whoa there farmer, you almost hurt your farm animals with that farmin' tool!"
+    // - determine cancelled
+    //
+    // @Example
+    // # This example disambiguates this event from the "vehicle damaged" event for specific vehicle entity types.
+    // on entity damaged type:minecart:
+    // - announce "A minecart took non-vehicular damage!"
+    //
     // -->
 
     public EntityDamagedScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> damaged (by <'cause'>)");
         registerCouldMatcher("<entity> damaged by <entity>");
         registerCouldMatcher("<entity> damages <entity>");
-        registerSwitches("with");
+        registerSwitches("with", "type", "blocker");
     }
 
-    public static EntityDamagedScriptEvent instance;
 
     public EntityTag entity;
-    public ElementTag cause;
     public EntityTag damager;
     public EntityTag projectile;
     public ItemTag held;
@@ -112,17 +133,17 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
         String target = cmd.equals("damages") ? path.eventArgLowerAt(2) : path.eventArgLowerAt(0);
         if (!attacker.isEmpty()) {
             if (damager != null) {
-                if (!cause.asString().equals(attacker) && !tryEntity(projectile, attacker) && !tryEntity(damager, attacker)) {
+                if (!runGenericCheck(attacker, event.getCause().name()) && (projectile == null || !projectile.tryAdvancedMatcher(attacker)) && (damager == null || !damager.tryAdvancedMatcher(attacker))) {
                     return false;
                 }
             }
             else {
-                if (!cause.asString().equals(attacker)) {
+                if (!runGenericCheck(attacker, event.getCause().name())) {
                     return false;
                 }
             }
         }
-        if (!tryEntity(entity, target)) {
+        if (!entity.tryAdvancedMatcher(target) || !path.tryObjectSwitch("type", entity)) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation())) {
@@ -131,12 +152,20 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
         if (!runWithCheck(path, held)) {
             return false;
         }
+        String blockMatcher = path.switches.get("block");
+        if (blockMatcher != null) {
+            if (!(event instanceof EntityDamageByBlockEvent)) {
+                return false;
+            }
+            Block block = ((EntityDamageByBlockEvent) event).getDamager();
+            if (block == null) {
+                return false;
+            }
+            if (!new LocationTag(block.getLocation()).tryAdvancedMatcher(blockMatcher)) {
+                return false;
+            }
+        }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityDamaged";
     }
 
     @Override
@@ -181,7 +210,7 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
             return false;
         }
         Player player = damager.getPlayer();
-        if (NMSHandler.getPlayerHelper().getAttackCooldownPercent(player) < 0.999) { // attack cooldown is also checked in that method earlier
+        if (player.getAttackCooldown() < 0.999) { // attack cooldown is also checked in that method earlier
             return false;
         }
         if (player.getFallDistance() <= 0 || player.isOnGround() || player.isClimbing() || player.isInWater()) {
@@ -202,10 +231,18 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
             case "entity": return entity.getDenizenObject();
             case "damage": return new ElementTag(event.getDamage());
             case "final_damage": return new ElementTag(event.getFinalDamage());
-            case "cause": return cause;
+            case "cause": return new ElementTag(event.getCause());
             case "damager":
                 if (damager != null) {
                     return damager.getDenizenObject();
+                }
+                break;
+            case "damager_block":
+                if (event instanceof EntityDamageByBlockEvent) {
+                    Block block = ((EntityDamageByBlockEvent) event).getDamager();
+                    if (block != null) {
+                        return new LocationTag(block.getLocation());
+                    }
                 }
                 break;
             case "projectile":
@@ -224,7 +261,7 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
                 return new ElementTag(calculateWasCritical());
         }
         if (name.startsWith("damage_")) {
-            Deprecations.damageEventTypeMap.warn();
+            BukkitImplDeprecations.damageEventTypeMap.warn();
             for (EntityDamageEvent.DamageModifier dm : EntityDamageEvent.DamageModifier.values()) {
                 if (name.equals("damage_" + CoreUtilities.toLowerCase(dm.name()))) {
                     return new ElementTag(event.getDamage(dm));
@@ -237,17 +274,18 @@ public class EntityDamagedScriptEvent extends BukkitScriptEvent implements Liste
     @EventHandler
     public void onEntityDamaged(EntityDamageEvent event) {
         entity = new EntityTag(event.getEntity());
-        cause = new ElementTag(CoreUtilities.toLowerCase(event.getCause().name()));
         damager = null;
         projectile = null;
         held = null;
         if (event instanceof EntityDamageByEntityEvent) {
             damager = new EntityTag(((EntityDamageByEntityEvent) event).getDamager());
-            if (damager.isProjectile()) {
+            EntityTag shooter = damager.getShooter();
+            if (damager instanceof Projectile) {
                 projectile = damager;
-                if (damager.hasShooter()) {
-                    damager = damager.getShooter();
-                }
+            }
+            if (shooter != null) {
+                projectile = damager;
+                damager = shooter;
             }
             if (damager != null) {
                 held = damager.getItemInHand();

@@ -37,12 +37,10 @@ public class PistonRetractsScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public PistonRetractsScriptEvent() {
-        instance = this;
         registerCouldMatcher("piston retracts");
         registerCouldMatcher("<block> retracts");
     }
 
-    public static PistonRetractsScriptEvent instance;
     public LocationTag location;
     public MaterialTag material;
     public BlockPistonRetractEvent event;
@@ -53,15 +51,10 @@ public class PistonRetractsScriptEvent extends BukkitScriptEvent implements List
         if (!runInCheck(path, location)) {
             return false;
         }
-        if (!mat.equals("piston") && !tryMaterial(material, mat)) {
+        if (!mat.equals("piston") && !material.tryAdvancedMatcher(mat)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PistonRetracts";
     }
 
     @Override

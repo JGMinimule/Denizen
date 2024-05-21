@@ -20,7 +20,7 @@ public class BlockFadesScriptEvent extends BukkitScriptEvent implements Listener
     //
     // @Cancellable true
     //
-    // @Triggers when a block fades, melts or disappears based on world conditions.
+    // @Triggers when a block fades, melts, or disappears based on world conditions.
     //
     // @Context
     // <context.location> returns the LocationTag the block faded at.
@@ -29,11 +29,9 @@ public class BlockFadesScriptEvent extends BukkitScriptEvent implements Listener
     // -->
 
     public BlockFadesScriptEvent() {
-        instance = this;
         registerCouldMatcher("<block> fades");
     }
 
-    public static BlockFadesScriptEvent instance;
     public LocationTag location;
     public MaterialTag material;
     public BlockFadeEvent event;
@@ -43,16 +41,10 @@ public class BlockFadesScriptEvent extends BukkitScriptEvent implements Listener
         if (!runInCheck(path, location)) {
             return false;
         }
-
-        if (!tryMaterial(material, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, material)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "BlockFades";
     }
 
     @Override

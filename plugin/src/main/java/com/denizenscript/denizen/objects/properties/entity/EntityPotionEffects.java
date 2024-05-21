@@ -6,8 +6,12 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.objects.properties.Property;
-import com.denizenscript.denizencore.tags.Attribute;
+import com.denizenscript.denizencore.objects.properties.PropertyParser;
+import com.denizenscript.denizencore.tags.TagContext;
+import com.denizenscript.denizencore.utilities.CoreUtilities;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import org.bukkit.entity.Arrow;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -34,15 +38,11 @@ public class EntityPotionEffects implements Property {
         }
     }
 
-    public static final String[] handledTags = new String[] {
-            "list_effects", "has_effect"
-    };
-
     public static final String[] handledMechs = new String[] {
             "potion_effects"
     };
 
-    private EntityPotionEffects(EntityTag entity) {
+    public EntityPotionEffects(EntityTag entity) {
         this.entity = entity;
     }
 
@@ -52,52 +52,72 @@ public class EntityPotionEffects implements Property {
         if (entity.isLivingEntity()) {
             return entity.getLivingEntity().getActivePotionEffects();
         }
-        else if (entity.getBukkitEntity() instanceof Arrow) {
-            return ((Arrow) entity.getBukkitEntity()).getCustomEffects();
+        else if (isArrow()) {
+            return getArrow().getCustomEffects();
         }
         return new ArrayList<>();
     }
 
+    public ListTag getEffectsListTag(TagContext context) {
+        ListTag result = new ListTag();
+        for (PotionEffect effect : getEffectsList()) {
+            result.add(ItemPotion.effectToLegacyString(effect, context));
+        }
+        return result;
+    }
+
+    public ListTag getEffectsMapTag() {
+        ListTag result = new ListTag();
+        for (PotionEffect effect : getEffectsList()) {
+            result.addObject(ItemPotion.effectToMap(effect));
+        }
+        return result;
+    }
+
+    public boolean isArrow() {
+        return entity.getBukkitEntity() instanceof Arrow;
+    }
+
+    public Arrow getArrow() {
+        return (Arrow) entity.getBukkitEntity();
+    }
+
     public String getPropertyString() {
-        Collection<PotionEffect> effects = getEffectsList();
-        if (effects.isEmpty()) {
-            return null;
-        }
-        ListTag returnable = new ListTag();
-        for (PotionEffect effect : effects) {
-            returnable.add(ItemPotion.stringifyEffect(effect));
-        }
-        return returnable.identify();
+        ListTag effects = getEffectsMapTag();
+        return effects.isEmpty() ? null : effects.identify();
     }
 
     public String getPropertyId() {
         return "potion_effects";
     }
 
-    public ObjectTag getObjectAttribute(Attribute attribute) {
-
-        if (attribute == null) {
-            return null;
-        }
+    public static void register() {
 
         // <--[tag]
         // @attribute <EntityTag.list_effects>
         // @returns ListTag
         // @group attribute
         // @mechanism EntityTag.potion_effects
+        // @deprecated use 'effects_data' instead
         // @description
-        // Returns the list of active potion effects on the entity, in the format: TYPE,AMPLIFIER,DURATION,IS_AMBIENT,HAS_PARTICLES,HAS_ICON|...
-        // Note that AMPLIFIER is a number representing the level, and DURATION is a number representing the time, in ticks, it will last for.
-        // IS_AMBIENT, HAS_PARTICLES, and HAS_ICON are booleans.
-        // The effect type will be from <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/potion/PotionEffectType.html>.
+        // Deprecated in favor of <@link tag EntityTag.effects_data>
         // -->
-        if (attribute.startsWith("list_effects")) {
-            ListTag effects = new ListTag();
-            for (PotionEffect effect : getEffectsList()) {
-                effects.add(ItemPotion.stringifyEffect(effect));
-            }
-            return effects.getObjectAttribute(attribute.fulfill(1));
-        }
+        PropertyParser.registerTag(EntityPotionEffects.class, ListTag.class, "list_effects", (attribute, object) -> {
+            BukkitImplDeprecations.oldPotionEffects.warn(attribute.context);
+            return object.getEffectsListTag(attribute.context);
+        });
+
+        // <--[tag]
+        // @attribute <EntityTag.effects_data>
+        // @returns ListTag(MapTag)
+        // @group attribute
+        // @mechanism EntityTag.potion_effects
+        // @description
+        // Returns the active potion effects on the entity, in the MapTag format of the mechanism.
+        // -->
+        PropertyParser.registerTag(EntityPotionEffects.class, ListTag.class, "effects_data", (attribute, object) -> {
+            return object.getEffectsMapTag();
+        });
 
         // <--[tag]
         // @attribute <EntityTag.has_effect[<effect>]>
@@ -109,23 +129,26 @@ public class EntityPotionEffects implements Property {
         // If no effect is specified, returns whether the entity has any effect.
         // The effect type must be from <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/potion/PotionEffectType.html>.
         // -->
-        if (attribute.startsWith("has_effect")) {
+        PropertyParser.registerTag(EntityPotionEffects.class, ElementTag.class, "has_effect", (attribute, object) -> {
             boolean returnElement = false;
             if (attribute.hasParam()) {
                 PotionEffectType effectType = PotionEffectType.getByName(attribute.getParam());
-                for (org.bukkit.potion.PotionEffect effect : getEffectsList()) {
-                    if (effect.getType().equals(effectType)) {
-                        returnElement = true;
-                    }
+                if (effectType == null) {
+                    attribute.echoError("Invalid effect type specified: " + attribute.getParam());
+                    return null;
+                }
+                if (object.entity.isLivingEntity()) {
+                    returnElement = object.entity.getLivingEntity().hasPotionEffect(effectType);
+                }
+                else if (object.isArrow()) {
+                    returnElement = object.getArrow().hasCustomEffect(effectType);
                 }
             }
-            else if (!getEffectsList().isEmpty()) {
+            else if (!object.getEffectsList().isEmpty()) {
                 returnElement = true;
             }
-            return new ElementTag(returnElement).getObjectAttribute(attribute.fulfill(1));
-        }
-
-        return null;
+            return new ElementTag(returnElement);
+        });
     }
 
     public void adjust(Mechanism mechanism) {
@@ -136,28 +159,39 @@ public class EntityPotionEffects implements Property {
         // @input ListTag
         // @description
         // Set the entity's active potion effects.
-        // Each item in the list is formatted as: TYPE,AMPLIFIER,DURATION,IS_AMBIENT,HAS_PARTICLES,HAS_ICON
-        // Note that AMPLIFIER is a number representing the level, and DURATION is a number representing the time, in ticks, it will last for.
-        // IS_AMBIENT, HAS_PARTICLES, and HAS_ICON are booleans.
-        // For example: SPEED,0,120,false,true,true would give the entity a swiftness potion for 120 ticks.
-        // The effect type must be from <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/potion/PotionEffectType.html>.
+        // Each item in the list must be a MapTag with keys:
+        // "type" - from <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/potion/PotionEffectType.html>
+        // "amplifier" - number to increase the level by (0 for default level 1)
+        // "duration" - DurationTag, how long it lasts
+        // "ambient", "particles", "icon" - booleans
+        //
+        // For example: [type=SPEED;amplifier=0;duration=120t;ambient=false;particles=true;icon=true]
+        // This example would be a level 1 swiftness potion that lasts 120 ticks.
         // @tags
+        // <EntityTag.effects_data>
         // <EntityTag.list_effects>
         // <EntityTag.has_effect[<effect>]>
         // -->
         if (mechanism.matches("potion_effects")) {
-            ListTag effects = ListTag.valueOf(mechanism.getValue().asString(), mechanism.context);
-            for (String effectStr : effects) {
-                PotionEffect effect = ItemPotion.parseEffect(effectStr, mechanism.context);
+            for (ObjectTag effectObj : CoreUtilities.objectToList(mechanism.value, mechanism.context)) {
+                PotionEffect effect;
+                if (effectObj.canBeType(MapTag.class)) {
+                    MapTag effectMap = effectObj.asType(MapTag.class, mechanism.context);
+                    effect = ItemPotion.parseEffect(effectMap, mechanism.context);
+                }
+                else {
+                    String effectStr = effectObj.toString();
+                    effect = ItemPotion.parseLegacyEffectString(effectStr, mechanism.context);
+                }
                 if (effect == null) {
-                    mechanism.echoError("Invalid potion effect '" + effectStr + "'");
+                    mechanism.echoError("Invalid potion effect '" + effectObj + "'");
                     continue;
                 }
                 if (entity.isLivingEntity()) {
                     entity.getLivingEntity().addPotionEffect(effect);
                 }
-                else if (entity.getBukkitEntity() instanceof Arrow) {
-                    ((Arrow) entity.getBukkitEntity()).addCustomEffect(effect, true);
+                else if (isArrow()) {
+                    getArrow().addCustomEffect(effect, true);
                 }
             }
         }

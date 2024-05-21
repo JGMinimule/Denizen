@@ -1,11 +1,12 @@
 package com.denizenscript.denizen.scripts.commands.player;
 
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.objects.ColorTag;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.PlayerTag;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.objects.core.ColorTag;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.DurationTag;
@@ -21,14 +22,14 @@ public class DebugBlockCommand extends AbstractCommand {
 
     public DebugBlockCommand() {
         setName("debugblock");
-        setSyntax("debugblock [<location>|.../clear] (color:<color>) (alpha:<#.#>) (name:<name>) (players:<player>|...) (d:<duration>{10s})");
+        setSyntax("debugblock [<location>|.../clear] (color:<color>) (name:<name>) (players:<player>|...) (d:<duration>{10s})");
         setRequiredArguments(1, 6);
         isProcedural = false;
     }
 
     // <--[command]
     // @Name DebugBlock
-    // @Syntax debugblock [<location>|.../clear] (color:<color>) (alpha:<#.#>) (name:<name>) (players:<player>|...) (d:<duration>{10s})
+    // @Syntax debugblock [<location>|.../clear] (color:<color>) (name:<name>) (players:<player>|...) (d:<duration>{10s})
     // @Required 1
     // @Maximum 6
     // @Short Shows or clears minecraft debug blocks.
@@ -40,10 +41,7 @@ public class DebugBlockCommand extends AbstractCommand {
     // These are block-grid-aligned markers that are a perfect cube of a single (specifiable) transparent color, and stay for a specified duration of time or until cleared.
     // Markers can optionally also have simple text names.
     //
-    // If arguments are unspecified, the default color is white (in practice: green), the default alpha is 1.0 (most opaque, but not completely opaque),
-    // the default player is the linked player, the default name is none, and the default duration is 10 seconds.
-    //
-    // The underlying color input is a full color value, however the current minecraft client can only render shades between green and gray (ie the red and blue color channels are ignored).
+    // If arguments are unspecified, the default color is white, the default player is the linked player, the default name is none, and the default duration is 10 seconds.
     //
     // @Tags
     // None
@@ -54,7 +52,7 @@ public class DebugBlockCommand extends AbstractCommand {
     //
     // @Usage
     // Use to show a transparent green debug block in front of the player for five seconds.
-    // - debugblock <player.eye_location.forward[2]> color:green alpha:0.5 d:5s
+    // - debugblock <player.eye_location.forward[2]> color:0,255,0,128 d:5s
     //
     // @Usage
     // Use to remove all debug blocks,
@@ -78,6 +76,7 @@ public class DebugBlockCommand extends AbstractCommand {
             }
             else if (arg.matchesPrefix("alpha")
                     && arg.matchesFloat()) {
+                BukkitImplDeprecations.debugBlockAlpha.warn(scriptEntry);
                 scriptEntry.addObject("alpha", arg.asElement());
             }
             else if (arg.matchesPrefix("name")) {
@@ -105,7 +104,6 @@ public class DebugBlockCommand extends AbstractCommand {
         }
         scriptEntry.defaultObject("duration", new DurationTag(10));
         scriptEntry.defaultObject("color", new ColorTag(255, 255, 255));
-        scriptEntry.defaultObject("alpha", new ElementTag("1"));
     }
 
     @Override
@@ -122,14 +120,17 @@ public class DebugBlockCommand extends AbstractCommand {
         }
         if (clear != null && clear.asBoolean()) {
             for (PlayerTag player : players) {
-                NMSHandler.getPacketHelper().clearDebugTestMarker(player.getPlayerEntity());
+                NMSHandler.packetHelper.clearDebugTestMarker(player.getPlayerEntity());
             }
         }
         else {
-            int alphaInt = (int) (alpha.asFloat() * 255);
+            if (alpha != null) {
+                color = new ColorTag(color);
+                color.alpha = (int)(alpha.asFloat() * 255);
+            }
             for (LocationTag location : locations) {
                 for (PlayerTag player : players) {
-                    NMSHandler.getPacketHelper().showDebugTestMarker(player.getPlayerEntity(), location, color, alphaInt, name == null ? "" : name.asString(), (int) duration.getMillis());
+                    NMSHandler.packetHelper.showDebugTestMarker(player.getPlayerEntity(), location, color, name == null ? "" : name.asString(), (int) duration.getMillis());
                 }
             }
         }

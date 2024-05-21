@@ -37,12 +37,10 @@ public class CauldronLevelChangeScriptEvent extends BukkitScriptEvent implements
     // -->
 
     public CauldronLevelChangeScriptEvent() {
-        instance = this;
         registerCouldMatcher("cauldron level changes|raises|lowers");
         registerSwitches("cause");
     }
 
-    public static CauldronLevelChangeScriptEvent instance;
     public LocationTag location;
     public CauldronLevelChangeEvent event;
 
@@ -72,14 +70,9 @@ public class CauldronLevelChangeScriptEvent extends BukkitScriptEvent implements
     }
 
     @Override
-    public String getName() {
-        return "CauldronLevelChange";
-    }
-
-    @Override
     public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag && ((ElementTag) determinationObj).isInt()) {
-            event.setNewLevel(((ElementTag) determinationObj).asInt());
+        if (determinationObj instanceof ElementTag element && element.isInt()) {
+            event.setNewLevel(element.asInt());
         }
         return super.applyDetermination(path, determinationObj);
     }
@@ -88,7 +81,7 @@ public class CauldronLevelChangeScriptEvent extends BukkitScriptEvent implements
     public ObjectTag getContext(String name) {
         switch (name) {
             case "location": return location;
-            case "cause": return new ElementTag(event.getReason().name());
+            case "cause": return new ElementTag(event.getReason());
             case "old_level": return new ElementTag(event.getOldLevel());
             case "new_level": return new ElementTag(event.getNewLevel());
             case "entity":

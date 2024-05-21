@@ -1,9 +1,8 @@
 package com.denizenscript.denizen.scripts.commands.player;
 
 import com.denizenscript.denizen.Denizen;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.interfaces.AdvancementHelper;
 import com.denizenscript.denizen.nms.util.Advancement;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.PlayerTag;
@@ -64,6 +63,8 @@ public class AdvancementCommand extends AbstractCommand {
     // To award a pre-existing vanilla advancement, instead use <@link mechanism PlayerTag.award_advancement>
     //
     // WARNING: Failure to re-create advancements on every server start may result in loss of data - use <@link event server prestart>.
+    //
+    // If you mess with datapacks, you will also need to re-create advancements during <@link event server resources reloaded>
     //
     // @Tags
     // <PlayerTag.has_advancement[<advancement>]>
@@ -132,7 +133,7 @@ public class AdvancementCommand extends AbstractCommand {
             }
             else if (!scriptEntry.hasObject("frame")
                     && arg.matchesPrefix("frame", "f")
-                    && arg.matchesEnum(Advancement.Frame.values())) {
+                    && arg.matchesEnum(Advancement.Frame.class)) {
                 scriptEntry.addObject("frame", arg.asElement());
             }
             else if (!scriptEntry.hasObject("toast")
@@ -207,7 +208,6 @@ public class AdvancementCommand extends AbstractCommand {
         if (scriptEntry.dbCallShouldDebug()) {
             Debug.report(scriptEntry, name, id, parent, delete, grant, revoke, icon, title, description, background, progressLength, frame, toast, announce, hidden, x, y);
         }
-        final AdvancementHelper advancementHelper = NMSHandler.getAdvancementHelper();
         NamespacedKey key = new NamespacedKey(Denizen.getInstance(), id.asString());
         if (delete == null && grant == null && revoke == null) {
             NamespacedKey parentKey = null;
@@ -234,33 +234,38 @@ public class AdvancementCommand extends AbstractCommand {
                     icon.getItemStack(), title.asString(), description.asString(),
                     backgroundKey, Advancement.Frame.valueOf(frame.asString().toUpperCase()),
                     toast.asBoolean(), announce.asBoolean(), hidden.asBoolean(), x.asFloat(), y.asFloat(), progressLength == null ? 1 : progressLength.asInt());
-            advancementHelper.register(advancement);
+            NMSHandler.advancementHelper.register(advancement);
             customRegistered.put(key, advancement);
+            return;
         }
-        else if (delete != null) {
-            advancementHelper.unregister(customRegistered.get(key));
+        Advancement advancement = customRegistered.get(key);
+        if (advancement == null) {
+            Debug.echoError("Invalid advancement key '" + key + "': not registered. Are you sure you registered it using the 'advancement' command previously?"
+                     + " Note that the 'advancement' command is not for vanilla advancements.");
+            return;
+        }
+        if (delete != null) {
+            NMSHandler.advancementHelper.unregister(advancement);
             customRegistered.remove(key);
         }
         else if (grant != null) {
-            Advancement advancement = customRegistered.get(key);
             for (PlayerTag target : grant.filter(PlayerTag.class, scriptEntry)) {
                 Player player = target.getPlayerEntity();
                 if (player != null) {
                     if (progressLength == null) {
-                        advancementHelper.grant(advancement, player);
+                        NMSHandler.advancementHelper.grant(advancement, player);
                     }
                     else {
-                        advancementHelper.grantPartial(advancement, player, progressLength.asInt());
+                        NMSHandler.advancementHelper.grantPartial(advancement, player, progressLength.asInt());
                     }
                 }
             }
         }
         else /*if (revoke != null)*/ {
-            Advancement advancement = customRegistered.get(key);
             for (PlayerTag target : revoke.filter(PlayerTag.class, scriptEntry)) {
                 Player player = target.getPlayerEntity();
                 if (player != null) {
-                    advancementHelper.revoke(advancement, player);
+                    NMSHandler.advancementHelper.revoke(advancement, player);
                 }
             }
         }

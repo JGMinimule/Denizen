@@ -5,13 +5,12 @@ import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.entity.FakeEntity;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
+import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
 import com.denizenscript.denizencore.objects.Argument;
-import com.denizenscript.denizencore.objects.core.ElementTag;
-import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import org.bukkit.Bukkit;
@@ -28,20 +27,21 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
-import java.util.function.Consumer;
 
 public class DisguiseCommand extends AbstractCommand {
 
     public DisguiseCommand() {
         setName("disguise");
-        setSyntax("disguise [<entity>] [cancel/as:<type>] (global/players:<player>|...)");
+        setSyntax("disguise [<entity>] [cancel/as:<type>] (global/players:<player>|...) (self)");
         setRequiredArguments(2, 4);
+        setBooleansHandled("cancel", "global", "self");
+        setPrefixesHandled("players", "as");
         isProcedural = false;
     }
 
     // <--[command]
     // @Name disguise
-    // @Syntax disguise [<entity>] [cancel/as:<type>] (global/players:<player>|...)
+    // @Syntax disguise [<entity>] [cancel/as:<type>] (global/players:<player>|...) (self)
     // @Required 2
     // @Maximum 4
     // @Short Makes the player see an entity as though it were a different type of entity.
@@ -61,7 +61,7 @@ public class DisguiseCommand extends AbstractCommand {
     //
     // Optionally, specify a list of players to show or cancel the entity to.
     // If unspecified, will default to the linked player.
-    // Or, specify 'global' to make the disguise or cancel apply for all players. If using global, use "players:<player>" to show to the self-player.
+    // Or, specify 'global' to make the disguise or cancel apply for all players. If using global, use "self" to show to the self-player.
     //
     // To remove a disguise, use the 'cancel' argument.
     //
@@ -82,54 +82,20 @@ public class DisguiseCommand extends AbstractCommand {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        if (arg.startsWith("as:")) {
-            for (EntityType entity : EntityType.values()) {
-                addOne.accept("as:" + entity.name());
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addWithPrefix("as:", EntityType.values());
     }
 
     @Override
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("players")
-                    && arg.matchesPrefix("to", "players")) {
-                scriptEntry.addObject("players", arg.asType(ListTag.class).filter(PlayerTag.class, scriptEntry));
-            }
-            else if (!scriptEntry.hasObject("global")
-                    && arg.matches("global")) {
-                scriptEntry.addObject("global", new ElementTag(true));
-            }
-            else if (arg.matchesPrefix("as")
-                    && arg.matchesArgumentType(EntityTag.class)) {
-                scriptEntry.addObject("as", arg.asType(EntityTag.class));
-            }
-            else if (!scriptEntry.hasObject("entity")
+            if (!scriptEntry.hasObject("entity")
                     && arg.matchesArgumentType(EntityTag.class)) {
                 scriptEntry.addObject("entity", arg.asType(EntityTag.class));
-            }
-            else if (!scriptEntry.hasObject("cancel")
-                    && arg.matches("cancel")) {
-                scriptEntry.addObject("cancel", new ElementTag(true));
             }
             else {
                 arg.reportUnhandled();
             }
-        }
-        if (!scriptEntry.hasObject("players") && Utilities.entryHasPlayer(scriptEntry)) {
-            if (scriptEntry.hasObject("global")) {
-                scriptEntry.defaultObject("players", new ArrayList<>());
-            }
-            else {
-                scriptEntry.defaultObject("players", Collections.singletonList(Utilities.getEntryPlayer(scriptEntry)));
-            }
-        }
-        if (!scriptEntry.hasObject("as") && !scriptEntry.hasObject("cancel")) {
-            throw new InvalidArgumentsException("Must specify a valid type to disguise as!");
-        }
-        if (!scriptEntry.hasObject("players") && !scriptEntry.hasObject("global")) {
-            throw new InvalidArgumentsException("Must have a valid player attached, or 'global' set!");
         }
         if (!scriptEntry.hasObject("entity")) {
             throw new InvalidArgumentsException("Must specify a valid entity!");
@@ -166,13 +132,17 @@ public class DisguiseCommand extends AbstractCommand {
                 }
             }
             else if (player.isOnline()) {
-                NMSHandler.getPlayerHelper().deTrackEntity(player.getPlayerEntity(), entity.getBukkitEntity());
+                NMSHandler.playerHelper.deTrackEntity(player.getPlayerEntity(), entity.getBukkitEntity());
             }
         }
 
         public void moveFakeNow(Location position) {
-            NMSHandler.getEntityHelper().snapPositionTo(fakeToSelf.entity.getBukkitEntity(), position.toVector());
-            NMSHandler.getEntityHelper().look(fakeToSelf.entity.getBukkitEntity(), position.getYaw(), position.getPitch());
+            float yawOff = 0;
+            if (as.getBukkitEntityType() == EntityType.ENDER_DRAGON) {
+                yawOff = 180;
+            }
+            NMSHandler.entityHelper.snapPositionTo(fakeToSelf.entity.getBukkitEntity(), position.toVector());
+            NMSHandler.entityHelper.look(fakeToSelf.entity.getBukkitEntity(), position.getYaw() + yawOff, position.getPitch());
         }
 
         public void startFake(PlayerTag player) {
@@ -186,9 +156,9 @@ public class DisguiseCommand extends AbstractCommand {
             if (!player.isOnline()) {
                 return;
             }
-            fakeToSelf = FakeEntity.showFakeEntityTo(Collections.singletonList(player), as, player.getLocation(), null);
-            NMSHandler.getPacketHelper().generateNoCollideTeam(player.getPlayerEntity(), fakeToSelf.entity.getUUID());
-            NMSHandler.getPacketHelper().sendEntityMetadataFlagsUpdate(player.getPlayerEntity(), player.getPlayerEntity());
+            fakeToSelf = FakeEntity.showFakeEntityTo(Collections.singletonList(player), as, player.getLocation(), null, null);
+            NMSHandler.packetHelper.generateNoCollideTeam(player.getPlayerEntity(), fakeToSelf.entity.getUUID());
+            NMSHandler.packetHelper.sendEntityMetadataFlagsUpdate(player.getPlayerEntity(), player.getPlayerEntity());
             new BukkitRunnable() {
                 @Override
                 public void run() {
@@ -207,12 +177,12 @@ public class DisguiseCommand extends AbstractCommand {
                 return;
             }
             if (player.isOnline()) {
-                NMSHandler.getPacketHelper().removeNoCollideTeam(player.getPlayerEntity(), fakeToSelf.entity.getUUID());
+                NMSHandler.packetHelper.removeNoCollideTeam(player.getPlayerEntity(), fakeToSelf.entity.getUUID());
                 new BukkitRunnable() {
                     @Override
                     public void run() {
                         if (player.isOnline()) {
-                            NMSHandler.getPacketHelper().sendEntityMetadataFlagsUpdate(player.getPlayerEntity(), player.getPlayerEntity());
+                            NMSHandler.packetHelper.sendEntityMetadataFlagsUpdate(player.getPlayerEntity(), player.getPlayerEntity());
                         }
                     }
                 }.runTaskLater(Denizen.getInstance(), 2);
@@ -229,7 +199,7 @@ public class DisguiseCommand extends AbstractCommand {
                     startFake(player);
                 }
                 else {
-                    NMSHandler.getPlayerHelper().sendEntityDestroy(player.getPlayerEntity(), entity.getBukkitEntity());
+                    NMSHandler.playerHelper.sendEntityDestroy(player.getPlayerEntity(), entity.getBukkitEntity());
                 }
             }
             if (remove != null) {
@@ -242,7 +212,7 @@ public class DisguiseCommand extends AbstractCommand {
                 return;
             }
             if (toOthers == null) {
-                toOthers = NMSHandler.getPlayerHelper().sendEntitySpawn(players, as.getEntityType(), entity.getLocation(), as.getWaitingMechanisms(), entity.getBukkitEntity().getEntityId(), entity.getUUID(), false);
+                toOthers = NMSHandler.playerHelper.sendEntitySpawn(players, as.getEntityType(), entity.getLocation(), as.mechanisms == null ? null : new ArrayList<>(as.mechanisms), entity.getBukkitEntity().getEntityId(), entity.getUUID(), false);
                 toOthers.overrideUUID = UUID.randomUUID();
                 toOthers.entity.uuid = toOthers.overrideUUID;
                 FakeEntity.idsToEntities.put(toOthers.overrideUUID, toOthers);
@@ -309,18 +279,31 @@ public class DisguiseCommand extends AbstractCommand {
     public void execute(ScriptEntry scriptEntry) {
         NetworkInterceptHelper.enable();
         EntityTag entity = scriptEntry.getObjectTag("entity");
-        EntityTag as = scriptEntry.getObjectTag("as");
-        ElementTag cancel = scriptEntry.getElement("cancel");
-        ElementTag global = scriptEntry.getElement("global");
-        List<PlayerTag> players = (List<PlayerTag>) scriptEntry.getObject("players");
-        if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), entity, cancel, as, global, db("players", players));
+        EntityTag as = scriptEntry.argForPrefix("as", EntityTag.class, true);
+        boolean cancel = scriptEntry.argAsBoolean("cancel");
+        boolean global = scriptEntry.argAsBoolean("global");
+        boolean self = scriptEntry.argAsBoolean("self");
+        List<PlayerTag> players = scriptEntry.argForPrefixList("players", PlayerTag.class, true);
+        if (as == null && !cancel) {
+            throw new InvalidArgumentsRuntimeException("Must specify a valid type to disguise as!");
         }
-        boolean isGlobal = global != null && global.asBoolean();
+        if (players == null && !global) {
+            PlayerTag player = Utilities.getEntryPlayer(scriptEntry);
+            if (player != null && player.isOnline()) {
+                players = Collections.singletonList(player);
+            }
+            else {
+                throw new InvalidArgumentsRuntimeException("Must have a valid player attached, or 'global' set!");
+            }
+        }
+        if (scriptEntry.dbCallShouldDebug()) {
+            Debug.report(scriptEntry, getName(), entity, db("cancel", cancel), as, db("global", global), db("self", self), db("players", players));
+        }
         HashMap<UUID, TrackedDisguise> playerMap = disguises.get(entity.getUUID());
         if (playerMap != null) {
-            if (isGlobal) {
+            if (global) {
                 for (Map.Entry<UUID, TrackedDisguise> entry : playerMap.entrySet()) {
+                    entry.getValue().isActive = false;
                     if (entry.getKey() == null) {
                         if (entry.getValue().toOthers != null) {
                             FakeEntity.idsToEntities.remove(entry.getValue().toOthers.overrideUUID);
@@ -335,7 +318,6 @@ public class DisguiseCommand extends AbstractCommand {
                         PlayerTag player = new PlayerTag(entry.getKey());
                         entry.getValue().removeFor(player);
                     }
-                    entry.getValue().isActive = false;
                 }
                 disguises.remove(entity.getUUID());
             }
@@ -355,28 +337,26 @@ public class DisguiseCommand extends AbstractCommand {
                 }
             }
         }
-        if (cancel == null || !cancel.asBoolean()) {
+        if (!cancel) {
             TrackedDisguise disguise = new TrackedDisguise(entity, as);
-            disguise.as.entity = NMSHandler.getPlayerHelper().sendEntitySpawn(new ArrayList<>(), as.getEntityType(), entity.getLocation(), as.getWaitingMechanisms(), -1, null, false).entity.getBukkitEntity();
-            if (isGlobal) {
+            disguise.as.entity = NMSHandler.playerHelper.sendEntitySpawn(new ArrayList<>(), as.getEntityType(), entity.getLocation(), as.mechanisms == null ? null : new ArrayList<>(as.mechanisms), -1, null, false).entity.getBukkitEntity();
+            if (global) {
                 playerMap = disguises.computeIfAbsent(entity.getUUID(), k -> new HashMap<>());
                 playerMap.put(null, disguise);
                 disguise.isActive = true;
                 ArrayList<PlayerTag> playerSet = players == null ? new ArrayList<>() : new ArrayList<>(players);
                 for (Player player : entity.getWorld().getPlayers()) {
-                    if (!EntityTag.isNPC(player) && !playerSet.contains(new PlayerTag(player)) && !player.getUniqueId().equals(entity.getUUID())) {
+                    if (!EntityTag.isNPC(player) && !playerSet.contains(new PlayerTag(player)) && (self || !player.getUniqueId().equals(entity.getUUID()))) {
                         playerSet.add(new PlayerTag(player));
                     }
                 }
                 disguise.sendTo(playerSet);
             }
             else {
-                if (players != null) {
-                    for (PlayerTag player : players) {
-                        playerMap = disguises.computeIfAbsent(entity.getUUID(), k -> new HashMap<>());
-                        playerMap.put(player.getUUID(), disguise);
-                        disguise.isActive = true;
-                    }
+                for (PlayerTag player : players) {
+                    playerMap = disguises.computeIfAbsent(entity.getUUID(), k -> new HashMap<>());
+                    playerMap.put(player.getUUID(), disguise);
+                    disguise.isActive = true;
                 }
                 disguise.sendTo(players);
             }

@@ -41,12 +41,10 @@ public class EntityPathfindScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public EntityPathfindScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> pathfinds");
         registerSwitches("to", "at");
     }
 
-    public static EntityPathfindScriptEvent instance;
 
     public EntityTag entity;
     public EntityTag target;
@@ -54,7 +52,7 @@ public class EntityPathfindScriptEvent extends BukkitScriptEvent implements List
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation())) {
@@ -63,16 +61,10 @@ public class EntityPathfindScriptEvent extends BukkitScriptEvent implements List
         if (!runInCheck(path, event.getLoc(), "to")) {
             return false;
         }
-        String at = path.switches.get("at");
-        if (at != null && !tryEntity(target, at)) {
+        if (!path.tryObjectSwitch("at", target)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityPathfinds";
     }
 
     @Override

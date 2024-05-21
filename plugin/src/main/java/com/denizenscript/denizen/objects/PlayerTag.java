@@ -1,17 +1,19 @@
 package com.denizenscript.denizen.objects;
 
-import com.denizenscript.denizen.events.BukkitScriptEvent;
+import com.denizenscript.denizen.Denizen;
+import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.NMSVersion;
+import com.denizenscript.denizen.nms.abstracts.ImprovedOfflinePlayer;
+import com.denizenscript.denizen.nms.abstracts.Sidebar;
 import com.denizenscript.denizen.nms.interfaces.AdvancementHelper;
 import com.denizenscript.denizen.objects.properties.entity.EntityHealth;
 import com.denizenscript.denizen.scripts.commands.player.DisguiseCommand;
+import com.denizenscript.denizen.scripts.commands.player.ExperienceCommand;
 import com.denizenscript.denizen.scripts.commands.player.SidebarCommand;
 import com.denizenscript.denizen.scripts.commands.server.BossBarCommand;
-import com.denizenscript.denizen.utilities.AdvancedTextImpl;
-import com.denizenscript.denizen.utilities.FormattedTextHelper;
-import com.denizenscript.denizen.utilities.ScoreboardHelper;
-import com.denizenscript.denizen.utilities.Utilities;
+import com.denizenscript.denizen.tags.core.PlayerTagBase;
+import com.denizenscript.denizen.utilities.*;
 import com.denizenscript.denizen.utilities.blocks.FakeBlock;
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.depends.Depends;
 import com.denizenscript.denizen.utilities.entity.BossBarHelper;
 import com.denizenscript.denizen.utilities.entity.FakeEntity;
@@ -21,13 +23,10 @@ import com.denizenscript.denizen.utilities.packets.DenizenPacketHandler;
 import com.denizenscript.denizen.utilities.packets.HideParticles;
 import com.denizenscript.denizen.utilities.packets.ItemChangeMessage;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
+import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
 import com.denizenscript.denizencore.flags.FlaggableObject;
 import com.denizenscript.denizencore.objects.*;
-import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.abstracts.ImprovedOfflinePlayer;
-import com.denizenscript.denizen.nms.abstracts.Sidebar;
-import com.denizenscript.denizen.tags.core.PlayerTagBase;
 import com.denizenscript.denizencore.objects.core.*;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
@@ -35,25 +34,25 @@ import com.denizenscript.denizencore.tags.TagContext;
 import com.denizenscript.denizencore.tags.TagRunnable;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.npc.NPCSelector;
-import net.md_5.bungee.api.ChatColor;
-import net.md_5.bungee.api.ChatMessageType;
 import org.bukkit.*;
 import org.bukkit.advancement.Advancement;
 import org.bukkit.advancement.AdvancementProgress;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.Sign;
+import org.bukkit.block.banner.Pattern;
 import org.bukkit.block.banner.PatternType;
 import org.bukkit.boss.BossBar;
 import org.bukkit.command.PluginCommand;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.FishHook;
-import org.bukkit.entity.Player;
+import org.bukkit.entity.*;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.*;
-import org.bukkit.inventory.meta.BookMeta;
 import org.bukkit.map.MapView;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 import org.bukkit.util.RayTraceResult;
 
 import java.util.*;
@@ -65,6 +64,14 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     // @prefix p
     // @base EntityTag
     // @implements FlaggableObject
+    // @ExampleTagBase player
+    // @ExampleValues <player>
+    // @ExampleForReturns
+    // - kill %VALUE%
+    // @ExampleForReturns
+    // - heal %VALUE%
+    // @ExampleForReturns
+    // - narrate "hello there!" targets:%VALUE%
     // @format
     // The identity format for players is the UUID of the relevant player.
     //
@@ -97,7 +104,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
      */
     public static void notePlayer(OfflinePlayer player) {
         if (player.getName() == null) {
-            Debug.echoError("Null player " + player.toString());
+            Debug.echoError("Null named player " + player + " - may be file corruption, or player data imported from non-bukkit server?");
             return;
         }
         if (!playerNames.containsKey(CoreUtilities.toLowerCase(player.getName()))) {
@@ -117,21 +124,12 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     //   OBJECT FETCHER
     /////////////////
 
-    @Deprecated
-    public static PlayerTag valueOf(String string) {
-        return valueOf(string, null);
-    }
-
     @Fetchable("p")
     public static PlayerTag valueOf(String string, TagContext context) {
         return valueOfInternal(string, context, true);
     }
 
-    public static PlayerTag valueOfInternal(String string, boolean announce) {
-        return valueOfInternal(string, null, announce);
-    }
-
-    public static String playerByNameMessage = Deprecations.playerByNameWarning.message;
+    public static String playerByNameMessage = BukkitImplDeprecations.playerByNameWarning.message;
 
     public static PlayerTag valueOfInternal(String string, TagContext context, boolean defaultAnnounce) {
         if (string == null) {
@@ -159,9 +157,9 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Match as a player name
         if (string.length() <= 16 && playerNames.containsKey(string)) {
             OfflinePlayer player = Bukkit.getOfflinePlayer(playerNames.get(string));
-            if (announce) {
-                Deprecations.playerByNameWarning.message = playerByNameMessage + " Player named '" + player.getName() + "' has UUID: " + player.getUniqueId();
-                Deprecations.playerByNameWarning.warn(context);
+            if (announce && (context == null || context.script != null)) { // 'script != null' check is to allow ex command usage silently
+                BukkitImplDeprecations.playerByNameWarning.message = playerByNameMessage + " Player named '" + player.getName() + "' has UUID: " + player.getUniqueId();
+                BukkitImplDeprecations.playerByNameWarning.warn(context);
             }
             return new PlayerTag(player);
         }
@@ -184,7 +182,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 UUID uuid = UUID.fromString(arg);
                 if (uuid != null) {
                     OfflinePlayer player = Bukkit.getOfflinePlayer(uuid);
-                    if (player != null && player.hasPlayedBefore()) {
+                    if (player != null && (player.isOnline() || player.hasPlayedBefore())) {
                         return true;
                     }
                 }
@@ -205,11 +203,11 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     /////////////////
 
     public PlayerTag(OfflinePlayer player) {
-        offlinePlayer = player;
+        this(player.getUniqueId());
     }
 
     public PlayerTag(UUID uuid) {
-        offlinePlayer = Bukkit.getOfflinePlayer(uuid);
+        this.uuid = uuid;
     }
 
     public PlayerTag(Player player) {
@@ -233,32 +231,37 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Nothing to do.
     }
 
-    OfflinePlayer offlinePlayer;
+    UUID uuid;
 
     public boolean isValid() {
-        return getPlayerEntity() != null || getOfflinePlayer() != null;
+        OfflinePlayer pl = getOfflinePlayer();
+        if (pl != null && pl.hasPlayedBefore()) {
+            return true;
+        }
+        return getPlayerEntity() != null;
     }
 
     public Player getPlayerEntity() {
-        if (offlinePlayer == null) {
-            return null;
-        }
-        return Bukkit.getPlayer(offlinePlayer.getUniqueId());
+        return Bukkit.getPlayer(uuid);
     }
 
     public UUID getUUID() {
-        if (offlinePlayer == null) {
-            return null;
-        }
-        return offlinePlayer.getUniqueId();
+        return uuid;
     }
 
     public OfflinePlayer getOfflinePlayer() {
-        return offlinePlayer;
+        return Bukkit.getOfflinePlayer(uuid);
     }
 
     public ImprovedOfflinePlayer getNBTEditor() {
-        return NMSHandler.getPlayerHelper().getOfflineData(getOfflinePlayer());
+        ImprovedOfflinePlayer result = ImprovedOfflinePlayer.offlinePlayers.get(uuid);
+        if (result == null || (!result.modified && result.timeLastLoaded + Settings.worldPlayerDataMaxCacheTicks < DenizenCore.currentTimeMonotonicMillis)) {
+            result = NMSHandler.playerHelper.getOfflineData(uuid);
+            if (result != null) {
+                ImprovedOfflinePlayer.offlinePlayers.put(uuid, result);
+            }
+        }
+        return result;
     }
 
     @Override
@@ -277,10 +280,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     }
 
     public String getName() {
-        if (offlinePlayer == null) {
-            return null;
-        }
-        return offlinePlayer.getName();
+        return getOfflinePlayer().getName();
     }
 
     @Override
@@ -347,15 +347,6 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         }
     }
 
-    public PlayerInventory getBukkitInventory() {
-        if (isOnline()) {
-            return getPlayerEntity().getInventory();
-        }
-        else {
-            return getNBTEditor().getInventory();
-        }
-    }
-
     public InventoryTag getInventory() {
         if (isOnline()) {
             return InventoryTag.mirrorBukkitInventory(getPlayerEntity().getInventory());
@@ -385,21 +376,21 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         return null;
     }
 
-    public Inventory getBukkitEnderChest() {
-        if (isOnline()) {
-            return getPlayerEntity().getEnderChest();
-        }
-        else {
-            return getNBTEditor().getEnderChest();
-        }
-    }
-
     public InventoryTag getEnderChest() {
         if (isOnline()) {
             return new InventoryTag(getPlayerEntity().getEnderChest(), getPlayerEntity());
         }
         else {
             return new InventoryTag(getNBTEditor(), true);
+        }
+    }
+
+    public WorldTag getWorldTag() {
+        if (isOnline()) {
+            return new WorldTag(getPlayerEntity().getWorld());
+        }
+        else {
+            return new WorldTag(getLocation().getWorldName());
         }
     }
 
@@ -414,6 +405,10 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
     public ItemTag getHeldItem() {
         return new ItemTag(getPlayerEntity().getEquipment().getItemInMainHand());
+    }
+
+    public ItemTag getOffhandItem() {
+        return new ItemTag(getPlayerEntity().getEquipment().getItemInOffHand());
     }
 
     public void decrementStatistic(Statistic statistic, int amount) {
@@ -473,7 +468,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             getPlayerEntity().setBedSpawnLocation(location);
         }
         else {
-            getNBTEditor().setBedSpawnLocation(location, getNBTEditor().isSpawnForced());
+            getNBTEditor().setBedSpawnLocation(location);
         }
     }
 
@@ -531,21 +526,57 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         }
     }
 
+    public float getExp() {
+        if (isOnline()) {
+            return getPlayerEntity().getExp();
+        }
+        else {
+            return getNBTEditor().getExp();
+        }
+    }
+
+    public void setExp(float xp) {
+        if (isOnline()) {
+            getPlayerEntity().setExp(xp);
+        }
+        else {
+            getNBTEditor().setExp(xp);
+        }
+    }
+
+    public int getTotalExperience() {
+        if (isOnline()) {
+            return getPlayerEntity().getTotalExperience();
+        }
+        else {
+            return getNBTEditor().getTotalExperience();
+        }
+    }
+
+    public void setTotalExperience(int xp) {
+        if (isOnline()) {
+            getPlayerEntity().setTotalExperience(xp);
+        }
+        else {
+            getNBTEditor().setTotalExperience(xp);
+        }
+    }
+
+    public int getLevel() {
+        if (isOnline()) {
+            return getPlayerEntity().getLevel();
+        }
+        else {
+            return getNBTEditor().getLevel();
+        }
+    }
+
     public void setLevel(int level) {
         if (isOnline()) {
             getPlayerEntity().setLevel(level);
         }
         else {
             getNBTEditor().setLevel(level);
-        }
-    }
-
-    public void setFlySpeed(float speed) {
-        if (isOnline()) {
-            getPlayerEntity().setFlySpeed(speed);
-        }
-        else {
-            getNBTEditor().setFlySpeed(speed);
         }
     }
 
@@ -559,7 +590,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     }
 
     public boolean hasChunkLoaded(Chunk chunk) {
-        return NMSHandler.getPlayerHelper().hasChunkLoaded(getPlayerEntity(), chunk);
+        return NMSHandler.playerHelper.hasChunkLoaded(getPlayerEntity(), chunk);
     }
 
     /////////////////////
@@ -581,7 +612,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
     @Override
     public String debuggable() {
-        return "p@" + offlinePlayer.getUniqueId().toString() + "<GR> (" + offlinePlayer.getName() + ")";
+        return "<LG>p@<Y>" + uuid + "<GR> (" + getOfflinePlayer().getName() + ")";
     }
 
     @Override
@@ -590,23 +621,23 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     }
 
     @Override
-    public String getObjectType() {
-        return "Player";
-    }
-
-    @Override
     public String identify() {
-        return "p@" + offlinePlayer.getUniqueId().toString();
+        return "p@" + uuid;
     }
 
     @Override
     public String identifySimple() {
-        return "p@" + offlinePlayer.getName();
+        return "p@" + getOfflinePlayer().getName();
     }
 
     @Override
     public String toString() {
         return identify();
+    }
+
+    @Override
+    public Object getJavaObject() {
+        return getOfflinePlayer();
     }
 
     @Override
@@ -622,7 +653,12 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         return getUUID().equals(((PlayerTag) other).getUUID());
     }
 
-    public static void registerTags() {
+    @Override
+    public boolean isTruthy() {
+        return isOnline();
+    }
+
+    public static void register() {
 
         AbstractFlagTracker.registerFlagHandlers(tagProcessor);
 
@@ -644,10 +680,11 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @returns ListTag
         // @description
         // Returns a list of the last 10 things the player has said, less if the player hasn't said all that much.
-        // Works with offline players.
+        // Works with offline players, if the player previously joined and typed in chat since the last server restart.
         // -->
         tagProcessor.registerTag(ListTag.class, "chat_history_list", (attribute, object) -> {
-            return new ListTag(PlayerTagBase.playerChatHistory.get(object.getUUID()), true);
+            List<String> history = PlayerTagBase.playerChatHistory.get(object.getUUID());
+            return history == null ? new ListTag() : new ListTag(history, true);
         });
 
         // <--[tag]
@@ -663,12 +700,8 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (attribute.hasParam() && ArgumentHelper.matchesInteger(attribute.getParam())) {
                 x = attribute.getIntParam();
             }
-            // No playerchathistory? Return null.
-            if (!PlayerTagBase.playerChatHistory.containsKey(object.getUUID())) {
-                return null;
-            }
             List<String> messages = PlayerTagBase.playerChatHistory.get(object.getUUID());
-            if (messages.size() < x || x < 1) {
+            if (messages == null || messages.size() < x || x < 1) {
                 return null;
             }
             return new ElementTag(messages.get(x - 1), true);
@@ -713,19 +746,19 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
             if (attribute.startsWith("formatted", 2)) {
                 attribute.fulfill(1);
-                Deprecations.playerMoneyFormatTag.warn(attribute.context);
+                BukkitImplDeprecations.playerMoneyFormatTag.warn(attribute.context);
                 return new ElementTag(Depends.economy.format(Depends.economy.getBalance(object.getOfflinePlayer())));
             }
 
             if (attribute.startsWith("currency_singular", 2)) {
                 attribute.fulfill(1);
-                Deprecations.oldEconomyTags.warn(attribute.context);
+                BukkitImplDeprecations.oldEconomyTags.warn(attribute.context);
                 return new ElementTag(Depends.economy.currencyNameSingular());
             }
 
             if (attribute.startsWith("currency", 2)) {
                 attribute.fulfill(1);
-                Deprecations.oldEconomyTags.warn(attribute.context);
+                BukkitImplDeprecations.oldEconomyTags.warn(attribute.context);
                 return new ElementTag(Depends.economy.currencyNamePlural());
             }
 
@@ -767,7 +800,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                     return false;
                 }
                 if (matcher != null) {
-                    return BukkitScriptEvent.tryEntity(new EntityTag(e), matcher);
+                    return new EntityTag(e).tryAdvancedMatcher(matcher);
                 }
                 return true;
             });
@@ -786,32 +819,42 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @returns LocationTag
         // @mechanism PlayerTag.bed_spawn_location
         // @description
-        // Returns the location of the player's bed spawn location, null if
-        // it doesn't exist.
+        // Returns the location of the player's bed spawn location, or null if it doesn't exist.
         // Works with offline players.
         // -->
-        tagProcessor.registerTag(LocationTag.class, "bed_spawn", (attribute, object) -> {
+        registerOfflineTag(LocationTag.class, "bed_spawn", (attribute, object) -> {
+            Location bedSpawn = object.isOnline() ? NMSHandler.playerHelper.getBedSpawnLocation(object.getPlayerEntity()) : object.getOfflinePlayer().getBedSpawnLocation();
+            return bedSpawn != null ? new LocationTag(bedSpawn) : null;
+        });
+
+        // <--[tag]
+        // @attribute <PlayerTag.calculated_bed_spawn>
+        // @returns LocationTag
+        // @description
+        // Returns the player's calculated bed spawn location.
+        // This is a location around their set spawn where they could actually spawn, such as a safe block next to a bed.
+        // See <@link tag PlayerTag.bed_spawn> for the actual spawn location they have set.
+        // -->
+        registerOnlineOnlyTag(LocationTag.class, "calculated_bed_spawn", (attribute, object) -> {
             try {
-                NMSHandler.getChunkHelper().changeChunkServerThread(object.getWorld());
-                if (object.getOfflinePlayer().getBedSpawnLocation() == null) {
-                    return null;
-                }
-                return new LocationTag(object.getOfflinePlayer().getBedSpawnLocation());
+                NMSHandler.chunkHelper.changeChunkServerThread(object.getWorld());
+                Location calculatedBedSpawn = object.getPlayerEntity().getBedSpawnLocation();
+                return calculatedBedSpawn != null ? new LocationTag(calculatedBedSpawn) : null;
             }
             finally {
-                NMSHandler.getChunkHelper().restoreServerThread(object.getWorld());
+                NMSHandler.chunkHelper.restoreServerThread(object.getWorld());
             }
         });
 
-        tagProcessor.registerTag(ObjectTag.class, "location", (attribute, object) -> {
+        registerOfflineTag(ObjectTag.class, "location", (attribute, object) -> {
             if (object.isOnline() && !object.getPlayerEntity().isDead()) {
                 return new EntityTag(object.getPlayerEntity()).doLocationTag(attribute);
             }
             return object.getLocation();
         });
 
-        tagProcessor.registerTag(WorldTag.class, "world", (attribute, object) -> {
-            return new WorldTag(object.getWorld());
+        registerOfflineTag(WorldTag.class, "world", (attribute, object) -> {
+            return object.getWorldTag();
         });
 
         /////////////////////
@@ -824,7 +867,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @description
         // Returns the cooldown duration remaining on player's material.
         // -->
-        tagProcessor.registerTag(DurationTag.class, "item_cooldown", (attribute, object) -> {
+        registerOnlineOnlyTag(DurationTag.class, "item_cooldown", (attribute, object) -> {
             MaterialTag mat = new ElementTag(attribute.getParam()).asType(MaterialTag.class, attribute.context);
             if (mat != null) {
                 return new DurationTag((long) object.getPlayerEntity().getCooldown(mat.getMaterial()));
@@ -843,7 +886,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             return new TimeTag(object.getOfflinePlayer().getFirstPlayed());
         });
         tagProcessor.registerTag(DurationTag.class, "first_played", (attribute, object) -> {
-            Deprecations.playerTimePlayedTags.warn(attribute.context);
+            BukkitImplDeprecations.playerTimePlayedTags.warn(attribute.context);
             return new DurationTag(object.getOfflinePlayer().getFirstPlayed() / 50);
         });
 
@@ -851,12 +894,11 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @attribute <PlayerTag.has_played_before>
         // @returns ElementTag(Boolean)
         // @description
-        // Returns whether the player has played before.
+        // Returns true if the player has played before, or is currently online. Returns false if this PlayerTag refers to a UUID that has never been on the server.
         // Works with offline players.
-        // Note: This will just always return true.
         // -->
         tagProcessor.registerTag(ElementTag.class, "has_played_before", (attribute, object) -> {
-            return new ElementTag(true);
+            return new ElementTag(object.isValid());
         });
 
         // <--[tag]
@@ -866,19 +908,25 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @description
         // Returns the player's exhaustion value. Exhaustion is increased in vanilla when a player sprints or jumps, and is used to reduce food saturation over time.
         // This can reach a maximum value of 40, and decreases by 4 every tick.
+        // Works with offline players.
         // -->
-        tagProcessor.registerTag(ElementTag.class, "exhaustion", (attribute, object) -> {
-            return new ElementTag(object.getPlayerEntity().getExhaustion());
+        registerOfflineTag(ElementTag.class, "exhaustion", (attribute, object) -> {
+            if (object.isOnline()) {
+                return new ElementTag(object.getPlayerEntity().getExhaustion());
+            }
+            else {
+                return new ElementTag(object.getNBTEditor().getExhaustion());
+            }
         });
 
         // Handle EntityTag oxygen tags here to allow getting them when the player is offline
-        tagProcessor.registerTag(DurationTag.class, "max_oxygen", (attribute, object) -> {
+        registerOfflineTag(DurationTag.class, "max_oxygen", (attribute, object) -> {
             return new DurationTag((long) object.getMaximumAir());
         });
 
-        tagProcessor.registerTag(DurationTag.class, "oxygen", (attribute, object) -> {
+        registerOfflineTag(DurationTag.class, "oxygen", (attribute, object) -> {
             if (attribute.startsWith("max", 2)) {
-                Deprecations.entityMaxOxygenTag.warn(attribute.context);
+                BukkitImplDeprecations.entityMaxOxygenTag.warn(attribute.context);
                 attribute.fulfill(1);
                 return new DurationTag((long) object.getMaximumAir());
             }
@@ -891,7 +939,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @description
         // Returns whether the player's health bar is currently being scaled.
         // -->
-        tagProcessor.registerTag(ElementTag.class, "health_is_scaled", (attribute, object) -> {
+        registerOfflineTag(ElementTag.class, "health_is_scaled", (attribute, object) -> {
             return new ElementTag(object.getPlayerEntity().isHealthScaled());
         });
 
@@ -900,19 +948,19 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @returns ElementTag(Decimal)
         // @mechanism PlayerTag.health_scale
         // @description
-        // Returns the current scale for the player's health bar
+        // Returns the current scale for the player's health bar.
         // -->
-        tagProcessor.registerTag(ElementTag.class, "health_scale", (attribute, object) -> {
+        registerOfflineTag(ElementTag.class, "health_scale", (attribute, object) -> {
             return new ElementTag(object.getPlayerEntity().getHealthScale());
         });
 
         // Handle EntityTag health tags here to allow getting them when the player is offline
-        tagProcessor.registerTag(ElementTag.class, "formatted_health", (attribute, object) -> {
+        registerOfflineTag(ElementTag.class, "formatted_health", (attribute, object) -> {
             Double maxHealth = attribute.hasParam() ? attribute.getDoubleParam() : null;
             return EntityHealth.getHealthFormatted(new EntityTag(object.getPlayerEntity()), maxHealth);
         });
 
-        tagProcessor.registerTag(ElementTag.class, "health_percentage", (attribute, object) -> {
+        registerOfflineTag(ElementTag.class, "health_percentage", (attribute, object) -> {
             double maxHealth = object.getPlayerEntity().getMaxHealth();
             if (attribute.hasParam()) {
                 maxHealth = attribute.getIntParam();
@@ -920,30 +968,30 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             return new ElementTag((object.getPlayerEntity().getHealth() / maxHealth) * 100);
         });
 
-        tagProcessor.registerTag(ElementTag.class, "health_max", (attribute, object) -> {
+        registerOfflineTag(ElementTag.class, "health_max", (attribute, object) -> {
             return new ElementTag(object.getMaxHealth());
         });
 
-        tagProcessor.registerTag(ElementTag.class, "health", (attribute, object) -> {
+        registerOfflineTag(ElementTag.class, "health", (attribute, object) -> {
             if (attribute.startsWith("is_scaled", 2)) {
                 attribute.fulfill(1);
-                Deprecations.entityHealthTags.warn(attribute.context);
+                BukkitImplDeprecations.entityHealthTags.warn(attribute.context);
                 return new ElementTag(object.getPlayerEntity().isHealthScaled());
             }
 
             if (attribute.startsWith("scale", 2)) {
                 attribute.fulfill(1);
-                Deprecations.entityHealthTags.warn(attribute.context);
+                BukkitImplDeprecations.entityHealthTags.warn(attribute.context);
                 return new ElementTag(object.getPlayerEntity().getHealthScale());
             }
             if (attribute.startsWith("formatted", 2)) {
-                Deprecations.entityHealthTags.warn(attribute.context);
+                BukkitImplDeprecations.entityHealthTags.warn(attribute.context);
                 Double maxHealth = attribute.hasContext(2) ? attribute.getDoubleContext(2) : null;
                 attribute.fulfill(1);
                 return EntityHealth.getHealthFormatted(new EntityTag(object.getPlayerEntity()), maxHealth);
             }
             if (attribute.startsWith("percentage", 2)) {
-                Deprecations.entityHealthTags.warn(attribute.context);
+                BukkitImplDeprecations.entityHealthTags.warn(attribute.context);
                 attribute.fulfill(1);
                 double maxHealth = object.getPlayerEntity().getMaxHealth();
                 if (attribute.hasParam()) {
@@ -952,7 +1000,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 return new ElementTag((object.getPlayerEntity().getHealth() / maxHealth) * 100);
             }
             if (attribute.startsWith("max", 2)) {
-                Deprecations.entityHealthTags.warn(attribute.context);
+                BukkitImplDeprecations.entityHealthTags.warn(attribute.context);
                 attribute.fulfill(1);
                 return new ElementTag(object.getMaxHealth());
             }
@@ -966,6 +1014,9 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns whether the player is banned.
         // -->
         tagProcessor.registerTag(ElementTag.class, "is_banned", (attribute, object) -> {
+            if (object.getName() == null) {
+                return new ElementTag(false);
+            }
             BanEntry ban = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(object.getName());
             if (ban == null) {
                 return new ElementTag(false);
@@ -1000,16 +1051,16 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         });
 
         // <--[tag]
-        // @attribute <PlayerTag.is_whitelisted>
+        // @attribute <PlayerTag.whitelisted>
         // @returns ElementTag(Boolean)
-        // @mechanism PlayerTag.is_whitelisted
+        // @mechanism PlayerTag.whitelisted
         // @description
         // Returns whether the player is whitelisted.
         // Works with offline players.
         // -->
-        tagProcessor.registerTag(ElementTag.class, "is_whitelisted", (attribute, object) -> {
+        tagProcessor.registerTag(ElementTag.class, "whitelisted", (attribute, object) -> {
             return new ElementTag(object.getOfflinePlayer().isWhitelisted());
-        });
+        }, "is_whitelisted");
 
         // <--[tag]
         // @attribute <PlayerTag.last_played_time>
@@ -1026,7 +1077,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             return new TimeTag(object.getOfflinePlayer().getLastPlayed());
         });
         tagProcessor.registerTag(DurationTag.class, "last_played", (attribute, object) -> {
-            Deprecations.playerTimePlayedTags.warn(attribute.context);
+            BukkitImplDeprecations.playerTimePlayedTags.warn(attribute.context);
             if (object.isOnline()) {
                 return new DurationTag(System.currentTimeMillis() / 50);
             }
@@ -1072,6 +1123,9 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Potentially can be null.
         // -->
         tagProcessor.registerTag(TimeTag.class, "ban_expiration_time", (attribute, object) -> {
+            if (object.getName() == null) {
+                return null;
+            }
             BanEntry ban = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(object.getName());
             if (ban == null || ban.getExpiration() == null || (ban.getExpiration() != null && ban.getExpiration().before(new Date()))) {
                 return null;
@@ -1079,7 +1133,10 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             return new TimeTag(ban.getExpiration().getTime());
         });
         tagProcessor.registerTag(DurationTag.class, "ban_expiration", (attribute, object) -> {
-            Deprecations.playerTimePlayedTags.warn(attribute.context);
+            if (object.getName() == null) {
+                return null;
+            }
+            BukkitImplDeprecations.playerTimePlayedTags.warn(attribute.context);
             BanEntry ban = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(object.getName());
             if (ban == null || ban.getExpiration() == null || (ban.getExpiration() != null && ban.getExpiration().before(new Date()))) {
                 return null;
@@ -1094,6 +1151,9 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the reason for the player's ban, if they are banned.
         // -->
         tagProcessor.registerTag(ElementTag.class, "ban_reason", (attribute, object) -> {
+            if (object.getName() == null) {
+                return null;
+            }
             BanEntry ban = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(object.getName());
             if (ban == null || (ban.getExpiration() != null && ban.getExpiration().before(new Date()))) {
                 return null;
@@ -1108,6 +1168,9 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns when the player's ban was created, if they are banned.
         // -->
         tagProcessor.registerTag(TimeTag.class, "ban_created_time", (attribute, object) -> {
+            if (object.getName() == null) {
+                return null;
+            }
             BanEntry ban = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(object.getName());
             if (ban == null || (ban.getExpiration() != null && ban.getExpiration().before(new Date()))) {
                 return null;
@@ -1115,6 +1178,9 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             return new TimeTag(ban.getCreated().getTime());
         });
         tagProcessor.registerTag(DurationTag.class, "ban_created", (attribute, object) -> {
+            if (object.getName() == null) {
+                return null;
+            }
             Deprecations.timeTagRewrite.warn(attribute.context);
             BanEntry ban = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(object.getName());
             if (ban == null || (ban.getExpiration() != null && ban.getExpiration().before(new Date()))) {
@@ -1130,6 +1196,9 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the source of the player's ban, if they are banned.
         // -->
         tagProcessor.registerTag(ElementTag.class, "ban_source", (attribute, object) -> {
+            if (object.getName() == null) {
+                return null;
+            }
             BanEntry ban = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(object.getName());
             if (ban == null || (ban.getExpiration() != null && ban.getExpiration().before(new Date()))) {
                 return null;
@@ -1138,7 +1207,10 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         });
 
         tagProcessor.registerTag(ObjectTag.class, "ban_info", (attribute, object) -> {
-            Deprecations.playerBanInfoTags.warn(attribute.context);
+            if (object.getName() == null) {
+                return null;
+            }
+            BukkitImplDeprecations.playerBanInfoTags.warn(attribute.context);
             BanEntry ban = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(object.getName());
             if (ban == null || (ban.getExpiration() != null && ban.getExpiration().before(new Date()))) {
                 return null;
@@ -1378,7 +1450,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the name of the player as shown in the player list.
         // -->
         registerOnlineOnlyTag(ElementTag.class, "list_name", (attribute, object) -> {
-            return new ElementTag(AdvancedTextImpl.instance.getPlayerListName(object.getPlayerEntity()), true);
+            return new ElementTag(PaperAPITools.instance.getPlayerListName(object.getPlayerEntity()), true);
         });
 
         // <--[tag]
@@ -1395,12 +1467,12 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Documented in EntityTag
         tagProcessor.registerTag(ElementTag.class, "name", (attribute, object) -> {
             if (attribute.startsWith("list", 2) && object.isOnline()) {
-                Deprecations.playerNameTags.warn(attribute.context);
+                BukkitImplDeprecations.playerNameTags.warn(attribute.context);
                 attribute.fulfill(1);
                 return new ElementTag(object.getPlayerEntity().getPlayerListName(), true);
             }
             if (attribute.startsWith("display", 2) && object.isOnline()) {
-                Deprecations.playerNameTags.warn(attribute.context);
+                BukkitImplDeprecations.playerNameTags.warn(attribute.context);
                 attribute.fulfill(1);
                 return new ElementTag(object.getPlayerEntity().getDisplayName(), true);
             }
@@ -1413,11 +1485,9 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @description
         // Returns the brand of the client, as sent via the "minecraft:brand" packet.
         // On normal clients, will say "vanilla". On broken clients, will say "unknown". Modded clients will identify themselves (though not guaranteed!).
-        // It may be ideal to change setting "Packets.Auto init" in the Denizen config to "true" to guarantee this tag functions as expected.
         // -->
         registerOnlineOnlyTag(ElementTag.class, "client_brand", (attribute, object) -> {
-            NetworkInterceptHelper.enable();
-            return new ElementTag(NMSHandler.getPlayerHelper().getPlayerBrand(object.getPlayerEntity()), true);
+            return new ElementTag(PaperAPITools.instance.getClientBrand(object.getPlayerEntity()), true);
         });
 
         // <--[tag]
@@ -1441,7 +1511,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns a InventoryTag of the player's current inventory.
         // Works with offline players.
         // -->
-        tagProcessor.registerTag(InventoryTag.class, "inventory", (attribute, object) -> {
+        registerOfflineTag(InventoryTag.class, "inventory", (attribute, object) -> {
             return object.getInventory();
         });
 
@@ -1452,7 +1522,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Gets the player's enderchest inventory.
         // Works with offline players.
         // -->
-        tagProcessor.registerTag(InventoryTag.class, "enderchest", (attribute, object) -> {
+        registerOfflineTag(InventoryTag.class, "enderchest", (attribute, object) -> {
             return object.getEnderChest();
         });
 
@@ -1478,7 +1548,11 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns a list of the recipes the player has discovered, in the Namespace:Key format, for example "minecraft:gold_nugget".
         // -->
         registerOnlineOnlyTag(ListTag.class, "discovered_recipes", (attribute, object) -> {
-            return new ListTag(NMSHandler.getEntityHelper().getDiscoveredRecipes(object.getPlayerEntity()));
+            ListTag result = new ListTag();
+            for (NamespacedKey recipe : object.getPlayerEntity().getDiscoveredRecipes()) {
+                result.addObject(new ElementTag(recipe.toString(), true));
+            }
+            return result;
         });
 
         // <--[tag]
@@ -1534,7 +1608,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
         registerOnlineOnlyTag(ObjectTag.class, "item_in_hand", (attribute, object) -> {
             if (attribute.startsWith("slot", 2)) {
-                Deprecations.playerItemInHandSlotTag.warn(attribute.context);
+                BukkitImplDeprecations.playerItemInHandSlotTag.warn(attribute.context);
                 attribute.fulfill(1);
                 return new ElementTag(object.getPlayerEntity().getInventory().getHeldItemSlot() + 1);
             }
@@ -1589,7 +1663,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         });
 
         registerOnlineOnlyTag(ObjectTag.class, "sidebar", (attribute, object) -> {
-            Deprecations.playerSidebarTags.warn(attribute.context);
+            BukkitImplDeprecations.playerSidebarTags.warn(attribute.context);
             if (attribute.startsWith("lines", 2)) {
                 attribute.fulfill(1);
                 Sidebar sidebar = SidebarCommand.getSidebar(object);
@@ -1631,7 +1705,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // See also <@link language Player Entity Skins (Skin Blobs)>.
         // -->
         registerOnlineOnlyTag(ElementTag.class, "skin_blob", (attribute, object) -> {
-            return new ElementTag(NMSHandler.getInstance().getProfileEditor().getPlayerSkinBlob(object.getPlayerEntity()));
+            return new ElementTag(NMSHandler.instance.getProfileEditor().getPlayerSkinBlob(object.getPlayerEntity()));
         });
 
         // <--[tag]
@@ -1643,7 +1717,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // See also <@link language Player Entity Skins (Skin Blobs)>.
         // -->
         registerOnlineOnlyTag(ElementTag.class, "skull_skin", (attribute, object) -> {
-            String skin = NMSHandler.getInstance().getProfileEditor().getPlayerSkinBlob(object.getPlayerEntity());
+            String skin = NMSHandler.instance.getProfileEditor().getPlayerSkinBlob(object.getPlayerEntity());
             if (skin == null) {
                 return null;
             }
@@ -1660,32 +1734,41 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerOnlineOnlyTag(ItemTag.class, "skull_item", (attribute, object) -> {
             ItemStack item = new ItemStack(Material.PLAYER_HEAD);
-            item = NMSHandler.getItemHelper().setSkullSkin(item, NMSHandler.getInstance().getPlayerProfile(object.getPlayerEntity()));
+            item = NMSHandler.itemHelper.setSkullSkin(item, NMSHandler.instance.getPlayerProfile(object.getPlayerEntity()));
             return new ItemTag(item);
         });
 
         registerOnlineOnlyTag(ObjectTag.class, "attack_cooldown", (attribute, object) -> {
-            Deprecations.playerAttackCooldownTags.warn(attribute.context);
+            BukkitImplDeprecations.playerAttackCooldownTags.warn(attribute.context);
             if (attribute.startsWith("duration", 2)) {
                 attribute.fulfill(1);
-                return new DurationTag((long) NMSHandler.getPlayerHelper()
+                return new DurationTag((long) NMSHandler.playerHelper
                         .ticksPassedDuringCooldown(object.getPlayerEntity()));
             }
             else if (attribute.startsWith("max_duration", 2)) {
                 attribute.fulfill(1);
-                return new DurationTag((long) NMSHandler.getPlayerHelper()
+                return new DurationTag((long) NMSHandler.playerHelper
                         .getMaxAttackCooldownTicks(object.getPlayerEntity()));
             }
 
             else if (attribute.startsWith("percent", 2)) {
                 attribute.fulfill(1);
-                return new ElementTag(NMSHandler.getPlayerHelper()
-                        .getAttackCooldownPercent(object.getPlayerEntity()) * 100);
+                return new ElementTag(object.getPlayerEntity().getAttackCooldown() * 100);
             }
 
             Debug.echoError("The tag 'player.attack_cooldown...' must be followed by a sub-tag.");
 
             return null;
+        });
+
+        // <--[tag]
+        // @attribute <PlayerTag.main_hand>
+        // @returns ElementTag
+        // @description
+        // Returns the player's main hand, either LEFT or RIGHT.
+        // -->
+        registerOnlineOnlyTag(ElementTag.class, "main_hand", (attribute, object) -> {
+            return new ElementTag(object.getPlayerEntity().getMainHand().toString());
         });
 
         /////////////////////
@@ -1774,7 +1857,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the displayed text in the nameplate of the player.
         // -->
         registerOnlineOnlyTag(ElementTag.class, "nameplate", (attribute, object) -> {
-            return new ElementTag(NMSHandler.getInstance().getProfileEditor().getPlayerName(object.getPlayerEntity()), true);
+            return new ElementTag(NMSHandler.instance.getProfileEditor().getPlayerName(object.getPlayerEntity()), true);
         });
 
         /////////////////////
@@ -1822,9 +1905,15 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @mechanism PlayerTag.can_fly
         // @description
         // Returns whether the player is allowed to fly.
+        // Works with offline players.
         // -->
-        registerOnlineOnlyTag(ElementTag.class, "can_fly", (attribute, object) -> {
-            return new ElementTag(object.getPlayerEntity().getAllowFlight());
+        registerOfflineTag(ElementTag.class, "can_fly", (attribute, object) -> {
+            if (object.isOnline()) {
+                return new ElementTag(object.getPlayerEntity().getAllowFlight());
+            }
+            else {
+                return new ElementTag(object.getNBTEditor().getAllowFlight());
+            }
         }, "allowed_flight");
 
         // <--[tag]
@@ -1834,9 +1923,15 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @description
         // Returns the speed the player can fly at.
         // Default value is '0.2'.
+        // Works with offline players.
         // -->
-        registerOnlineOnlyTag(ElementTag.class, "fly_speed", (attribute, object) -> {
-            return new ElementTag(object.getPlayerEntity().getFlySpeed());
+        registerOfflineTag(ElementTag.class, "fly_speed", (attribute, object) -> {
+            if (object.isOnline()) {
+                return new ElementTag(object.getPlayerEntity().getFlySpeed());
+            }
+            else {
+                return new ElementTag(object.getNBTEditor().getFlySpeed());
+            }
         });
 
         // <--[tag]
@@ -1845,9 +1940,15 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @mechanism PlayerTag.walk_speed
         // @description
         // Returns the speed the player can walk at.
+        // Works with offline players.
         // -->
-        registerOnlineOnlyTag(ElementTag.class, "walk_speed", (attribute, object) -> {
-            return new ElementTag(object.getPlayerEntity().getWalkSpeed());
+        registerOfflineTag(ElementTag.class, "walk_speed", (attribute, object) -> {
+            if (object.isOnline()) {
+                return new ElementTag(object.getPlayerEntity().getWalkSpeed());
+            }
+            else {
+                return new ElementTag(object.getNBTEditor().getWalkSpeed());
+            }
         });
 
         // <--[tag]
@@ -1856,9 +1957,15 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @mechanism PlayerTag.saturation
         // @description
         // Returns the current food saturation of the player.
+        // Works with offline players.
         // -->
-        registerOnlineOnlyTag(ElementTag.class, "saturation", (attribute, object) -> {
-            return new ElementTag(object.getPlayerEntity().getSaturation());
+        registerOfflineTag(ElementTag.class, "saturation", (attribute, object) -> {
+            if (object.isOnline()) {
+                return new ElementTag(object.getPlayerEntity().getSaturation());
+            }
+            else {
+                return new ElementTag(object.getNBTEditor().getSaturation());
+            }
         });
 
         // <--[tag]
@@ -1902,7 +2009,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerOnlineOnlyTag(ElementTag.class, "food_level", (attribute, object) -> {
             if (attribute.startsWith("formatted", 2)) {
-                Deprecations.playerFoodLevelFormatTag.warn(attribute.context);
+                BukkitImplDeprecations.playerFoodLevelFormatTag.warn(attribute.context);
                 double maxHunger = object.getPlayerEntity().getMaxHealth();
                 if (attribute.hasContext(2)) {
                     maxHunger = attribute.getIntContext(2);
@@ -1936,11 +2043,11 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the name of the gamemode the player is currently set to.
         // Works with offline players.
         // -->
-        tagProcessor.registerTag(ElementTag.class, "gamemode", (attribute, object) -> {
+        registerOfflineTag(ElementTag.class, "gamemode", (attribute, object) -> {
             if (object.isOnline()) {
-                return new ElementTag(object.getPlayerEntity().getGameMode().name());
+                return new ElementTag(object.getPlayerEntity().getGameMode());
             }
-            return new ElementTag(object.getNBTEditor().getGameMode().name());
+            return new ElementTag(object.getNBTEditor().getGameMode());
         });
 
         // <--[tag]
@@ -1960,7 +2067,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the player's current ping.
         // -->
         registerOnlineOnlyTag(ElementTag.class, "ping", (attribute, object) -> {
-            return new ElementTag(NMSHandler.getPlayerHelper().getPing(object.getPlayerEntity()));
+            return new ElementTag(object.getPlayerEntity().getPing());
         });
 
         // <--[tag]
@@ -1979,9 +2086,11 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @description
         // Returns whether the player is currently sneaking.
         // -->
-        registerOnlineOnlyTag(ElementTag.class, "is_sneaking", (attribute, object) -> {
-            return new ElementTag(object.getPlayerEntity().isSneaking());
-        });
+        if (!Denizen.supportsPaper || NMSHandler.getVersion().isAtMost(NMSVersion.v1_18)) {
+            registerOnlineOnlyTag(ElementTag.class, "is_sneaking", (attribute, object) -> {
+                return new ElementTag(object.getPlayerEntity().isSneaking());
+            });
+        }
 
         // <--[tag]
         // @attribute <PlayerTag.is_sprinting>
@@ -2045,9 +2154,8 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @attribute <PlayerTag.time>
         // @returns ElementTag(Number)
         // @description
-        // Returns the time the player is currently experiencing. This time could differ from
-        // the time that the rest of the world is currently experiencing if a 'time' or 'freeze_time'
-        // mechanism is being used on the player.
+        // Returns the time the player is currently experiencing.
+        // This time could differ from the time that the rest of the world is currently experiencing if <@link command time> is being used on the player.
         // -->
         registerOnlineOnlyTag(ElementTag.class, "time", (attribute, object) -> {
             return new ElementTag(object.getPlayerEntity().getPlayerTime());
@@ -2064,7 +2172,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerOnlineOnlyTag(ElementTag.class, "weather", (attribute, object) -> {
             if (object.getPlayerEntity().getPlayerWeather() != null) {
-                return new ElementTag(object.getPlayerEntity().getPlayerWeather().name());
+                return new ElementTag(object.getPlayerEntity().getPlayerWeather());
             }
             else {
                 return null;
@@ -2072,22 +2180,37 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         });
 
         // <--[tag]
+        // @attribute <PlayerTag.calculate_xp>
+        // @returns ElementTag(Number)
+        // @description
+        // Returns the calculated total amount of XP the player has, based on the amount of experience needed per level, for each level the player has.
+        // Works with offline players.
+        // -->
+        registerOfflineTag(ElementTag.class, "calculate_xp", (attribute, object) -> {
+            int level = object.getLevel();
+            return new ElementTag(ExperienceCommand.TOTAL_XP_FOR_LEVEL(level) + (object.getExp() * ExperienceCommand.XP_FOR_NEXT_LEVEL(level)));
+        });
+
+        // <--[tag]
         // @attribute <PlayerTag.xp_level>
         // @returns ElementTag(Number)
         // @description
         // Returns the number of XP levels the player has.
+        // Works with offline players.
         // -->
-        registerOnlineOnlyTag(ElementTag.class, "xp_level", (attribute, object) -> {
-            return new ElementTag(object.getPlayerEntity().getLevel());
+        registerOfflineTag(ElementTag.class, "xp_level", (attribute, object) -> {
+            return new ElementTag(object.getLevel());
         });
+
         // <--[tag]
         // @attribute <PlayerTag.xp_to_next_level>
         // @returns ElementTag(Number)
         // @description
         // Returns the amount of XP the player needs to get to the next level.
+        // Works with offline players.
         // -->
-        registerOnlineOnlyTag(ElementTag.class, "xp_to_next_level", (attribute, object) -> {
-            return new ElementTag(object.getPlayerEntity().getExpToLevel());
+        registerOfflineTag(ElementTag.class, "xp_to_next_level", (attribute, object) -> {
+            return new ElementTag(ExperienceCommand.XP_FOR_NEXT_LEVEL(object.getLevel()));
         });
 
         // <--[tag]
@@ -2095,9 +2218,12 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @returns ElementTag(Number)
         // @description
         // Returns the total amount of experience points the player has.
+        // This is how much XP the player has ever received, not a current value.
+        // To get the current total, use <@link tag PlayerTag.calculate_xp>.
+        // Works with offline players.
         // -->
-        registerOnlineOnlyTag(ElementTag.class, "xp_total", (attribute, object) -> {
-            return new ElementTag(object.getPlayerEntity().getTotalExperience());
+        registerOfflineTag(ElementTag.class, "xp_total", (attribute, object) -> {
+            return new ElementTag(object.getTotalExperience());
         });
 
         // <--[tag]
@@ -2106,23 +2232,23 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @description
         // Returns the percentage of experience points to the next level.
         // -->
-        registerOnlineOnlyTag(ElementTag.class, "xp", (attribute, object) -> {
+        registerOfflineTag(ElementTag.class, "xp", (attribute, object) -> {
             if (attribute.startsWith("level", 2)) {
-                Deprecations.playerXpTags.warn(attribute.context);
+                BukkitImplDeprecations.playerXpTags.warn(attribute.context);
                 attribute.fulfill(1);
-                return new ElementTag(object.getPlayerEntity().getLevel());
+                return new ElementTag(object.getLevel());
             }
             if (attribute.startsWith("to_next_level", 2)) {
-                Deprecations.playerXpTags.warn(attribute.context);
+                BukkitImplDeprecations.playerXpTags.warn(attribute.context);
                 attribute.fulfill(1);
-                return new ElementTag(object.getPlayerEntity().getExpToLevel());
+                return new ElementTag(ExperienceCommand.XP_FOR_NEXT_LEVEL(object.getLevel()));
             }
             if (attribute.startsWith("total", 2)) {
-                Deprecations.playerXpTags.warn(attribute.context);
+                BukkitImplDeprecations.playerXpTags.warn(attribute.context);
                 attribute.fulfill(1);
-                return new ElementTag(object.getPlayerEntity().getTotalExperience());
+                return new ElementTag(object.getTotalExperience());
             }
-            return new ElementTag(object.getPlayerEntity().getExp() * 100);
+            return new ElementTag(object.getExp() * 100);
         });
 
         // <--[tag]
@@ -2295,7 +2421,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerOnlineOnlyTag(ElementTag.class, "packets_sent", (attribute, object) -> {
             NetworkInterceptHelper.enable();
-            return new ElementTag(NMSHandler.getPacketHelper().getPacketStats(object.getPlayerEntity(), true));
+            return new ElementTag(NMSHandler.packetHelper.getPacketStats(object.getPlayerEntity(), true));
         });
 
         // <--[tag]
@@ -2307,7 +2433,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerOnlineOnlyTag(ElementTag.class, "packets_received", (attribute, object) -> {
             NetworkInterceptHelper.enable();
-            return new ElementTag(NMSHandler.getPacketHelper().getPacketStats(object.getPlayerEntity(), false));
+            return new ElementTag(NMSHandler.packetHelper.getPacketStats(object.getPlayerEntity(), false));
         });
 
         // <--[tag]
@@ -2317,7 +2443,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the fishing hook a player has cast (if any).
         // -->
         registerOnlineOnlyTag(EntityTag.class, "fish_hook", (attribute, object) -> {
-            FishHook hook = NMSHandler.getFishingHelper().getHookFrom(object.getPlayerEntity());
+            FishHook hook = NMSHandler.fishingHelper.getHookFrom(object.getPlayerEntity());
             if (hook == null) {
                 return null;
             }
@@ -2331,9 +2457,9 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @description
         // Returns whether the player's bed spawn location is forced (ie still valid even if a bed is missing).
         // -->
-        tagProcessor.registerTag(ElementTag.class, "spawn_forced", (attribute, object) -> {
+        registerOfflineTag(ElementTag.class, "spawn_forced", (attribute, object) -> {
             if (object.isOnline()) {
-                return new ElementTag(NMSHandler.getPlayerHelper().getSpawnForced(object.getPlayerEntity()));
+                return new ElementTag(NMSHandler.playerHelper.getSpawnForced(object.getPlayerEntity()));
             }
             return new ElementTag(object.getNBTEditor().isSpawnForced());
         });
@@ -2346,9 +2472,8 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerOnlineOnlyTag(TimeTag.class, "last_action_time", (attribute, object) -> {
             // The internal time values use monotonic time - this converts to real time.
-            long playerMilliTime = NMSHandler.getPlayerHelper().getLastActionTime(object.getPlayerEntity());
-            long relativeMillis = System.nanoTime() / 1000000L - playerMilliTime;
-            return new TimeTag(System.currentTimeMillis() - relativeMillis);
+            long playerMilliTime = NMSHandler.playerHelper.getLastActionTime(object.getPlayerEntity());
+            return new TimeTag(CoreUtilities.monotonicMillisToReal(playerMilliTime));
         });
 
         // <--[tag]
@@ -2363,6 +2488,22 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 return null;
             }
             return new ElementTag(id);
+        });
+
+        // <--[tag]
+        // @attribute <PlayerTag.scoreboard_team_name[(<board>)]>
+        // @returns ElementTag
+        // @description
+        // Returns the name of the team the player is in for a given scoreboard, if any.
+        // If no scoreboard is specified, uses the default (main) board.
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "scoreboard_team_name", (attribute, object) -> {
+            Scoreboard board = attribute.hasParam() ? ScoreboardHelper.getScoreboard(attribute.getParam()) : ScoreboardHelper.getMain();
+            Team team = board.getEntryTeam(object.getName());
+            if (team == null) {
+                return null;
+            }
+            return new ElementTag(team.getName());
         });
 
         // <--[tag]
@@ -2415,20 +2556,193 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             }
             return result;
         });
+
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18)) {
+
+            // <--[tag]
+            // @attribute <PlayerTag.skin_model>
+            // @returns ElementTag
+            // @description
+            // Returns the player's skin model, either CLASSIC or SLIM.
+            // -->
+            registerOnlineOnlyTag(ElementTag.class, "skin_model", (attribute, object) -> {
+                return MultiVersionHelper1_18.getSkinModel(object.getPlayerEntity());
+            });
+        }
+
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19)) {
+
+            // <--[tag]
+            // @attribute <PlayerTag.last_death_location>
+            // @returns LocationTag
+            // @mechanism PlayerTag.last_death_location
+            // @description
+            // Returns the location where the player last died, if any.
+            // Works with offline players.
+            // -->
+            registerOfflineTag(LocationTag.class, "last_death_location", (attribute, object) -> {
+                Location deathLoc = object.getOfflinePlayer().getLastDeathLocation();
+                return deathLoc != null ? new LocationTag(deathLoc) : null;
+            });
+
+            // <--[mechanism]
+            // @object PlayerTag
+            // @name last_death_location
+            // @input LocationTag
+            // @description
+            // Sets the player's last death location, note that this only updates clientside when the player respawns.
+            // Works with offline players.
+            // See also <@link mechanism PlayerTag.refresh_player>.
+            // @tags
+            // <PlayerTag.last_death_location>
+            // -->
+            registerOfflineMechanism("last_death_location", LocationTag.class, (object, mechanism, input) -> {
+                if (object.isOnline()) {
+                    object.getPlayerEntity().setLastDeathLocation(input);
+                }
+                else {
+                    object.getNBTEditor().setLastDeathLocation(input);
+                }
+            });
+        }
+
+        // <--[mechanism]
+        // @object PlayerTag
+        // @name refresh_player
+        // @input None
+        // @description
+        // Refreshes the player's client, resending some internal data.
+        // -->
+        registerOnlineOnlyMechanism("refresh_player", (object, mechanism) -> {
+            NMSHandler.playerHelper.refreshPlayer(object.getPlayerEntity());
+        });
+
+        // <--[mechanism]
+        // @object PlayerTag
+        // @name whitelisted
+        // @input ElementTag(Boolean)
+        // @description
+        // Sets whether the player is whitelisted.
+        // Works with offline players.
+        // @tags
+        // <PlayerTag.whitelisted>
+        // -->
+        tagProcessor.registerMechanism("whitelisted", false, ElementTag.class, (object, mechanism, input) -> {
+            if (mechanism.requireBoolean()) {
+                object.getOfflinePlayer().setWhitelisted(input.asBoolean());
+            }
+        }, "is_whitelisted");
+
+
+
+        // <--[mechanism]
+        // @object PlayerTag
+        // @name bed_spawn_location
+        // @input LocationTag
+        // @description
+        // Sets the bed location that the player respawns at.
+        // Provide no input to unset.
+        // @tags
+        // <PlayerTag.bed_spawn>
+        // -->
+        registerOfflineMechanism("bed_spawn_location", (object, mechanism) -> {
+            if (!mechanism.hasValue()) {
+                object.setBedSpawnLocation(null);
+            }
+            else if (mechanism.requireObject(LocationTag.class)) {
+                object.setBedSpawnLocation(mechanism.valueAsType(LocationTag.class));
+            }
+        });
+
+        // <--[mechanism]
+        // @object PlayerTag
+        // @name spawn_forced
+        // @input ElementTag(Boolean)
+        // @description
+        // Sets whether the player's bed spawn location is forced (ie still valid even if a bed is missing).
+        // @tags
+        // <PlayerTag.spawn_forced>
+        // -->
+        registerOfflineMechanism("spawn_forced", ElementTag.class, (object, mechanism, input) -> {
+            if (!mechanism.requireBoolean()) {
+                return;
+            }
+            if (object.isOnline()) {
+                NMSHandler.playerHelper.setSpawnForced(object.getPlayerEntity(), input.asBoolean());
+            }
+            else {
+                object.getNBTEditor().setSpawnForced(input.asBoolean());
+            }
+        });
     }
 
     public static ObjectTagProcessor<PlayerTag> tagProcessor = new ObjectTagProcessor<>();
 
-    public static <R extends ObjectTag> void registerOnlineOnlyTag(Class<R> returnType, String name, TagRunnable.ObjectInterface<PlayerTag, R> runnable, String... variants) {
+    /**
+     * Needed for validation on tags that mess with 'getNBTEditor' or similar special calls for offline-player-compatibility logic.
+     */
+    public static <R extends ObjectTag> void registerOfflineTag(Class<R> returnType, String name, TagRunnable.ObjectInterface<PlayerTag, R> runnable, String... variants) {
         tagProcessor.registerTag(returnType, name, (attribute, object) -> {
-            if (!object.isOnline()) {
+            if (!object.isValid()) {
                 if (!attribute.hasAlternative()) {
-                    Debug.echoError("Player is not online, but tag '" + attribute.getAttributeWithoutParam(1) + "' requires the player be online, for player: " + object.debuggable());
+                    attribute.echoError("Player is not considered valid in tag '" + attribute.getAttributeWithoutParam(1) + "' for player: " + object.debuggable());
                 }
                 return null;
             }
             return runnable.run(attribute, object);
         }, variants);
+    }
+
+    public static <R extends ObjectTag> void registerOnlineOnlyTag(Class<R> returnType, String name, TagRunnable.ObjectInterface<PlayerTag, R> runnable, String... variants) {
+        tagProcessor.registerTag(returnType, name, (attribute, object) -> {
+            if (!object.isOnline()) {
+                if (!attribute.hasAlternative()) {
+                    attribute.echoError("Player is not online, but tag '" + attribute.getAttributeWithoutParam(1) + "' requires the player be online, for player: " + object.debuggable());
+                }
+                return null;
+            }
+            return runnable.run(attribute, object);
+        }, variants);
+    }
+
+    public static void registerOnlineOnlyMechanism(String name, Mechanism.GenericMechRunnerInterface<PlayerTag> runnable) {
+        tagProcessor.registerMechanism(name, false, (object, mechanism) -> {
+            if (!object.isOnline()) {
+                mechanism.echoError("Player is not online, but mechanism '" + name + "' requires the player be online, for player: " + object.debuggable());
+                return;
+            }
+            runnable.run(object, mechanism);
+        });
+    }
+
+    public static <P extends ObjectTag> void registerOnlineOnlyMechanism(String name, Class<P> paramType, Mechanism.ObjectInputMechRunnerInterface<PlayerTag, P> runnable) {
+        tagProcessor.registerMechanism(name, false, paramType, (object, mechanism, input) -> {
+            if (!object.isOnline()) {
+                mechanism.echoError("Player is not online, but mechanism '" + name + "' requires the player be online, for player: " + object.debuggable());
+                return;
+            }
+            runnable.run(object, mechanism, input);
+        });
+    }
+
+    public static <P extends ObjectTag> void registerOfflineMechanism(String name, Class<P> paramType, Mechanism.ObjectInputMechRunnerInterface<PlayerTag, P> runnable, String... deprecatedVariants) {
+        tagProcessor.registerMechanism(name, false, paramType, (object, mechanism, input) -> {
+            if (!object.isValid()) {
+                mechanism.echoError("Player is not considered valid in mechanism '" + name + "' for player: " + object.debuggable());
+                return;
+            }
+            runnable.run(object, mechanism, input);
+        }, deprecatedVariants);
+    }
+
+    public static void registerOfflineMechanism(String name, Mechanism.GenericMechRunnerInterface<PlayerTag> runnable, String... deprecatedVariants) {
+        tagProcessor.registerMechanism(name, false, (object, mechanism) -> {
+            if (!object.isValid()) {
+                mechanism.echoError("Player is not considered valid in mechanism '" + name + "' for player: " + object.debuggable());
+                return;
+            }
+            runnable.run(object, mechanism);
+        }, deprecatedVariants);
     }
 
     @Override
@@ -2445,11 +2759,42 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     }
 
     public void applyProperty(Mechanism mechanism) {
-        Debug.echoError("Cannot apply properties to a player!");
+        mechanism.echoError("Cannot apply properties to a player!");
     }
 
     @Override
     public void adjust(Mechanism mechanism) {
+
+        // <--[mechanism]
+        // @object PlayerTag
+        // @name send_climbable_materials
+        // @input ListTag(MaterialTag)
+        // @description
+        // Sends the player a list of climbable materials.
+        // To climb a block, the player has to stand in it, which means only non-full blocks can be climbed.
+        // Note that this gets reset once the player rejoins or once server resources are reloaded (see <@link event server resources reloaded>).
+        // @tags
+        // <server.vanilla_tagged_materials[<tag>]>
+        // @example
+        // # Lets the linked player climb iron_bars, while keeping other climbable materials climbable
+        // - adjust <player> send_climbable_materials:<server.vanilla_tagged_materials[climbable].include[iron_bars]>
+        // @example
+        // # Lets the linked player climb only acacia_buttons, making all other materials non-climbable.
+        // - adjust <player> send_climbable_materials:acacia_button
+        // -->
+        if (mechanism.matches("send_climbable_materials") && mechanism.requireObject(ListTag.class)) {
+            List<MaterialTag> materialTags = mechanism.valueAsType(ListTag.class).filter(MaterialTag.class, mechanism.context);
+            List<Material> materials = new ArrayList<>();
+            for (MaterialTag materialTag : materialTags) {
+                Material material = materialTag.getMaterial();
+                if (!material.isBlock()) {
+                    mechanism.echoError("Invalid material specified '" + material.name() + "': must be a block material.");
+                    continue;
+                }
+                materials.add(material);
+            }
+            NMSHandler.playerHelper.sendClimbableMaterials(getPlayerEntity(), materials);
+        }
 
         // <--[mechanism]
         // @object PlayerTag
@@ -2479,7 +2824,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Forces the player to respawn if they are on the death screen.
         // -->
         if (mechanism.matches("respawn")) {
-            NMSHandler.getPacketHelper().respawn(getPlayerEntity());
+            NMSHandler.packetHelper.respawn(getPlayerEntity());
         }
 
         // <--[mechanism]
@@ -2493,11 +2838,11 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Note: This is powered by a bug in Minecraft that has been present for a long time, but may at some point be 'fixed' by Mojang.
         // -->
         if (mechanism.matches("vision")) {
-            if (mechanism.hasValue() && mechanism.requireEnum(false, EntityType.values())) {
-                NMSHandler.getPacketHelper().setVision(getPlayerEntity(), EntityType.valueOf(mechanism.getValue().asString().toUpperCase()));
+            if (mechanism.hasValue() && mechanism.requireEnum(EntityType.class)) {
+                NMSHandler.packetHelper.setVision(getPlayerEntity(), EntityType.valueOf(mechanism.getValue().asString().toUpperCase()));
             }
             else {
-                NMSHandler.getPacketHelper().forceSpectate(getPlayerEntity(), getPlayerEntity());
+                NMSHandler.packetHelper.forceSpectate(getPlayerEntity(), getPlayerEntity());
             }
         }
 
@@ -2629,7 +2974,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Shows the player fake absorption health that persists on damage.
         // -->
         if (mechanism.matches("fake_absorption_health") && mechanism.requireFloat()) {
-            NMSHandler.getPacketHelper().setFakeAbsorption(getPlayerEntity(), mechanism.getValue().asFloat());
+            NMSHandler.packetHelper.setFakeAbsorption(getPlayerEntity(), mechanism.getValue().asFloat());
         }
 
         // <--[mechanism]
@@ -2680,7 +3025,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Deprecated, use <@link command resourcepack>.
         // -->
         if (mechanism.matches("resource_pack") || mechanism.matches("texture_pack")) {
-            Deprecations.playerResourcePackMech.warn(mechanism.context);
+            BukkitImplDeprecations.playerResourcePackMech.warn(mechanism.context);
             String pack = mechanism.getValue().asString();
             int pipe = pack.indexOf('|');
             if (pipe > 0) {
@@ -2707,11 +3052,17 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @input ElementTag(Decimal)
         // @description
         // Sets the current food saturation level of a player.
+        // Works with offline players.
         // @tags
         // <PlayerTag.saturation>
         // -->
         if (mechanism.matches("saturation") && mechanism.requireFloat()) {
-            getPlayerEntity().setSaturation(mechanism.getValue().asFloat());
+            if (isOnline()) {
+                getPlayerEntity().setSaturation(mechanism.getValue().asFloat());
+            }
+            else {
+                getNBTEditor().setSaturation(mechanism.getValue().asFloat());
+            }
         }
 
         // <--[mechanism]
@@ -2747,47 +3098,21 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
         // <--[mechanism]
         // @object PlayerTag
-        // @name bed_spawn_location
-        // @input LocationTag
-        // @description
-        // Sets the bed location that the player respawns at.
-        // @tags
-        // <PlayerTag.bed_spawn>
-        // -->
-        if (mechanism.matches("bed_spawn_location") && mechanism.requireObject(LocationTag.class)) {
-            setBedSpawnLocation(mechanism.valueAsType(LocationTag.class));
-        }
-
-        // <--[mechanism]
-        // @object PlayerTag
-        // @name spawn_forced
-        // @input ElementTag(Boolean)
-        // @description
-        // Sets whether the player's bed spawn location is forced (ie still valid even if a bed is missing).
-        // @tags
-        // <PlayerTag.spawn_forced>
-        // -->
-        if (mechanism.matches("spawn_forced") && mechanism.requireBoolean()) {
-            if (isOnline()) {
-                NMSHandler.getPlayerHelper().setSpawnForced(getPlayerEntity(), mechanism.getValue().asBoolean());
-            }
-            else {
-                ImprovedOfflinePlayer editor = getNBTEditor();
-                editor.setBedSpawnLocation(editor.getBedSpawnLocation(), mechanism.getValue().asBoolean());
-            }
-        }
-
-        // <--[mechanism]
-        // @object PlayerTag
         // @name can_fly
         // @input ElementTag(Boolean)
         // @description
         // Sets whether the player is allowed to fly.
+        // Works with offline players.
         // @tags
         // <PlayerTag.can_fly>
         // -->
         if (mechanism.matches("can_fly") && mechanism.requireBoolean()) {
-            getPlayerEntity().setAllowFlight(mechanism.getValue().asBoolean());
+            if (isOnline()) {
+                getPlayerEntity().setAllowFlight(mechanism.getValue().asBoolean());
+            }
+            else {
+                getNBTEditor().setAllowFlight(mechanism.getValue().asBoolean());
+            }
         }
 
         // <--[mechanism]
@@ -2796,11 +3121,22 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @input ElementTag(Decimal)
         // @description
         // Sets the fly speed of the player. Valid range is 0.0 to 1.0
+        // Works with offline players.
         // @tags
         // <PlayerTag.fly_speed>
         // -->
         if (mechanism.matches("fly_speed") && mechanism.requireFloat()) {
-            setFlySpeed(mechanism.getValue().asFloat());
+            float val = mechanism.getValue().asFloat();
+            if (val < -1 || val > 1) {
+                mechanism.echoError("Invalid speed specified. Must be between -1 and 1.");
+                return;
+            }
+            if (isOnline()) {
+                getPlayerEntity().setFlySpeed(val);
+            }
+            else {
+                getNBTEditor().setFlySpeed(val);
+            }
         }
 
         // <--[mechanism]
@@ -2813,7 +3149,12 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // <PlayerTag.is_flying>
         // -->
         if (mechanism.matches("flying") && mechanism.requireBoolean()) {
-            getPlayerEntity().setFlying(mechanism.getValue().asBoolean());
+            boolean doFly = mechanism.getValue().asBoolean();
+            if (doFly && !getPlayerEntity().getAllowFlight()) {
+                Debug.echoError("Must adjust 'can_fly:true' before you can adjust 'flying:true'");
+                return;
+            }
+            getPlayerEntity().setFlying(doFly);
         }
 
         // <--[mechanism]
@@ -2840,22 +3181,22 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @tags
         // <PlayerTag.gamemode>
         // -->
-        if (mechanism.matches("gamemode") && mechanism.requireEnum(false, GameMode.values())) {
+        if (mechanism.matches("gamemode") && mechanism.requireEnum(GameMode.class)) {
             setGameMode(GameMode.valueOf(mechanism.getValue().asString().toUpperCase()));
         }
 
         if (mechanism.matches("kick")) {
-            Deprecations.oldKickMech.warn(mechanism.context);
+            BukkitImplDeprecations.oldKickMech.warn(mechanism.context);
             getPlayerEntity().kickPlayer(mechanism.getValue().asString());
         }
 
-        if (mechanism.matches("weather") && mechanism.requireEnum(false, WeatherType.values())) {
-            Deprecations.oldWeatherMech.warn(mechanism.context);
+        if (mechanism.matches("weather") && mechanism.requireEnum(WeatherType.class)) {
+            BukkitImplDeprecations.oldWeatherMech.warn(mechanism.context);
             getPlayerEntity().setPlayerWeather(WeatherType.valueOf(mechanism.getValue().asString().toUpperCase()));
         }
 
         if (mechanism.matches("reset_weather")) {
-            Deprecations.oldWeatherMech.warn(mechanism.context);
+            BukkitImplDeprecations.oldWeatherMech.warn(mechanism.context);
             getPlayerEntity().resetPlayerWeather();
         }
 
@@ -2869,7 +3210,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // <PlayerTag.list_name>
         // -->
         if (mechanism.matches("player_list_name")) {
-            AdvancedTextImpl.instance.setPlayerListName(getPlayerEntity(), mechanism.getValue().asString());
+            PaperAPITools.instance.setPlayerListName(getPlayerEntity(), mechanism.getValue().asString());
         }
 
         // <--[mechanism]
@@ -2914,12 +3255,12 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         }
 
         if (mechanism.matches("time") && mechanism.requireInteger()) {
-            Deprecations.oldTimeMech.warn(mechanism.context);
+            BukkitImplDeprecations.oldTimeMech.warn(mechanism.context);
             getPlayerEntity().setPlayerTime(mechanism.getValue().asInt(), true);
         }
 
         if (mechanism.matches("freeze_time")) {
-            Deprecations.oldTimeMech.warn(mechanism.context);
+            BukkitImplDeprecations.oldTimeMech.warn(mechanism.context);
             if (mechanism.requireInteger("Invalid integer specified. Assuming current world time.")) {
                 getPlayerEntity().setPlayerTime(mechanism.getValue().asInt(), false);
             }
@@ -2929,7 +3270,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         }
 
         if (mechanism.matches("reset_time")) {
-            Deprecations.oldTimeMech.warn(mechanism.context);
+            BukkitImplDeprecations.oldTimeMech.warn(mechanism.context);
             getPlayerEntity().resetPlayerTime();
         }
 
@@ -2939,11 +3280,22 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @input ElementTag(Decimal)
         // @description
         // Sets the walk speed of the player. The standard value is '0.2'. Valid range is 0.0 to 1.0
+        // Works with offline players.
         // @tags
         // <PlayerTag.walk_speed>
         // -->
         if (mechanism.matches("walk_speed") && mechanism.requireFloat()) {
-            getPlayerEntity().setWalkSpeed(mechanism.getValue().asFloat());
+            float val = mechanism.getValue().asFloat();
+            if (val < -1 || val > 1) {
+                mechanism.echoError("Invalid speed specified. Must be between -1 and 1.");
+                return;
+            }
+            if (isOnline()) {
+                getPlayerEntity().setWalkSpeed(val);
+            }
+            else {
+                getNBTEditor().setWalkSpeed(val);
+            }
         }
 
         // <--[mechanism]
@@ -2952,11 +3304,17 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @input ElementTag(Decimal)
         // @description
         // Sets the exhaustion level of a player.
+        // Works with offline players.
         // @tags
         // <PlayerTag.exhaustion>
         // -->
         if (mechanism.matches("exhaustion") && mechanism.requireFloat()) {
-            getPlayerEntity().setExhaustion(mechanism.getValue().asFloat());
+            if (isOnline()) {
+                getPlayerEntity().setExhaustion(mechanism.getValue().asFloat());
+            }
+            else {
+                getNBTEditor().setExhaustion(mechanism.getValue().asFloat());
+            }
         }
 
         // <--[mechanism]
@@ -3007,7 +3365,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @name hide_entities
         // @input ElementTag
         // @description
-        // Hides a matchable type of entity from the player. Can use any advanced entity matchers per <@link language Advanced Script Event Matching>.
+        // Hides a matchable type of entity from the player. Can use any advanced entity matchers per <@link language Advanced Object Matching>.
         // To hide a specific entity from the player, use <@link mechanism PlayerTag.hide_entity>.
         // To remove hide sets, use <@link mechanism PlayerTag.unhide_entities>.
         // Note that dynamic matchables like 'entity_flagged' will behave in unexpected ways when dynamically changing.
@@ -3018,8 +3376,8 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             map.matchersHidden.add(hideMe);
             if (isOnline()) {
                 for (Entity ent : getPlayerEntity().getWorld().getEntities()) {
-                    if (BukkitScriptEvent.tryEntity(new EntityTag(ent), hideMe) && map.shouldHide(ent)) {
-                        NMSHandler.getEntityHelper().sendHidePacket(getPlayerEntity(), ent);
+                    if (new EntityTag(ent).tryAdvancedMatcher(hideMe) && map.shouldHide(ent)) {
+                        NMSHandler.entityHelper.sendHidePacket(getPlayerEntity(), ent);
                     }
                 }
             }
@@ -3041,15 +3399,15 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             }
             if (isOnline()) {
                 for (Entity ent : getPlayerEntity().getWorld().getEntities()) {
-                    if (BukkitScriptEvent.tryEntity(new EntityTag(ent), unhideMe) && !map.shouldHide(ent)) {
-                        NMSHandler.getEntityHelper().sendShowPacket(getPlayerEntity(), ent);
+                    if (new EntityTag(ent).tryAdvancedMatcher(unhideMe) && !map.shouldHide(ent)) {
+                        NMSHandler.entityHelper.sendShowPacket(getPlayerEntity(), ent);
                     }
                 }
             }
         }
 
         if (mechanism.matches("show_boss_bar")) {
-            Deprecations.oldBossBarMech.warn(mechanism.context);
+            BukkitImplDeprecations.oldBossBarMech.warn(mechanism.context);
             if (!mechanism.getValue().asString().isEmpty()) {
                 String[] split = mechanism.getValue().asString().split("\\|", 2);
                 if (split.length == 2 && new ElementTag(split[0]).isDouble()) {
@@ -3079,20 +3437,18 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 String[] split = mechanism.getValue().asString().split("\\|", 2);
                 if (split.length > 0 && new ElementTag(split[0]).isFloat()) {
                     if (split.length > 1 && new ElementTag(split[1]).isInt()) {
-                        NMSHandler.getPacketHelper().showExperience(getPlayerEntity(),
-                                new ElementTag(split[0]).asFloat(), new ElementTag(split[1]).asInt());
+                        getPlayerEntity().sendExperienceChange(new ElementTag(split[0]).asFloat(), new ElementTag(split[1]).asInt());
                     }
                     else {
-                        NMSHandler.getPacketHelper().showExperience(getPlayerEntity(),
-                                new ElementTag(split[0]).asFloat(), getPlayerEntity().getLevel());
+                        getPlayerEntity().sendExperienceChange(new ElementTag(split[0]).asFloat());
                     }
                 }
                 else {
-                    Debug.echoError("'" + split[0] + "' is not a valid decimal number!");
+                    mechanism.echoError("'" + split[0] + "' is not a valid decimal number!");
                 }
             }
             else {
-                NMSHandler.getPacketHelper().resetExperience(getPlayerEntity());
+                getPlayerEntity().sendExperienceChange(getPlayerEntity().getExp(), getPlayerEntity().getLevel());
             }
         }
 
@@ -3105,6 +3461,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Use with no input value to reset to the player's normal health.
         // Optionally, you can specify a fake food level, between 0 and 20.
         // You can also optionally specify a food saturation level between 0 and 10.
+        // For example:
         // - adjust <player> fake_health:1
         // - adjust <player> fake_health:10|15
         // - adjust <player> fake_health:<player.health>|3|0
@@ -3115,16 +3472,16 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 if (split.length > 0 && new ElementTag(split[0]).isFloat()) {
                     if (split.length > 1 && new ElementTag(split[1]).isInt()) {
                         if (split.length > 2 && new ElementTag(split[2]).isFloat()) {
-                            NMSHandler.getPacketHelper().showHealth(getPlayerEntity(), new ElementTag(split[0]).asFloat(),
+                            NMSHandler.packetHelper.showHealth(getPlayerEntity(), new ElementTag(split[0]).asFloat(),
                                     new ElementTag(split[1]).asInt(), new ElementTag(split[2]).asFloat());
                         }
                         else {
-                            NMSHandler.getPacketHelper().showHealth(getPlayerEntity(), new ElementTag(split[0]).asFloat(),
+                            NMSHandler.packetHelper.showHealth(getPlayerEntity(), new ElementTag(split[0]).asFloat(),
                                     new ElementTag(split[1]).asInt(), getPlayerEntity().getSaturation());
                         }
                     }
                     else {
-                        NMSHandler.getPacketHelper().showHealth(getPlayerEntity(), new ElementTag(split[0]).asFloat(),
+                        NMSHandler.packetHelper.showHealth(getPlayerEntity(), new ElementTag(split[0]).asFloat(),
                                 getPlayerEntity().getFoodLevel(), getPlayerEntity().getSaturation());
                     }
                 }
@@ -3133,8 +3490,81 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 }
             }
             else {
-                NMSHandler.getPacketHelper().resetHealth(getPlayerEntity());
+                NMSHandler.packetHelper.resetHealth(getPlayerEntity());
             }
+        }
+
+        // <--[mechanism]
+        // @object PlayerTag
+        // @name fake_mount_health
+        // @input ElementTag(Decimal)|ElementTag(Decimal)
+        // @description
+        // Shows the player a fake health bar for their mounted. Specify both the current and maximum health values.
+        // Use with no input value to reset to the real health value.
+        // Using a health of '0' will make your mount look dead but continue to function.
+        // For example:
+        // - adjust <player> fake_mount_health:10|15
+        // -->
+        if (mechanism.matches("fake_mount_health")) {
+            if (!isOnline() || !getPlayerEntity().isInsideVehicle()) {
+                mechanism.echoError("Cannot run fake_mount_health - player is offline or unmounted.");
+                return;
+            }
+            Entity vehicle = getPlayerEntity().getVehicle();
+            if (!(vehicle instanceof LivingEntity)) {
+                mechanism.echoError("Cannot run fake_mount_health - vehicle is not a living entity.");
+                return;
+            }
+            LivingEntity liveVehicle = (LivingEntity) vehicle;
+            double current, maximum;
+            if (mechanism.hasValue()) {
+                ListTag input = mechanism.valueAsType(ListTag.class);
+                if (input.size() != 2) {
+                    mechanism.echoError("Cannot run fake_mount_health - improper input.");
+                    return;
+                }
+                current = new ElementTag(input.get(0)).asDouble();
+                maximum = new ElementTag(input.get(1)).asDouble();
+            }
+            else {
+                current = liveVehicle.getHealth();
+                maximum = liveVehicle.getMaxHealth();
+            }
+            NMSHandler.packetHelper.showMobHealth(getPlayerEntity(), liveVehicle, current, maximum);
+        }
+
+        // <--[mechanism]
+        // @object PlayerTag
+        // @name fake_entity_health
+        // @input MapTag
+        // @description
+        // Shows the player a fake health number for a given entity.
+        // Input is a map with 'entity' as the target entity, and 'health' as the health amount.
+        // Optionally add 'max' to set the max health too.
+        // Using health of '0' can cause an entity to look dead.
+        // For example:
+        // - adjust <player> fake_entity_health:[entity=<player.target>;health=0]
+        // -->
+        if (mechanism.matches("fake_entity_health") && mechanism.requireObject(MapTag.class)) {
+            if (!isOnline()) {
+                mechanism.echoError("Cannot run fake_entity_health - player is offline.");
+                return;
+            }
+            MapTag map = mechanism.valueAsType(MapTag.class);
+            EntityTag entity = map.getObjectAs("entity", EntityTag.class, mechanism.context);
+            ElementTag healthObject = map.getElement("health");
+            ElementTag maxObject = map.getElement("max");
+            if (healthObject == null) {
+                mechanism.echoError("Cannot run fake_entity_health - input map is missing 'health' key.");
+                return;
+            }
+            double health = healthObject.asDouble();
+            if (entity == null || !entity.isLivingEntity()) {
+                mechanism.echoError("Cannot run fake_entity_health - entity is invalid or not living.");
+                return;
+            }
+            double max = maxObject == null ? entity.getLivingEntity().getMaxHealth() : maxObject.asDouble();
+            NMSHandler.packetHelper.showMobHealth(getPlayerEntity(), entity.getLivingEntity(), health, max);
         }
 
         // <--[mechanism]
@@ -3145,6 +3575,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Shows the player fake equipment on the specified living entity, which has no real non-visual effects.
         // Input is in the form Entity|Slot|Item, where the slot can be one of the following: HAND, OFF_HAND, BOOTS, LEGS, CHEST, HEAD
         // Optionally, exclude the slot and item to stop showing the fake equipment, if any, on the specified entity.
+        // For example:
         // - adjust <player> fake_equipment:<[some_entity]>|chest|diamond_chestplate
         // - adjust <player> fake_equipment:<player>|head|jack_o_lantern
         // Consider instead using <@link command fakeequip>.
@@ -3154,7 +3585,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 String[] split = mechanism.getValue().asString().split("\\|", 3);
                 if (split.length > 0 && new ElementTag(split[0]).matchesType(EntityTag.class)) {
                     String slot = split.length > 1 ? split[1].toUpperCase() : null;
-                    if (split.length > 1 && (new ElementTag(slot).matchesEnum(EquipmentSlot.values())
+                    if (split.length > 1 && (new ElementTag(slot).matchesEnum(EquipmentSlot.class)
                             || slot.equals("MAIN_HAND") || slot.equals("BOOTS"))) {
                         if (split.length > 2 && new ElementTag(split[2]).matchesType(ItemTag.class)) {
                             if (slot.equals("MAIN_HAND")) {
@@ -3163,7 +3594,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                             else if (slot.equals("BOOTS")) {
                                 slot = "FEET";
                             }
-                            NMSHandler.getPacketHelper().showEquipment(getPlayerEntity(),
+                            NMSHandler.packetHelper.showEquipment(getPlayerEntity(),
                                     new ElementTag(split[0]).asType(EntityTag.class, mechanism.context).getLivingEntity(),
                                     EquipmentSlot.valueOf(slot),
                                     new ElementTag(split[2]).asType(ItemTag.class, mechanism.context).getItemStack());
@@ -3176,7 +3607,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                         Debug.echoError("'" + split[1] + "' is not a valid slot; must be HAND, OFF_HAND, BOOTS, LEGS, CHEST, or HEAD!");
                     }
                     else {
-                        NMSHandler.getPacketHelper().resetEquipment(getPlayerEntity(),
+                        NMSHandler.packetHelper.resetEquipment(getPlayerEntity(),
                                 new ElementTag(split[0]).asType(EntityTag.class, mechanism.context).getLivingEntity());
                     }
                 }
@@ -3197,15 +3628,15 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         if (mechanism.matches("fov_multiplier")) {
             if (mechanism.hasValue() && mechanism.requireFloat()) {
-                NMSHandler.getPacketHelper().setFieldOfView(getPlayerEntity(), mechanism.getValue().asFloat());
+                NMSHandler.packetHelper.setFieldOfView(getPlayerEntity(), mechanism.getValue().asFloat());
             }
             else {
-                NMSHandler.getPacketHelper().setFieldOfView(getPlayerEntity(), Float.NaN);
+                NMSHandler.packetHelper.setFieldOfView(getPlayerEntity(), Float.NaN);
             }
         }
 
         if (mechanism.matches("item_message")) {
-            Deprecations.itemMessage.warn(mechanism.context);
+            BukkitImplDeprecations.itemMessage.warn(mechanism.context);
             ItemChangeMessage.sendMessage(getPlayerEntity(), mechanism.getValue().asString());
         }
 
@@ -3217,7 +3648,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Shows the player the end credits.
         // -->
         if (mechanism.matches("show_endcredits")) {
-            NMSHandler.getPlayerHelper().showEndCredits(getPlayerEntity());
+            NMSHandler.playerHelper.showEndCredits(getPlayerEntity());
         }
 
         // <--[mechanism]
@@ -3228,7 +3659,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Shows the player the demo screen.
         // -->
         if (mechanism.matches("show_demo")) {
-            NMSHandler.getPacketHelper().showDemoScreen(getPlayerEntity());
+            NMSHandler.packetHelper.showDemoScreen(getPlayerEntity());
         }
 
         // <--[mechanism]
@@ -3262,10 +3693,10 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // To cause real spectator mode spectating, use <@link mechanism PlayerTag.spectator_target>
         // Note that in some cases you may want to force the player into the spectate gamemode prior to using this mechanism.
         // Note: They cannot cancel the spectating without a re-log -- you must make them spectate themselves to cancel the effect.
-        // (i.e. - adjust <player> spectate:<player>)
+        // Like: - adjust <player> spectate:<player>
         // -->
         if (mechanism.matches("spectate") && mechanism.requireObject(EntityTag.class)) {
-            NMSHandler.getPacketHelper().forceSpectate(getPlayerEntity(), mechanism.valueAsType(EntityTag.class).getBukkitEntity());
+            NMSHandler.packetHelper.forceSpectate(getPlayerEntity(), mechanism.valueAsType(EntityTag.class).getBukkitEntity());
         }
 
         // <--[mechanism]
@@ -3277,7 +3708,10 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // The book can safely be removed from the player's hand without the player closing the book.
         // -->
         if (mechanism.matches("open_book")) {
-            NMSHandler.getPacketHelper().openBook(getPlayerEntity(), EquipmentSlot.HAND);
+            ItemStack book = getPlayerEntity().getEquipment().getItemInMainHand();
+            if (book.getType() == Material.WRITTEN_BOOK) {
+                getPlayerEntity().openBook(book);
+            }
         }
 
         // <--[mechanism]
@@ -3289,7 +3723,10 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // The book can safely be removed from the player's offhand without the player closing the book.
         // -->
         if (mechanism.matches("open_offhand_book")) {
-            NMSHandler.getPacketHelper().openBook(getPlayerEntity(), EquipmentSlot.OFF_HAND);
+            ItemStack book = getPlayerEntity().getEquipment().getItemInOffHand();
+            if (book.getType() == Material.WRITTEN_BOOK) {
+                getPlayerEntity().openBook(book);
+            }
         }
 
         // <--[mechanism]
@@ -3303,15 +3740,11 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         if (mechanism.matches("show_book")
                 && mechanism.requireObject(ItemTag.class)) {
             ItemTag book = mechanism.valueAsType(ItemTag.class);
-            if (!(book.getItemMeta() instanceof BookMeta)) {
-                Debug.echoError("show_book mechanism must have a book as input.");
+            if (book.getBukkitMaterial() != Material.WRITTEN_BOOK) {
+                mechanism.echoError("show_book mechanism must have a written book as input.");
                 return;
             }
-            NMSHandler.getPacketHelper().showEquipment(getPlayerEntity(), getPlayerEntity(),
-                    EquipmentSlot.OFF_HAND, book.getItemStack());
-            NMSHandler.getPacketHelper().openBook(getPlayerEntity(), EquipmentSlot.OFF_HAND);
-            NMSHandler.getPacketHelper().showEquipment(getPlayerEntity(), getPlayerEntity(),
-                    EquipmentSlot.OFF_HAND, getPlayerEntity().getEquipment().getItemInOffHand());
+            getPlayerEntity().openBook(book.getItemStack());
         }
 
         // <--[mechanism]
@@ -3324,8 +3757,8 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // This will automatically resend discovered recipes at the same time (otherwise the player will seemingly have no recipes unlocked).
         // -->
         if (mechanism.matches("resend_recipes")) {
-            NMSHandler.getPlayerHelper().resendRecipeDetails(getPlayerEntity());
-            NMSHandler.getPlayerHelper().resendDiscoveredRecipes(getPlayerEntity());
+            NMSHandler.playerHelper.resendRecipeDetails(getPlayerEntity());
+            NMSHandler.playerHelper.resendDiscoveredRecipes(getPlayerEntity());
         }
 
         // <--[mechanism]
@@ -3337,7 +3770,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // This is useful when used alongside <@link mechanism PlayerTag.quietly_discover_recipe>.
         // -->
         if (mechanism.matches("resend_discovered_recipes")) {
-            NMSHandler.getPlayerHelper().resendDiscoveredRecipes(getPlayerEntity());
+            NMSHandler.playerHelper.resendDiscoveredRecipes(getPlayerEntity());
         }
 
         // <--[mechanism]
@@ -3352,7 +3785,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         if (mechanism.matches("quietly_discover_recipe")) {
             for (String keyText : mechanism.valueAsType(ListTag.class)) {
                 NamespacedKey key = Utilities.parseNamespacedKey(keyText);
-                NMSHandler.getPlayerHelper().quietlyAddRecipe(getPlayerEntity(), key);
+                NMSHandler.playerHelper.quietlyAddRecipe(getPlayerEntity(), key);
             }
         }
 
@@ -3395,8 +3828,20 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Give no input to make a fake edit interface.
         // -->
         if (mechanism.matches("edit_sign")) {
-            if (!NMSHandler.getPacketHelper().showSignEditor(getPlayerEntity(), mechanism.hasValue() ? mechanism.valueAsType(LocationTag.class) : null)) {
-                Debug.echoError("Can't edit non-sign materials!");
+            if (mechanism.hasValue() && mechanism.requireObject(LocationTag.class)) {
+                BlockState state = mechanism.valueAsType(LocationTag.class).getBlockState();
+                if (!(state instanceof Sign)) {
+                    mechanism.echoError("Invalid location specified: must be a sign.");
+                    return;
+                }
+                if (!NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18)) {
+                    NMSHandler.packetHelper.showSignEditor(getPlayerEntity(), state.getLocation());
+                    return;
+                }
+                getPlayerEntity().openSign((Sign) state);
+            }
+            else {
+                NMSHandler.packetHelper.showSignEditor(getPlayerEntity(), null);
             }
         }
 
@@ -3413,18 +3858,15 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 String[] split = mechanism.getValue().asString().split("\\|", 2);
                 if (split.length > 0) {
                     String header = split[0];
-                    String footer = "";
-                    if (split.length > 1) {
-                        footer = split[1];
-                    }
-                    NMSHandler.getPacketHelper().showTabListHeaderFooter(getPlayerEntity(), header, footer);
+                    String footer = split.length > 1 ? split[1] : "";
+                    NMSHandler.packetHelper.showTabListHeaderFooter(getPlayerEntity(), header, footer);
                 }
                 else {
-                    Debug.echoError("Must specify a header and footer to show!");
+                    mechanism.echoError("Must specify a header and footer to show!");
                 }
             }
             else {
-                NMSHandler.getPacketHelper().resetTabListHeaderFooter(getPlayerEntity());
+                getPlayerEntity().setPlayerListHeaderFooter(null, null);
             }
         }
 
@@ -3441,7 +3883,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 if (LocationTag.matches(split[0]) && split.length > 1) {
                     ListTag lines = ListTag.valueOf(split[1], mechanism.context);
                     LocationTag location = LocationTag.valueOf(split[0], mechanism.context);
-                    AdvancedTextImpl.instance.sendSignUpdate(getPlayerEntity(), location, lines.toArray(new String[4]));
+                    PaperAPITools.instance.sendSignUpdate(getPlayerEntity(), location, lines.toArray(new String[4]));
                 }
                 else {
                     Debug.echoError("Must specify a valid location and at least one sign line!");
@@ -3464,7 +3906,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         if (mechanism.matches("banner_update")) {
             if (mechanism.getValue().asString().length() > 0) {
                 String[] split = mechanism.getValue().asString().split("\\|");
-                List<org.bukkit.block.banner.Pattern> patterns = new ArrayList<>();
+                List<Pattern> patterns = new ArrayList<>();
                 if (LocationTag.matches(split[0]) && split.length > 1) {
                     List<String> splitList;
                     for (int i = 1; i < split.length; i++) {
@@ -3474,7 +3916,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                         }
                         try {
                             splitList = CoreUtilities.split(string, '/', 2);
-                            patterns.add(new org.bukkit.block.banner.Pattern(DyeColor.valueOf(splitList.get(0).toUpperCase()),
+                            patterns.add(new Pattern(DyeColor.valueOf(splitList.get(0).toUpperCase()),
                                     PatternType.valueOf(splitList.get(1).toUpperCase())));
                         }
                         catch (Exception e) {
@@ -3482,7 +3924,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                         }
                     }
                     LocationTag location = LocationTag.valueOf(split[0], mechanism.context);
-                    NMSHandler.getPacketHelper().showBannerUpdate(getPlayerEntity(), location, DyeColor.WHITE, patterns);
+                    NMSHandler.packetHelper.showBannerUpdate(getPlayerEntity(), location, patterns);
                 }
                 else {
                     Debug.echoError("Must specify a valid location and pattern list!");
@@ -3504,26 +3946,18 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             SoundCategory category = null;
             String key = null;
             if (mechanism.hasValue()) {
-                try {
-                    if (mechanism.getValue().matchesEnum(SoundCategory.values())) {
-                        category = SoundCategory.valueOf(mechanism.getValue().asString().toUpperCase());
-                    }
-                    else {
-                        key = mechanism.getValue().asString();
+                if (mechanism.getValue().matchesEnum(SoundCategory.class)) {
+                    category = mechanism.getValue().asEnum(SoundCategory.class);
+                    if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19)) {
+                        getPlayerEntity().stopSound(category);
+                        return;
                     }
                 }
-                catch (Exception e) {
+                else {
+                    key = mechanism.getValue().asString();
                 }
             }
-            else {
-                category = SoundCategory.MASTER;
-            }
-            NMSHandler.getPlayerHelper().stopSound(getPlayerEntity(), key, category);
-        }
-
-        if (mechanism.matches("action_bar")) {
-            Deprecations.playerActionBarMech.warn(mechanism.context);
-            getPlayerEntity().spigot().sendMessage(ChatMessageType.ACTION_BAR, FormattedTextHelper.parse(mechanism.getValue().asString(), ChatColor.WHITE));
+            NMSHandler.playerHelper.stopSound(getPlayerEntity(), key, category);
         }
 
         // <--[mechanism]
@@ -3534,7 +3968,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Updates the player's client-side advancements to match their server data.
         // -->
         if (mechanism.matches("update_advancements")) {
-            NMSHandler.getAdvancementHelper().update(getPlayerEntity());
+            NMSHandler.advancementHelper.update(getPlayerEntity());
         }
 
         // <--[mechanism]
@@ -3546,13 +3980,13 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @tags
         // <PlayerTag.name>
         // -->
-        if (mechanism.matches("name")) {
+        if (mechanism.matches("name") && mechanism.hasValue()) {
             String name = mechanism.getValue().asString();
             if (name.length() > 16) {
                 Debug.echoError("Must specify a name with no more than 16 characters.");
             }
             else {
-                NMSHandler.getInstance().getProfileEditor().setPlayerName(getPlayerEntity(), mechanism.getValue().asString());
+                NMSHandler.instance.getProfileEditor().setPlayerName(getPlayerEntity(), mechanism.getValue().asString());
             }
         }
 
@@ -3564,14 +3998,13 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Changes the skin of the player to the skin of the given player name.
         // See also <@link language Player Entity Skins (Skin Blobs)>.
         // -->
-        if (mechanism.matches("skin")) {
+        if (mechanism.matches("skin") && mechanism.hasValue()) {
             String name = mechanism.getValue().asString();
             if (name.length() > 16) {
-                Debug.echoError("Must specify a name with no more than 16 characters.");
+                mechanism.echoError("Must specify a name with no more than 16 characters.");
+                return;
             }
-            else {
-                NMSHandler.getInstance().getProfileEditor().setPlayerSkin(getPlayerEntity(), mechanism.getValue().asString());
-            }
+            PaperAPITools.instance.setSkin(getPlayerEntity(), name);
         }
 
         // <--[mechanism]
@@ -3585,21 +4018,8 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @tags
         // <PlayerTag.skin_blob>
         // -->
-        if (mechanism.matches("skin_blob")) {
-            NMSHandler.getInstance().getProfileEditor().setPlayerSkinBlob(getPlayerEntity(), mechanism.getValue().asString());
-        }
-
-        // <--[mechanism]
-        // @object PlayerTag
-        // @name is_whitelisted
-        // @input ElementTag(Boolean)
-        // @description
-        // Changes whether the player is whitelisted or not.
-        // @tags
-        // <PlayerTag.is_whitelisted>
-        // -->
-        if (mechanism.matches("is_whitelisted") && mechanism.requireBoolean()) {
-            getPlayerEntity().setWhitelisted(mechanism.getValue().asBoolean());
+        if (mechanism.matches("skin_blob") && mechanism.hasValue()) {
+            PaperAPITools.instance.setSkinBlob(getPlayerEntity(), mechanism.getValue().asString());
         }
 
         // <--[mechanism]
@@ -3612,11 +4032,12 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // <PlayerTag.is_op>
         // -->
         if (mechanism.matches("is_op") && mechanism.requireBoolean()) {
+            ImprovedOfflinePlayer.invalidateNow(getUUID());
             getOfflinePlayer().setOp(mechanism.getValue().asBoolean());
         }
 
         if (mechanism.matches("money") && mechanism.requireDouble() && Depends.economy != null) {
-            Deprecations.oldMoneyMech.warn(mechanism.context);
+            BukkitImplDeprecations.oldMoneyMech.warn(mechanism.context);
             double bal = Depends.economy.getBalance(getOfflinePlayer());
             double goal = mechanism.getValue().asDouble();
             if (goal > bal) {
@@ -3707,6 +4128,7 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @plugin BungeeCord
         // @description
         // Sends the player to the specified Bungee server.
+        // This also works with other Bungee-Messaging compatible proxy systems, such as Velocity.
         // -->
         if (mechanism.matches("send_to") && mechanism.hasValue()) {
             if (!isOnline()) {
@@ -3728,10 +4150,10 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 Debug.echoError("Cannot use send_server_brand on offline player.");
                 return;
             }
-            NMSHandler.getPacketHelper().sendBrand(getPlayerEntity(), mechanism.getValue().asString());
+            NMSHandler.packetHelper.sendBrand(getPlayerEntity(), mechanism.getValue().asString());
         }
 
-        CoreUtilities.autoPropertyMechanism(this, mechanism);
+        tagProcessor.processMechanism(this, mechanism);
 
         // Pass along to EntityTag mechanism handler if not already handled.
         if (!mechanism.fulfilled()) {
@@ -3751,6 +4173,14 @@ public class PlayerTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
     @Override
     public boolean advancedMatches(String matcher) {
-        return isOnline() && BukkitScriptEvent.tryEntity(getDenizenEntity(), matcher);
+        return isOnline() && getDenizenEntity().tryAdvancedMatcher(matcher);
+    }
+
+    /**
+     * Return an appropriate error-header output for this object, if any.
+     */
+    @Override
+    public String getErrorHeaderContext() {
+        return " with player '<A>" + getName() + "<LR>'";
     }
 }

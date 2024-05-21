@@ -1,6 +1,8 @@
 package com.denizenscript.denizen.objects;
 
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizen.utilities.NotedAreaTracker;
+import com.denizenscript.denizencore.tags.TagManager;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
 import com.denizenscript.denizencore.flags.FlaggableObject;
 import com.denizenscript.denizencore.flags.SavableMapFlagTracker;
@@ -22,13 +24,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 
-public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainmentObject, FlaggableObject {
+public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainmentObject, FlaggableObject, Adjustable {
 
     // <--[ObjectType]
     // @name EllipsoidTag
     // @prefix ellipsoid
     // @base ElementTag
     // @implements FlaggableObject, AreaObject
+    // @ExampleTagBase ellipsoid[my_noted_ellipsoid]
+    // @ExampleValues my_ellipsoid_note
+    // @ExampleForReturns
+    // - note %VALUE% as:my_new_ellipsoid
     // @format
     // The identity format for ellipsoids is <x>,<y>,<z>,<world>,<x-radius>,<y-radius>,<z-radius>
     // For example, 'ellipsoid@1,2,3,space,7,7,7'.
@@ -44,33 +50,15 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
     // This object type is flaggable when it is noted.
     // Flags on this object type will be stored in the notables.yml file.
     //
+    // @Matchable
+    // Refer to <@link objecttype areaobject>'s matchable list.
+    //
     // -->
-
-    public static List<EllipsoidTag> getNotableEllipsoidsContaining(Location location) {
-        List<EllipsoidTag> ellipsoids = new ArrayList<>();
-        for (EllipsoidTag ellipsoid : NoteManager.getAllType(EllipsoidTag.class)) {
-            if (ellipsoid.contains(location)) {
-                ellipsoids.add(ellipsoid);
-            }
-        }
-
-        return ellipsoids;
-    }
 
     //////////////////
     //    OBJECT FETCHER
     ////////////////
 
-    @Deprecated
-    public static EllipsoidTag valueOf(String string) {
-        return valueOf(string, null);
-    }
-
-    /**
-     * Gets an Ellipsoid Object from a string form.
-     *
-     * @param string the string
-     */
     @Fetchable("ellipsoid")
     public static EllipsoidTag valueOf(String string, TagContext context) {
         if (string.startsWith("ellipsoid@")) {
@@ -79,18 +67,17 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         if (string.contains("@")) {
             return null;
         }
-        Notable noted = NoteManager.getSavedObject(string);
-        if (noted instanceof EllipsoidTag) {
-            return (EllipsoidTag) noted;
+        if (!TagManager.isStaticParsing) {
+            Notable noted = NoteManager.getSavedObject(string);
+            if (noted instanceof EllipsoidTag) {
+                return (EllipsoidTag) noted;
+            }
         }
         List<String> split = CoreUtilities.split(string, ',');
         if (split.size() != 7) {
             return null;
         }
-        WorldTag world = WorldTag.valueOf(split.get(3), false);
-        if (world == null) {
-            return null;
-        }
+        String worldName = split.get(3);
         for (int i = 0; i < 7; i++) {
             if (i != 3 && !ArgumentHelper.matchesDouble(split.get(i))) {
                 if (context == null || context.showErrors()) {
@@ -99,7 +86,7 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
                 }
             }
         }
-        LocationTag location = new LocationTag(world.getWorld(), Double.parseDouble(split.get(0)), Double.parseDouble(split.get(1)), Double.parseDouble(split.get(2)));
+        LocationTag location = new LocationTag(Double.parseDouble(split.get(0)), Double.parseDouble(split.get(1)), Double.parseDouble(split.get(2)), worldName);
         LocationTag size = new LocationTag(null, Double.parseDouble(split.get(4)), Double.parseDouble(split.get(5)), Double.parseDouble(split.get(6)));
         return new EllipsoidTag(location, size);
     }
@@ -125,10 +112,11 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
 
     @Override
     public ObjectTag duplicate() {
-        if (noteName != null) {
+        EllipsoidTag self = refreshState();
+        if (self.noteName != null) {
             return this;
         }
-        return clone();
+        return self.clone();
     }
 
     ///////////////
@@ -148,20 +136,13 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
 
     public LocationTag size;
 
-    public String noteName = null;
+    public String noteName = null, priorNoteName = null;
 
     public AbstractFlagTracker flagTracker = null;
 
     @Override
     public ListTag getBlocks(Predicate<Location> test) {
-        List<LocationTag> initial = getCuboidBoundary().getBlocks_internal(test);
-        ListTag list = new ListTag();
-        for (LocationTag loc : initial) {
-            if (contains(loc)) {
-                list.addObject(loc);
-            }
-        }
-        return list;
+        return getCuboidBoundary().getBlocks(test == null ? this::contains : (l) -> (test.test(l) && contains(l)));
     }
 
     public List<LocationTag> getBlockLocationsUnfiltered(boolean doMax) {
@@ -261,11 +242,12 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
 
     @Override
     public String debuggable() {
-        if (isUnique()) {
-            return "ellipsoid@" + noteName + "<GR> (" + identifyFull() + ")";
+        EllipsoidTag self = refreshState();
+        if (self.isUnique()) {
+            return "<LG>ellipsoid@<Y>" + self.noteName + "<GR> (" + self.identifyFull() + ")";
         }
         else {
-            return identifyFull();
+            return self.identifyFull();
         }
     }
 
@@ -289,14 +271,33 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         toNote.noteName = id;
         toNote.flagTracker = new SavableMapFlagTracker();
         NoteManager.saveAs(toNote, id);
+        NotedAreaTracker.add(toNote);
     }
 
     @Override
     public void forget() {
+        if (noteName == null) {
+            return;
+        }
+        priorNoteName = noteName;
+        NotedAreaTracker.remove(this);
         NoteManager.remove(this);
         noteName = null;
         flagTracker = null;
     }
+
+    @Override
+    public EllipsoidTag refreshState() {
+        if (noteName == null && priorNoteName != null) {
+            Notable note = NoteManager.getSavedObject(priorNoteName);
+            if (note instanceof EllipsoidTag) {
+                return (EllipsoidTag) note;
+            }
+            priorNoteName = null;
+        }
+        return this;
+    }
+
     @Override
     public int hashCode() {
         if (noteName != null) {
@@ -314,8 +315,8 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         if ((noteName == null) != (ellipsoid2.noteName == null)) {
             return false;
         }
-        if (noteName != null && !noteName.equals(ellipsoid2.noteName)) {
-            return false;
+        if (noteName != null) {
+            return noteName.equals(ellipsoid2.noteName);
         }
         if (!center.getWorldName().equals(ellipsoid2.center.getWorldName())) {
             return false;
@@ -330,17 +331,13 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
     }
 
     @Override
-    public String getObjectType() {
-        return "Ellipsoid";
-    }
-
-    @Override
     public String identify() {
-        if (isUnique()) {
-            return "ellipsoid@" + noteName;
+        EllipsoidTag self = refreshState();
+        if (self.isUnique()) {
+            return "ellipsoid@" + self.noteName;
         }
         else {
-            return identifyFull();
+            return self.identifyFull();
         }
     }
 
@@ -404,10 +401,10 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         return new EllipsoidTag(loc, size.clone());
     }
 
-    public static void registerTags() {
+    public static void register() {
 
         AbstractFlagTracker.registerFlagHandlers(tagProcessor);
-        AreaContainmentObject.registerTags(EllipsoidTag.class, tagProcessor);
+        AreaContainmentObject.register(EllipsoidTag.class, tagProcessor);
 
         // <--[tag]
         // @attribute <EllipsoidTag.random>
@@ -415,6 +412,9 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         // @description
         // Returns a random decimal location within the ellipsoid.
         // Note that distribution of results will not be completely even.
+        // @example
+        // # Displays a debugblock at a random location within the ellipsoid "my_ellipsoid".
+        // - debugblock <ellipsoid[my_ellipsoid].random>
         // -->
         tagProcessor.registerTag(LocationTag.class, "random", (attribute, object) -> {
             // This is an awkward hack to try to weight towards the center a bit (to counteract the weight-away-from-center that would otherwise happen).
@@ -436,7 +436,10 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         // @attribute <EllipsoidTag.location>
         // @returns LocationTag
         // @description
-        // Returns the location of the ellipsoid.
+        // Returns the center location of the ellipsoid.
+        // @example
+        // # Displays a debugblock at center location of the ellipsoid "my_ellipsoid".
+        // - debugblock <ellipsoid[my_ellipsoid].location>
         // -->
         tagProcessor.registerTag(LocationTag.class, "location", (attribute, object) -> {
             return object.center;
@@ -447,6 +450,9 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         // @returns LocationTag
         // @description
         // Returns the size of the ellipsoid.
+        // @example
+        // # For example, this can return: "The size of the ellipsoid 'my_ellipsoid' is: 10,10,10!"
+        // - narrate "The size of the ellipsoid 'my_ellipsoid' is: <ellipsoid[my_ellipsoid].size.xyz>!"
         // -->
         tagProcessor.registerTag(LocationTag.class, "size", (attribute, object) -> {
             return object.size;
@@ -457,6 +463,11 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         // @returns EllipsoidTag
         // @description
         // Returns a copy of this ellipsoid, shifted by the input location.
+        // @example
+        // # Shifts the ellipsoid by 10,10,10 and notes it as "my_shifted_ellipsoid".
+        // # For example, if "my_ellipsoid" has a location of "5,5,5", and it's added by "10,10,10",
+        // # "my_shifted_cuboid" will have a location of "15,15,15".
+        // - note <ellipsoid[my_ellipsoid].add[10,10,10]> as:my_shifted_ellipsoid
         // -->
         tagProcessor.registerTag(EllipsoidTag.class, "add", (attribute, object) -> {
             if (!attribute.hasParam()) {
@@ -471,6 +482,12 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         // @returns EllipsoidTag
         // @description
         // Returns a copy of this ellipsoid, with the size value adapted to include the specified world location.
+        // @example
+        // # Expands "my_ellipsoid" to include the player's location and notes it as "my_new_ellipsoid".
+        // # For example, if "my_ellipsoid" has a location of "5,5,5" and a size of "8,8,8",
+        // # and the player had a location of 20,22,24, then "my_new_ellipsoid" will have a location of
+        // # "5,5,5" and a size of "26,29,33" (rounded).
+        // - note <ellipsoid[my_ellipsoid].include[<player.location>]> as:my_new_ellipsoid
         // -->
         tagProcessor.registerTag(EllipsoidTag.class, "include", (attribute, object) -> {
             if (!attribute.hasParam()) {
@@ -521,6 +538,10 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         // @returns EllipsoidTag
         // @description
         // Returns a copy of this ellipsoid, set to the specified location.
+        // @example
+        // # Sets the location of "my_ellipsoid" to be the player's location.
+        // # For example, if the player's location is 10,15,20, then "my_new_ellipsoid" will have a location of 10,15,20.
+        // - note <ellipsoid[my_ellipsoid].with_location[<player.location>]> as:my_new_ellipsoid
         // -->
         tagProcessor.registerTag(EllipsoidTag.class, "with_location", (attribute, object) -> {
             if (!attribute.hasParam()) {
@@ -535,6 +556,9 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         // @returns EllipsoidTag
         // @description
         // Returns a copy of this ellipsoid, set to the specified size.
+        // @example
+        // # Changes the size of "my_ellipsoid" to be 20,20,20 and notes it as "my_new_ellipsoid".
+        // - note <ellipsoid[my_ellipsoid].with_size[20,20,20]> as:my_new_ellipsoid
         // -->
         tagProcessor.registerTag(EllipsoidTag.class, "with_size", (attribute, object) -> {
             if (!attribute.hasParam()) {
@@ -549,6 +573,11 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         // @returns ListTag(ChunkTag)
         // @description
         // Returns a list of all chunks that this ellipsoid touches at all (note that no valid ellipsoid tag can ever totally contain a chunk, due to vertical limits and roundness).
+        // @example
+        // # Loads the chunks that touch the ellipsoid "my_ellipsoid".
+        // # For example, if "my_ellipsoid" had a size of "9,4,6" and a location of "-10,70,-9",
+        // # this will return a list containing chunks -2,-1 and -1,-1.
+        // - chunkload <ellipsoid[my_ellipsoid].chunks>
         // -->
         tagProcessor.registerTag(ListTag.class, "chunks", (attribute, object) -> {
             ListTag chunks = new ListTag();
@@ -578,6 +607,10 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
         // @returns ElementTag
         // @description
         // Gets the name of a noted EllipsoidTag. If the ellipsoid isn't noted, this is null.
+        // @example
+        // # For example, this might return something like:
+        // # "The ellipsoid you are currently in is noted as: my_ellipsoid!"
+        // - narrate "The ellipsoid you are currently in is noted as: <player.location.areas[ellipsoid].first.note_name.if_null[null! You aren't in an ellipsoid]>!"
         // -->
         tagProcessor.registerTag(ElementTag.class, "note_name", (attribute, ellipsoid) -> {
             String noteName = NoteManager.getSavedId(ellipsoid);
@@ -603,5 +636,28 @@ public class EllipsoidTag implements ObjectTag, Notable, Cloneable, AreaContainm
     @Override
     public boolean doesContainLocation(Location loc) {
         return contains(loc);
+    }
+
+    public void applyProperty(Mechanism mechanism) {
+        if (noteName != null) {
+            mechanism.echoError("Cannot apply properties to noted objects.");
+            return;
+        }
+        adjust(mechanism);
+    }
+
+
+    @Override
+    public void adjust(Mechanism mechanism) {
+        tagProcessor.processMechanism(this, mechanism);
+    }
+
+    @Override
+    public boolean advancedMatches(String matcher) {
+        String matcherLow = CoreUtilities.toLowerCase(matcher);
+        if (matcherLow.equals("ellipsoid")) {
+            return true;
+        }
+        return areaBaseAdvancedMatches(matcher);
     }
 }

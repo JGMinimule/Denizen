@@ -3,7 +3,7 @@ package com.denizenscript.denizen.scripts.commands.server;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.scripts.containers.core.FormatScriptContainer;
 import com.denizenscript.denizen.utilities.FormattedTextHelper;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -19,14 +19,14 @@ public class AnnounceCommand extends AbstractCommand {
 
     public AnnounceCommand() {
         setName("announce");
-        setSyntax("announce [<text>] (to_ops/to_console/to_flagged:<flag_name>/to_permission:<node>) (format:<name>)");
+        setSyntax("announce [<text>] (to_ops/to_console/to_flagged:<flag_name>/to_permission:<node>) (format:<script>)");
         setRequiredArguments(1, 3);
         isProcedural = true;
     }
 
     // <--[command]
     // @Name Announce
-    // @Syntax announce [<text>] (to_ops/to_console/to_flagged:<flag_name>/to_permission:<node>) (format:<name>)
+    // @Syntax announce [<text>] (to_ops/to_console/to_flagged:<flag_name>/to_permission:<node>) (format:<script>)
     // @Required 1
     // @Maximum 3
     // @Short Announces a message for everyone online to read.
@@ -98,7 +98,7 @@ public class AnnounceCommand extends AbstractCommand {
                 scriptEntry.addObject("format", format);
             }
             else if (!scriptEntry.hasObject("text")) {
-                scriptEntry.addObject("text", new ElementTag(arg.getRawValue()));
+                scriptEntry.addObject("text", arg.getRawElement());
             }
             else {
                 arg.reportUnhandled();
@@ -154,4 +154,3 @@ public class AnnounceCommand extends AbstractCommand {
         }
     }
 }
-

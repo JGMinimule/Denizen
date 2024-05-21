@@ -31,10 +31,8 @@ public class VehicleCreatedScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public VehicleCreatedScriptEvent() {
-        instance = this;
     }
 
-    public static VehicleCreatedScriptEvent instance;
     public EntityTag vehicle;
     public VehicleCreateEvent event;
 
@@ -51,7 +49,7 @@ public class VehicleCreatedScriptEvent extends BukkitScriptEvent implements List
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(vehicle, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, vehicle)) {
             return false;
         }
         if (!runInCheck(path, vehicle.getLocation())) {
@@ -61,11 +59,6 @@ public class VehicleCreatedScriptEvent extends BukkitScriptEvent implements List
     }
 
     // TODO: Can the vehicle be an NPC?
-
-    @Override
-    public String getName() {
-        return "VehicleCreated";
-    }
 
     @Override
     public ObjectTag getContext(String name) {

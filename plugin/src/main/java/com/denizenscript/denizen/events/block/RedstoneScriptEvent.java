@@ -33,11 +33,9 @@ public class RedstoneScriptEvent extends BukkitScriptEvent implements Listener {
     // -->
 
     public RedstoneScriptEvent() {
-        instance = this;
         registerCouldMatcher("redstone recalculated");
     }
 
-    public static RedstoneScriptEvent instance;
 
     public LocationTag location;
     public BlockRedstoneEvent event;
@@ -51,14 +49,9 @@ public class RedstoneScriptEvent extends BukkitScriptEvent implements Listener {
     }
 
     @Override
-    public String getName() {
-        return "RedstoneRecalculated";
-    }
-
-    @Override
     public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag && ((ElementTag) determinationObj).isInt()) {
-            event.setNewCurrent(((ElementTag) determinationObj).asInt());
+        if (determinationObj instanceof ElementTag element && element.isInt()) {
+            event.setNewCurrent(element.asInt());
             return true;
         }
         return super.applyDetermination(path, determinationObj);

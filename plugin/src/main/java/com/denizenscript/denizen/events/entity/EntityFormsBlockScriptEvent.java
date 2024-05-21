@@ -15,12 +15,7 @@ public class EntityFormsBlockScriptEvent extends BukkitScriptEvent implements Li
 
     // <--[event]
     // @Events
-    // entity forms block
-    // entity forms <block>
-    // <entity> forms block
     // <entity> forms <block>
-    //
-    // @Regex ^on [^\s]+ forms [^\s]+$
     //
     // @Group Entity
     //
@@ -39,50 +34,26 @@ public class EntityFormsBlockScriptEvent extends BukkitScriptEvent implements Li
     // -->
 
     public EntityFormsBlockScriptEvent() {
-        instance = this;
+        registerCouldMatcher("<entity> forms <block>");
     }
 
-    public static EntityFormsBlockScriptEvent instance;
     public MaterialTag material;
     public LocationTag location;
     public EntityTag entity;
     public EntityBlockFormEvent event;
 
     @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventArgLowerAt(1).equals("forms")) {
-            return false;
-        }
-        if (!couldMatchEntity(path.eventArgLowerAt(0))) {
-            return false;
-        }
-        if (!couldMatchBlock(path.eventArgLowerAt(2))) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
     public boolean matches(ScriptPath path) {
-
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
-
-        if (!tryMaterial(material, path.eventArgLowerAt(2))) {
+        if (!path.tryArgObject(2, material)) {
             return false;
         }
-
         if (!runInCheck(path, location)) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityFormsBlock";
     }
 
     @Override

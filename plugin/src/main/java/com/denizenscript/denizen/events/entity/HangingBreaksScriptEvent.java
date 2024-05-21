@@ -6,8 +6,6 @@ import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
@@ -34,11 +32,9 @@ public class HangingBreaksScriptEvent extends BukkitScriptEvent implements Liste
     // -->
 
     public HangingBreaksScriptEvent() {
-        instance = this;
         registerCouldMatcher("<hanging> breaks (because <'cause'>)");
     }
 
-    public static HangingBreaksScriptEvent instance;
     public ElementTag cause;
     public EntityTag entity;
     public EntityTag hanging;
@@ -47,25 +43,16 @@ public class HangingBreaksScriptEvent extends BukkitScriptEvent implements Liste
     @Override
     public boolean matches(ScriptPath path) {
         String hangCheck = path.eventArgLowerAt(0);
-
-        if (!tryEntity(hanging, hangCheck)) {
+        if (!hanging.tryAdvancedMatcher(hangCheck)) {
             return false;
         }
-
-        if (path.eventArgLowerAt(2).equals("because") && !path.eventArgLowerAt(3).equals(CoreUtilities.toLowerCase(cause.asString()))) {
+        if (path.eventArgLowerAt(2).equals("because") && !path.eventArgLowerAt(3).equals(cause.asLowerString())) {
             return false;
         }
-
         if (!runInCheck(path, hanging.getLocation())) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "HangingBreaks";
     }
 
     @Override
@@ -82,9 +69,6 @@ public class HangingBreaksScriptEvent extends BukkitScriptEvent implements Liste
                 return entity;
             case "hanging":
                 return hanging;
-            case "location":
-                Deprecations.hangingBreaksEventContext.warn();
-                return hanging.getLocation();
         }
         return super.getContext(name);
     }
@@ -92,7 +76,7 @@ public class HangingBreaksScriptEvent extends BukkitScriptEvent implements Liste
     @EventHandler
     public void onHangingBreaks(HangingBreakEvent event) {
         hanging = new EntityTag(event.getEntity());
-        cause = new ElementTag(event.getCause().name());
+        cause = new ElementTag(event.getCause());
         if (event instanceof HangingBreakByEntityEvent) {
             entity = new EntityTag(((HangingBreakByEntityEvent) event).getRemover());
         }

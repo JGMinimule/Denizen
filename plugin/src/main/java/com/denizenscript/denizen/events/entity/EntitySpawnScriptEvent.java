@@ -39,11 +39,9 @@ public class EntitySpawnScriptEvent extends BukkitScriptEvent implements Listene
     // -->
 
     public EntitySpawnScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> spawns (because <'cause'>)");
     }
 
-    public static EntitySpawnScriptEvent instance;
     public EntityTag entity;
     public LocationTag location;
     public ElementTag reason;
@@ -62,22 +60,16 @@ public class EntitySpawnScriptEvent extends BukkitScriptEvent implements Listene
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
-        if (path.eventArgLowerAt(2).equals("because")
-                && !runGenericCheck(path.eventArgLowerAt(3), reason.toString())) {
+        if (path.eventArgLowerAt(2).equals("because") && !runGenericCheck(path.eventArgLowerAt(3), reason.toString())) {
             return false;
         }
         if (!runInCheck(path, location)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntitySpawn";
     }
 
     @Override
@@ -112,7 +104,7 @@ public class EntitySpawnScriptEvent extends BukkitScriptEvent implements Listene
             if (creatureReason == CreatureSpawnEvent.SpawnReason.SPAWNER) {
                 return; // Let the SpawnerSpawnEvent happen and handle it instead
             }
-            reason = new ElementTag(creatureReason.name());
+            reason = new ElementTag(creatureReason);
         }
         else if (event instanceof SpawnerSpawnEvent) {
             reason = new ElementTag("SPAWNER");

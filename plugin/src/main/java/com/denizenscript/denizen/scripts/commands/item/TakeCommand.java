@@ -1,16 +1,15 @@
 package com.denizenscript.denizen.scripts.commands.item;
 
-import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.objects.InventoryTag;
+import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizen.scripts.containers.core.ItemScriptHelper;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.depends.Depends;
 import com.denizenscript.denizen.utilities.inventory.SlotHelper;
 import com.denizenscript.denizen.utilities.nbt.CustomNBT;
-import com.denizenscript.denizen.objects.InventoryTag;
-import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -18,7 +17,7 @@ import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
@@ -28,21 +27,20 @@ import org.bukkit.inventory.meta.BookMeta;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class TakeCommand extends AbstractCommand {
 
     public TakeCommand() {
         setName("take");
-        setSyntax("take [xp/iteminhand/cursoritem/bydisplay:<name>/bycover:<title>|<author>/slot:<slot>/flagged:<flag>/item:<matcher>] (quantity:<#>) (from:<inventory>)");
+        setSyntax("take [iteminhand/cursoritem/bydisplay:<name>/bycover:<title>|<author>/slot:<slot>/flagged:<flag>/item:<matcher>] (quantity:<#>) (from:<inventory>)");
         setRequiredArguments(1, 3);
         isProcedural = false;
     }
 
     // <--[command]
     // @Name Take
-    // @Syntax take [xp/iteminhand/cursoritem/bydisplay:<name>/bycover:<title>|<author>/slot:<slot>/flagged:<flag>/item:<matcher>] (quantity:<#>) (from:<inventory>)
+    // @Syntax take [iteminhand/cursoritem/bydisplay:<name>/bycover:<title>|<author>/slot:<slot>/flagged:<flag>/item:<matcher>] (quantity:<#>) (from:<inventory>)
     // @Required 1
     // @Maximum 3
     // @Short Takes an item from the player.
@@ -67,9 +65,7 @@ public class TakeCommand extends AbstractCommand {
     //
     // Using 'raw_exact:' (Intentionally undocumented) will compare all raw details of an item exactly. This is almost always a bad idea to use. DO NOT USE.
     //
-    // Using 'item:' will take items that match an advanced item matcher, using the system behind <@link language Advanced Script Event Matching>.
-    //
-    // Using 'xp' will take experience from the player.
+    // Using 'item:' will take items that match an advanced item matcher, using the system behind <@link language Advanced Object Matching>.
     //
     // Flagged, Slot, ByDisplay, and Raw_Exact, all take a list as input to take multiple different item types at once.
     //
@@ -79,9 +75,10 @@ public class TakeCommand extends AbstractCommand {
     //
     // Optionally using 'from:' to specify a specific inventory to take from. If not specified, the linked player's inventory will be used.
     //
-    // The options 'iteminhand', 'cursoritem', and 'xp' require a linked player and will ignore the 'from:' inventory.
+    // The options 'iteminhand' and 'cursoritem' require a linked player and will ignore the 'from:' inventory.
     //
-    // To give money to a player, use <@link command money>.
+    // To take xp from a player, use <@link command experience>.
+    // To take money from a player, use <@link command money>.
     //
     // @Tags
     // <PlayerTag.item_in_hand>
@@ -99,33 +96,27 @@ public class TakeCommand extends AbstractCommand {
     // - take item:emerald quantity:5
     // -->
 
-    private enum Type {MONEY, XP, ITEMINHAND, CURSORITEM, ITEM, INVENTORY, BYDISPLAY, SLOT, BYCOVER, SCRIPTNAME, NBT, MATERIAL, FLAGGED, RAWEXACT, MATCHER}
+    private enum Type {MONEY, XP, ITEMINHAND, CURSORITEM, ITEM, BYDISPLAY, SLOT, BYCOVER, SCRIPTNAME, NBT, MATERIAL, FLAGGED, RAWEXACT, MATCHER}
 
     public static HashSet<Type> requiresPlayerTypes = new HashSet<>(Arrays.asList(Type.XP, Type.MONEY, Type.ITEMINHAND, Type.CURSORITEM));
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        if (arg.startsWith("material:")) {
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addWithPrefix("scriptname:", ItemScriptHelper.item_scripts.keySet());
+        if (tab.arg.startsWith("material:")) {
             for (Material material : Material.values()) {
                 if (material.isItem()) {
-                    addOne.accept("material:" + material.name());
+                    tab.add("material:" + material.name());
                 }
             }
         }
-        else if (arg.startsWith("scriptname:")) {
-            for (String itemScript : ItemScriptHelper.item_scripts.keySet()) {
-                addOne.accept("scriptname:" + itemScript);
-            }
-        }
-        else if (arg.startsWith("item:")) {
+        else if (tab.arg.startsWith("item:")) {
             for (Material material : Material.values()) {
                 if (material.isItem()) {
-                    addOne.accept("item:" + material.name());
+                    tab.add("item:" + material.name());
                 }
             }
-            for (String itemScript : ItemScriptHelper.item_scripts.keySet()) {
-                addOne.accept("item:" + itemScript);
-            }
+            tab.addWithPrefix("item:", ItemScriptHelper.item_scripts.keySet());
         }
     }
 
@@ -134,7 +125,7 @@ public class TakeCommand extends AbstractCommand {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("type")
                     && arg.matches("money", "coins")) {
-                Deprecations.giveTakeMoney.warn(scriptEntry);
+                BukkitImplDeprecations.takeMoney.warn(scriptEntry);
                 scriptEntry.addObject("type", Type.MONEY);
             }
             else if (!scriptEntry.hasObject("type")
@@ -153,7 +144,7 @@ public class TakeCommand extends AbstractCommand {
                     && arg.matchesPrefix("q", "qty", "quantity")
                     && arg.matchesFloat()) {
                 if (arg.matchesPrefix("q", "qty")) {
-                    Deprecations.qtyTags.warn(scriptEntry);
+                    BukkitImplDeprecations.qtyTags.warn(scriptEntry);
                 }
                 scriptEntry.addObject("quantity", arg.asElement());
             }
@@ -166,7 +157,7 @@ public class TakeCommand extends AbstractCommand {
             else if (!scriptEntry.hasObject("items")
                     && arg.matchesPrefix("nbt")
                     && !scriptEntry.hasObject("type")) {
-                Deprecations.itemNbt.warn(scriptEntry);
+                BukkitImplDeprecations.itemNbt.warn(scriptEntry);
                 scriptEntry.addObject("type", Type.NBT);
                 scriptEntry.addObject("nbt_key", arg.asElement());
             }
@@ -191,14 +182,14 @@ public class TakeCommand extends AbstractCommand {
             else if (!scriptEntry.hasObject("type")
                     && !scriptEntry.hasObject("items")
                     && arg.matchesPrefix("material")) {
-                Deprecations.takeRawItems.warn(scriptEntry);
+                BukkitImplDeprecations.takeRawItems.warn(scriptEntry);
                 scriptEntry.addObject("type", Type.MATERIAL);
                 scriptEntry.addObject("material", arg.asType(ListTag.class).filter(MaterialTag.class, scriptEntry));
             }
             else if (!scriptEntry.hasObject("type")
                     && !scriptEntry.hasObject("items")
                     && arg.matchesPrefix("script", "scriptname")) {
-                Deprecations.takeRawItems.warn(scriptEntry);
+                BukkitImplDeprecations.takeRawItems.warn(scriptEntry);
                 scriptEntry.addObject("type", Type.SCRIPTNAME);
                 scriptEntry.addObject("scriptitem", arg.asType(ListTag.class).filter(ItemTag.class, scriptEntry));
             }
@@ -217,23 +208,13 @@ public class TakeCommand extends AbstractCommand {
             else if (!scriptEntry.hasObject("items")
                     && !scriptEntry.hasObject("type")
                     && arg.matchesArgumentList(ItemTag.class)) {
-                Deprecations.takeRawItems.warn(scriptEntry);
+                BukkitImplDeprecations.takeRawItems.warn(scriptEntry);
                 scriptEntry.addObject("items", arg.asType(ListTag.class).filter(ItemTag.class, scriptEntry));
             }
             else if (!scriptEntry.hasObject("inventory")
                     && arg.matchesPrefix("f", "from")
                     && arg.matchesArgumentType(InventoryTag.class)) {
                 scriptEntry.addObject("inventory", arg.asType(InventoryTag.class));
-            }
-            else if (!scriptEntry.hasObject("type")
-                    && arg.matches("inventory")) {
-                Deprecations.takeCommandInventory.warn(scriptEntry);
-                scriptEntry.addObject("type", Type.INVENTORY);
-            }
-            else if (!scriptEntry.hasObject("inventory")
-                    && arg.matches("npc")) {
-                Deprecations.takeCommandInventory.warn(scriptEntry);
-                scriptEntry.addObject("inventory", Utilities.getEntryNPC(scriptEntry).getDenizenEntity().getInventory());
             }
             else {
                 arg.reportUnhandled();
@@ -272,10 +253,6 @@ public class TakeCommand extends AbstractCommand {
                     db("Items", items), slotList, nbtKey, flagList, matcherText, db("material",  materialList), titleAuthor);
         }
         switch (type) {
-            case INVENTORY: {
-                inventory.clear();
-                break;
-            }
             case ITEMINHAND: {
                 Player player = Utilities.getEntryPlayer(scriptEntry).getPlayerEntity();
                 int inHandAmt = player.getEquipment().getItemInMainHand().getAmount();
@@ -324,19 +301,20 @@ public class TakeCommand extends AbstractCommand {
             }
             case MONEY: {
                 if (Depends.economy == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "No economy loaded! Have you installed Vault and a compatible economy plugin?");
+                    Debug.echoError(scriptEntry, "No economy loaded! Have you installed Vault and a compatible economy plugin?");
                     return;
                 }
                 Depends.economy.withdrawPlayer(Utilities.getEntryPlayer(scriptEntry).getOfflinePlayer(), quantity.asDouble());
                 break;
             }
             case XP: {
+                BukkitImplDeprecations.takeExperience.warn(scriptEntry);
                 Utilities.getEntryPlayer(scriptEntry).getPlayerEntity().giveExp(-quantity.asInt());
                 break;
             }
             case RAWEXACT: {
                 if (items == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Must specify item/items!");
+                    Debug.echoError(scriptEntry, "Must specify item/items!");
                     return;
                 }
                 for (ItemTag targetItem : items) {
@@ -346,7 +324,7 @@ public class TakeCommand extends AbstractCommand {
             }
             case ITEM: {
                 if (items == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Must specify item/items!");
+                    Debug.echoError(scriptEntry, "Must specify item/items!");
                     return;
                 }
                 for (ItemTag item : items) {
@@ -360,7 +338,7 @@ public class TakeCommand extends AbstractCommand {
             }
             case BYDISPLAY: {
                 if (displayNameList == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Must specify a displayname!");
+                    Debug.echoError(scriptEntry, "Must specify a displayname!");
                     return;
                 }
                 for (String name : displayNameList) {
@@ -371,7 +349,7 @@ public class TakeCommand extends AbstractCommand {
             }
             case BYCOVER: {
                 if (titleAuthor == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Must specify a cover!");
+                    Debug.echoError(scriptEntry, "Must specify a cover!");
                     return;
                 }
                 takeByMatcher(inventory, (item) -> item.hasItemMeta() && item.getItemMeta() instanceof BookMeta
@@ -381,7 +359,7 @@ public class TakeCommand extends AbstractCommand {
             }
             case FLAGGED: {
                 if (flagList == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Must specify a flag name!");
+                    Debug.echoError(scriptEntry, "Must specify a flag name!");
                     return;
                 }
                 for (String flag : flagList) {
@@ -391,7 +369,7 @@ public class TakeCommand extends AbstractCommand {
             }
             case NBT: {
                 if (nbtKey == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Must specify an NBT key!");
+                    Debug.echoError(scriptEntry, "Must specify an NBT key!");
                     return;
                 }
                 takeByMatcher(inventory, (item) -> CustomNBT.hasCustomNBT(item, nbtKey.asString(), CustomNBT.KEY_DENIZEN), quantity.asInt());
@@ -399,13 +377,13 @@ public class TakeCommand extends AbstractCommand {
             }
             case SCRIPTNAME: {
                 if (scriptItemList == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Must specify a valid script name!");
+                    Debug.echoError(scriptEntry, "Must specify a valid script name!");
                     return;
                 }
                 for (ItemTag scriptedItem : scriptItemList) {
                     String script = scriptedItem.getScriptName();
                     if (script == null) {
-                        Debug.echoError(scriptEntry.getResidingQueue(), "Item '" + scriptedItem.debuggable() + "' is not a scripted item, cannot take by scriptname.");
+                        Debug.echoError(scriptEntry, "Item '" + scriptedItem.debuggable() + "' is not a scripted item, cannot take by scriptname.");
                         continue;
                     }
                     takeByMatcher(inventory, (item) -> script.equalsIgnoreCase(new ItemTag(item).getScriptName()), quantity.asInt());
@@ -414,7 +392,7 @@ public class TakeCommand extends AbstractCommand {
             }
             case MATERIAL: {
                 if (materialList == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Must specify a valid material!");
+                    Debug.echoError(scriptEntry, "Must specify a valid material!");
                     return;
                 }
                 for (MaterialTag material : materialList) {
@@ -424,17 +402,17 @@ public class TakeCommand extends AbstractCommand {
             }
             case MATCHER: {
                 if (matcherText == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Must specify an item matcher!");
+                    Debug.echoError(scriptEntry, "Must specify an item matcher!");
                     return;
                 }
-                takeByMatcher(inventory, (item) -> BukkitScriptEvent.tryItem(new ItemTag(item), matcherText.asString()), quantity.asInt());
+                takeByMatcher(inventory, (item) -> new ItemTag(item).tryAdvancedMatcher(matcherText.asString()), quantity.asInt());
                 break;
             }
             case SLOT: {
                 for (String slot : slotList) {
                     int slotId = SlotHelper.nameToIndexFor(slot, inventory.getInventory().getHolder());
                     if (slotId == -1 || slotId >= inventory.getSize()) {
-                        Debug.echoError(scriptEntry.getResidingQueue(), "The input '" + slot + "' is not a valid slot!");
+                        Debug.echoError(scriptEntry, "The input '" + slot + "' is not a valid slot!");
                         return;
                     }
                     ItemStack original = inventory.getInventory().getItem(slotId);
@@ -498,7 +476,7 @@ public class TakeCommand extends AbstractCommand {
             String newItem = CoreUtilities.toLowerCase(ItemTag.valueOf(new ItemTag(is).identify(), false).identify());
             if (myItem.equals(newItem)) {
                 if (count <= amount) {
-                    NMSHandler.getItemHelper().setInventoryItem(inventory, null, i);
+                    NMSHandler.itemHelper.setInventoryItem(inventory, null, i);
                     amount -= count;
                     if (amount == 0) {
                         return true;
@@ -506,7 +484,7 @@ public class TakeCommand extends AbstractCommand {
                 }
                 else {
                     is.setAmount(count - amount);
-                    NMSHandler.getItemHelper().setInventoryItem(inventory, is, i);
+                    NMSHandler.itemHelper.setInventoryItem(inventory, is, i);
                     return true;
                 }
             }

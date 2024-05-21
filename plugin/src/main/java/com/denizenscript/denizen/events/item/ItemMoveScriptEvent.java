@@ -4,7 +4,6 @@ import com.denizenscript.denizen.objects.InventoryTag;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
@@ -35,11 +34,9 @@ public class ItemMoveScriptEvent extends BukkitScriptEvent implements Listener {
     // -->
 
     public ItemMoveScriptEvent() {
-        instance = this;
         registerCouldMatcher("<item> moves from <inventory> (to <inventory>)");
     }
 
-    public static ItemMoveScriptEvent instance;
 
     public InventoryTag origin;
     public InventoryTag destination;
@@ -48,26 +45,19 @@ public class ItemMoveScriptEvent extends BukkitScriptEvent implements Listener {
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryItem(item, CoreUtilities.getXthArg(0, path.eventLower))) {
+        if (!path.tryArgObject(0, item)) {
             return false;
         }
-        if (!tryInventory(origin, CoreUtilities.getXthArg(3, path.eventLower))) {
+        if (!path.tryArgObject(3, origin)) {
             return false;
         }
-        if (CoreUtilities.xthArgEquals(4, path.eventLower, "to")) {
-            if (!tryInventory(destination, CoreUtilities.getXthArg(5, path.eventLower))) {
-                return false;
-            }
+        if (path.eventArgLowerAt(4).equals("to") && !path.tryArgObject(5, destination)) {
+            return false;
         }
         if (!runInCheck(path, origin.getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "ItemMoves";
     }
 
     @Override

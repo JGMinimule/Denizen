@@ -8,8 +8,8 @@ import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.tags.Attribute;
-import com.denizenscript.denizencore.tags.core.EscapeTagBase;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizencore.tags.core.EscapeTagUtil;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
@@ -38,7 +38,7 @@ public class ItemNBT implements Property {
             "remove_nbt", "nbt"
     };
 
-    private ItemNBT(ItemTag item) {
+    public ItemNBT(ItemTag item) {
         this.item = item;
     }
 
@@ -52,19 +52,19 @@ public class ItemNBT implements Property {
         }
 
         if (attribute.startsWith("has_nbt")) {
-            Deprecations.itemNbt.warn(attribute.context);
+            BukkitImplDeprecations.itemNbt.warn(attribute.context);
             return new ElementTag(CustomNBT.hasCustomNBT(item.getItemStack(), attribute.getParam(), CustomNBT.KEY_DENIZEN))
                     .getObjectAttribute(attribute.fulfill(1));
         }
 
         if (attribute.startsWith("nbt_keys")) {
-            Deprecations.itemNbt.warn(attribute.context);
+            BukkitImplDeprecations.itemNbt.warn(attribute.context);
             return new ListTag(CustomNBT.listNBT(item.getItemStack(), CustomNBT.KEY_DENIZEN))
                     .getObjectAttribute(attribute.fulfill(1));
         }
 
         if (attribute.matches("nbt")) {
-            Deprecations.itemNbt.warn(attribute.context);
+            BukkitImplDeprecations.itemNbt.warn(attribute.context);
             if (!attribute.hasParam()) {
                 ListTag list = getNBTDataList();
                 if (list == null) {
@@ -89,7 +89,7 @@ public class ItemNBT implements Property {
         if (nbtKeys != null && !nbtKeys.isEmpty()) {
             ListTag list = new ListTag();
             for (String key : nbtKeys) {
-                list.add(EscapeTagBase.escape(key) + "/" + EscapeTagBase.escape(CustomNBT.getCustomNBT(itemStack, key, CustomNBT.KEY_DENIZEN)));
+                list.add(EscapeTagUtil.escape(key) + "/" + EscapeTagUtil.escape(CustomNBT.getCustomNBT(itemStack, key, CustomNBT.KEY_DENIZEN)));
             }
             return list;
         }
@@ -114,7 +114,7 @@ public class ItemNBT implements Property {
     public void adjust(Mechanism mechanism) {
 
         if (mechanism.matches("remove_nbt")) {
-            Deprecations.itemNbt.warn(mechanism.context);
+            BukkitImplDeprecations.itemNbt.warn(mechanism.context);
             if (item.getMaterial().getMaterial() == Material.AIR) {
                 mechanism.echoError("Cannot apply NBT to AIR!");
                 return;
@@ -134,7 +134,7 @@ public class ItemNBT implements Property {
         }
 
         if (mechanism.matches("nbt")) {
-            Deprecations.itemNbt.warn(mechanism.context);
+            BukkitImplDeprecations.itemNbt.warn(mechanism.context);
             if (item.getMaterial().getMaterial() == Material.AIR) {
                 mechanism.echoError("Cannot apply NBT to AIR!");
                 return;
@@ -143,7 +143,7 @@ public class ItemNBT implements Property {
             ItemStack itemStack = item.getItemStack();
             for (String string : list) {
                 String[] split = string.split("/", 2);
-                itemStack = CustomNBT.addCustomNBT(itemStack, EscapeTagBase.unEscape(split[0]), EscapeTagBase.unEscape(split[1]), CustomNBT.KEY_DENIZEN);
+                itemStack = CustomNBT.addCustomNBT(itemStack, EscapeTagUtil.unEscape(split[0]), EscapeTagUtil.unEscape(split[1]), CustomNBT.KEY_DENIZEN);
             }
             item.setItemStack(itemStack);
         }

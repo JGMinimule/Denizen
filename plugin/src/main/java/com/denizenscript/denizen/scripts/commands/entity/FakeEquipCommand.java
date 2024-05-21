@@ -6,7 +6,7 @@ import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -16,6 +16,7 @@ import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -70,7 +71,7 @@ public class FakeEquipCommand extends AbstractCommand {
     //
     // @Usage
     // Use to make all players within 30 blocks of an entity see it permanently equip a shield.
-    // - fakeequip <[entity]> offhand:shield for:<[entity].find.players.within[30]> duration:0
+    // - fakeequip <[entity]> offhand:shield for:<[entity].find_players_within[30]> duration:0
     //
     // -->
 
@@ -157,6 +158,25 @@ public class FakeEquipCommand extends AbstractCommand {
             legs = override.legs == null ? legs : override.legs;
             boots = override.boots == null ? boots : override.boots;
         }
+
+        public EquipmentOverride getVariantFor(Player player) {
+            return this;
+        }
+    }
+
+    public static EquipmentOverride getOverrideFor(UUID entity, Player player) {
+        HashMap<UUID, EquipmentOverride> playerMap = overrides.get(player.getUniqueId());
+        if (playerMap == null) {
+            playerMap = overrides.get(null);
+            if (playerMap == null) {
+                return null;
+            }
+        }
+        EquipmentOverride override = playerMap.get(entity);
+        if (override == null) {
+            return null;
+        }
+        return override.getVariantFor(player);
     }
 
     public static HashMap<UUID, HashMap<UUID, EquipmentOverride>> overrides = new HashMap<>();
@@ -177,12 +197,12 @@ public class FakeEquipCommand extends AbstractCommand {
             HashMap<UUID, EquipmentOverride> playersMap = overrides.computeIfAbsent(player.getUUID(), (k) -> new HashMap<>());
             for (EntityTag entity : entities) {
                 if (entity.isGeneric()) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Cannot equip generic entity " + entity.identify() + "!");
+                    Debug.echoError(scriptEntry, "Cannot equip generic entity " + entity.identify() + "!");
                     continue;
                 }
                 LivingEntity livingEntity = entity.getLivingEntity();
                 if (livingEntity == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Cannot equip invalid/non-living entity " + entity.identify() + "!");
+                    Debug.echoError(scriptEntry, "Cannot equip invalid/non-living entity " + entity.identify() + "!");
                     continue;
                 }
                 EquipmentOverride entityData;
@@ -212,14 +232,14 @@ public class FakeEquipCommand extends AbstractCommand {
                                         if (playersMap.isEmpty()) {
                                             overrides.remove(player.getUUID());
                                         }
-                                        NMSHandler.getPacketHelper().resetEquipment(player.getPlayerEntity(), livingEntity);
+                                        NMSHandler.packetHelper.resetEquipment(player.getPlayerEntity(), livingEntity);
                                     }
                                 }
                             }
                         }.runTaskLater(Denizen.getInstance(), duration.getTicks());
                     }
                 }
-                NMSHandler.getPacketHelper().resetEquipment(player.getPlayerEntity(), livingEntity);
+                NMSHandler.packetHelper.resetEquipment(player.getPlayerEntity(), livingEntity);
             }
         }
     }

@@ -1,16 +1,17 @@
 package com.denizenscript.denizen.scripts.commands.server;
 
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.PlayerTag;
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
-import com.denizenscript.denizencore.objects.*;
+import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
+import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.DurationTag;
-import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
+import com.denizenscript.denizencore.objects.core.TimeTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
+import com.denizenscript.denizencore.scripts.commands.generator.*;
 import org.bukkit.BanList;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 
 import java.util.Date;
 import java.util.List;
@@ -19,14 +20,17 @@ public class BanCommand extends AbstractCommand {
 
     public BanCommand() {
         setName("ban");
-        setSyntax("ban ({add}/remove) [<player>|.../addresses:<address>|...] (reason:<text>) (duration:<duration>) (source:<text>)");
+        setSyntax("ban ({add}/remove) [<player>|.../addresses:<address>|.../names:<name>|...] (reason:<text>) (expire:<time>) (source:<text>)");
         setRequiredArguments(1, 5);
         isProcedural = false;
+        autoCompile();
+        addRemappedPrefixes("addresses", "address");
+        addRemappedPrefixes("expire", "duration", "time", "d", "expiration");
     }
 
     // <--[command]
     // @Name Ban
-    // @Syntax ban ({add}/remove) [<player>|.../addresses:<address>|...] (reason:<text>) (duration:<duration>) (source:<text>)
+    // @Syntax ban ({add}/remove) [<player>|.../addresses:<address>|.../names:<name>|...] (reason:<text>) (expire:<time>) (source:<text>)
     // @Required 1
     // @Maximum 5
     // @Short Ban or un-ban players or ip addresses.
@@ -34,11 +38,14 @@ public class BanCommand extends AbstractCommand {
     //
     // @Description
     // Add or remove player or ip address bans from the server. Banning a player will also kick them from the server.
+    // You may specify a list of player names instead of <@link ObjectType PlayerTag>s, which should only ever be used for special cases (such as banning players that haven't joined the server yet).
+    //
     // You may optionally specify both a list of players and list of addresses.
-    // Options are:
-    // reason: Sets the ban reason. Defaults to "Banned.".
-    // duration: Sets the duration of the temporary ban. This will be a permanent ban if not specified.
-    // source: Sets the source of the ban. Defaults to "(Unknown)".
+    //
+    // Additional options are:
+    // reason: Sets the ban reason.
+    // expire: Sets the expire time of the temporary ban, as a TimeTag or a DurationTag. This will be a permanent ban if not specified.
+    // source: Sets the source of the ban.
     //
     // @Tags
     // <PlayerTag.is_banned>
@@ -64,7 +71,7 @@ public class BanCommand extends AbstractCommand {
     //
     // @Usage
     // Use to ban a list of players for 10 minutes with a reason.
-    // - ban <[player]>|<[someplayer]> "reason:Didn't grow enough potatoes." duration:10m
+    // - ban <[player]>|<[someplayer]> "reason:Didn't grow enough potatoes." expire:10m
     //
     // @Usage
     // Use to ban a player with a source.
@@ -76,7 +83,7 @@ public class BanCommand extends AbstractCommand {
     //
     // @Usage
     // Use to temporarily ip ban all online players.
-    // - ban addresses:<server.online_players.parse[ip]> duration:5m
+    // - ban addresses:<server.online_players.parse[ip]> expire:5m
     //
     // @Usage
     // Use to unban a list of players.
@@ -87,86 +94,63 @@ public class BanCommand extends AbstractCommand {
     // - ban remove addresses:127.0.0.1
     // -->
 
-    public enum Actions {
-        ADD, REMOVE
-    }
+    public enum Actions { ADD, REMOVE }
 
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
-        for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("action") && (arg.matchesPrefix("action")
-                    || arg.matchesEnum(Actions.values()))) {
-                scriptEntry.addObject("action", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("addresses") && arg.matchesPrefix("addresses", "address")) {
-                scriptEntry.addObject("addresses", arg.asType(ListTag.class));
-            }
-            else if (!scriptEntry.hasObject("targets") && (arg.matchesPrefix("targets", "target")
-                    || arg.matchesArgumentList(PlayerTag.class))) {
-                scriptEntry.addObject("targets", arg.asType(ListTag.class).filter(PlayerTag.class, scriptEntry));
-            }
-            else if (!scriptEntry.hasObject("reason") && arg.matchesPrefix("reason")) {
-                scriptEntry.addObject("reason", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("duration") && (arg.matchesPrefix("duration", "time", "d", "expiration")
-                    || arg.matchesArgumentType(DurationTag.class))) {
-                scriptEntry.addObject("duration", arg.asType(DurationTag.class));
-            }
-            else if (!scriptEntry.hasObject("source") && arg.matchesPrefix("source")) {
-                scriptEntry.addObject("source", arg.asElement());
+    public static void autoExecute(ScriptEntry scriptEntry,
+                               @ArgName("action") @ArgDefaultText("add") Actions action,
+                               @ArgName("targets") @ArgLinear @ArgDefaultNull @ArgSubType(PlayerTag.class) List<PlayerTag> targets,
+                               @ArgName("addresses") @ArgPrefixed @ArgDefaultNull ListTag addresses,
+                               @ArgName("names") @ArgPrefixed @ArgDefaultNull ListTag names,
+                               @ArgName("reason") @ArgPrefixed @ArgDefaultNull String reason,
+                               @ArgName("expire") @ArgPrefixed @ArgDefaultNull ObjectTag rawExpire,
+                               @ArgName("source") @ArgPrefixed @ArgDefaultNull String source) {
+        if ((targets == null || targets.isEmpty()) && (addresses == null || addresses.isEmpty()) && (names == null || names.isEmpty())) {
+            throw new InvalidArgumentsRuntimeException("Must specify valid players, addresses or names to ban.");
+        }
+        Date expiration = null;
+        if (rawExpire != null) {
+            if (rawExpire.canBeType(DurationTag.class)) {
+                DurationTag banDuration = rawExpire.asType(DurationTag.class, scriptEntry.context);
+                if (banDuration.getSeconds() > 0) {
+                    expiration = new Date(TimeTag.now().millis() + banDuration.getMillis());
+                }
             }
             else {
-                arg.reportUnhandled();
+                TimeTag expirationTime = rawExpire.asType(TimeTag.class, scriptEntry.context);
+                if (expirationTime == null) {
+                    throw new InvalidArgumentsRuntimeException("Invalid 'expire:' input, must be a DurationTag or a TimeTag.");
+                }
+                expiration = new Date(expirationTime.millis());
             }
         }
-        scriptEntry.defaultObject("action", new ElementTag("add"))
-                .defaultObject("reason", new ElementTag("Banned."))
-                .defaultObject("source", new ElementTag("(Unknown)"));
-        if (Actions.valueOf(scriptEntry.getObject("action").toString().toUpperCase()) == null) {
-            throw new IllegalArgumentException("Invalid action specified.");
-        }
-        if ((!scriptEntry.hasObject("targets") || ((List<PlayerTag>) scriptEntry.getObject("targets")).isEmpty())
-                && (!scriptEntry.hasObject("addresses") || ((List<ElementTag>) scriptEntry.getObject("addresses")).isEmpty())) {
-            throw new IllegalArgumentException("Must specify a valid target or address!");
-        }
-    }
-
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag action = scriptEntry.getElement("action");
-        List<PlayerTag> targets = (List<PlayerTag>) scriptEntry.getObject("targets");
-        ListTag addresses = scriptEntry.getObjectTag("addresses");
-        ElementTag reason = scriptEntry.getElement("reason");
-        DurationTag duration = scriptEntry.getObjectTag("duration");
-        ElementTag source = scriptEntry.getElement("source");
-        Date expiration = null;
-        if (duration != null && duration.getTicks() != 0) {
-            expiration = new Date(new DurationTag(System.currentTimeMillis() / 50 + duration.getTicks()).getTicks() * 50);
-        }
-        if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), action, db("targets", targets), addresses, reason, duration, source);
-        }
-        Actions banAction = Actions.valueOf(action.toString().toUpperCase());
-        switch (banAction) {
-            case ADD:
+        switch (action) {
+            case ADD -> {
                 if (targets != null) {
                     for (PlayerTag player : targets) {
                         if (player.isValid()) {
-                            Bukkit.getBanList(BanList.Type.NAME).addBan(player.getName(), reason.toString(), expiration, source.toString());
+                            Bukkit.getBanList(BanList.Type.NAME).addBan(player.getName(), reason, expiration, source);
                             if (player.isOnline()) {
-                                player.getPlayerEntity().kickPlayer(reason.toString());
+                                player.getPlayerEntity().kickPlayer(reason);
                             }
                         }
                     }
                 }
                 if (addresses != null) {
                     for (String address : addresses) {
-                        Bukkit.getBanList(BanList.Type.IP).addBan(address, reason.toString(), expiration, source.toString());
+                        Bukkit.getBanList(BanList.Type.IP).addBan(address, reason, expiration, source);
                     }
                 }
-                break;
-
-            case REMOVE:
+                if (names != null) {
+                    for (String name : names) {
+                        Bukkit.getBanList(BanList.Type.NAME).addBan(name, reason, expiration, source);
+                        Player player = Bukkit.getPlayerExact(name);
+                        if (player != null) {
+                            player.kickPlayer(reason);
+                        }
+                    }
+                }
+            }
+            case REMOVE -> {
                 if (targets != null) {
                     for (PlayerTag player : targets) {
                         if (player.isValid()) {
@@ -177,11 +161,12 @@ public class BanCommand extends AbstractCommand {
                     }
                 }
                 if (addresses != null) {
-                    for (String address : addresses) {
-                        Bukkit.getBanList(BanList.Type.IP).pardon(address);
-                    }
+                    addresses.forEach(Bukkit.getBanList(BanList.Type.IP)::pardon);
                 }
-                break;
+                if (names != null) {
+                    names.forEach(Bukkit.getBanList(BanList.Type.NAME)::pardon);
+                }
+            }
         }
     }
 }

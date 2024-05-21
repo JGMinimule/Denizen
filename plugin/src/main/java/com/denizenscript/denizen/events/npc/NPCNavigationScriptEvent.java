@@ -24,6 +24,8 @@ public class NPCNavigationScriptEvent extends BukkitScriptEvent implements Liste
     //
     // @Triggers when an NPC begins, finishes, or cancels navigating.
     //
+    // @Switch npc:<npc> to only process the event if the spawned NPC matches.
+    //
     // @Context
     // None
     //
@@ -32,16 +34,18 @@ public class NPCNavigationScriptEvent extends BukkitScriptEvent implements Liste
     // -->
 
     public NPCNavigationScriptEvent() {
-        instance = this;
         registerCouldMatcher("npc begins|completes|cancels navigation");
+        registerSwitches("npc");
     }
 
-    public static NPCNavigationScriptEvent instance;
     public NPCTag npc;
     public String type;
 
     @Override
     public boolean matches(ScriptPath path) {
+        if (!path.tryObjectSwitch("npc", npc)) {
+            return false;
+        }
         if (!runInCheck(path, npc.getLocation())) {
             return false;
         }
@@ -49,11 +53,6 @@ public class NPCNavigationScriptEvent extends BukkitScriptEvent implements Liste
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "NPCNavigation";
     }
 
     @Override

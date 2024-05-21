@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.entity;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -32,8 +32,9 @@ public class HealCommand extends AbstractCommand {
     // @Group entity
     //
     // @Description
-    // This command heals a player, list of players, entity or list of entities. If no amount is specified it will
-    // heal the specified player(s)/entity(s) fully.
+    // This command heals a player, list of players, entity or list of entities.
+    //
+    // If no amount is specified it will heal the specified player(s)/entity(s) fully.
     //
     // @Tags
     // <EntityTag.health>

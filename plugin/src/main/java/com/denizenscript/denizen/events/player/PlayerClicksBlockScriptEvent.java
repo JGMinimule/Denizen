@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.events.player;
 
 import com.denizenscript.denizen.objects.*;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -49,12 +49,10 @@ public class PlayerClicksBlockScriptEvent extends BukkitScriptEvent implements L
     // -->
 
     public PlayerClicksBlockScriptEvent() {
-        instance = this;
         registerCouldMatcher("player (right|left) clicks <block>");
         registerSwitches("with", "using", "type");
     }
 
-    public PlayerClicksBlockScriptEvent instance;
     public PlayerInteractEvent event;
     public ItemTag item;
     public LocationTag location;
@@ -88,7 +86,7 @@ public class PlayerClicksBlockScriptEvent extends BukkitScriptEvent implements L
         return true;
     }
 
-    private static final HashSet<String> matchHelpList = new HashSet<>(Arrays.asList("at", "entity", "npc", "player", "vehicle", "projectile", "hanging", "fake"));
+    private static final HashSet<String> matchHelpList = new HashSet<>(Arrays.asList("at", "entity", "npc", "player", "vehicle", "projectile", "hanging", "fake", "item"));
 
     @Override
     public boolean couldMatch(ScriptPath path) {
@@ -128,7 +126,7 @@ public class PlayerClicksBlockScriptEvent extends BukkitScriptEvent implements L
             return false;
         }
         String mat = path.eventArgLowerAt(index + 1);
-        if (mat.length() > 0 && !withHelpList.contains(mat) && !tryMaterial(blockMaterial, mat)) {
+        if (mat.length() > 0 && !withHelpList.contains(mat) && !blockMaterial.tryAdvancedMatcher(mat)) {
             return false;
         }
         if (!nonSwitchWithCheck(path, new ItemTag(event.getItem()))) {
@@ -143,15 +141,10 @@ public class PlayerClicksBlockScriptEvent extends BukkitScriptEvent implements L
         if (!runInCheck(path, location != null ? location : event.getPlayer().getLocation())) {
             return false;
         }
-        if (path.switches.containsKey("type") && !tryMaterial(blockMaterial, path.switches.get("type"))) {
+        if (!path.tryObjectSwitch("type", blockMaterial)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerClicksBlock";
     }
 
     public boolean wasCancellationAltered;
@@ -195,10 +188,10 @@ public class PlayerClicksBlockScriptEvent extends BukkitScriptEvent implements L
             return;
         }
         blockMaterial = event.hasBlock() ? new MaterialTag(event.getClickedBlock()) : new MaterialTag(Material.AIR);
-        hand = new ElementTag(event.getHand().name());
+        hand = new ElementTag(event.getHand());
         item = new ItemTag(event.getItem());
         location = event.hasBlock() ? new LocationTag(event.getClickedBlock().getLocation()) : null;
-        click_type = new ElementTag(event.getAction().name());
+        click_type = new ElementTag(event.getAction());
         cancelled = event.isCancelled() && event.useItemInHand() == Event.Result.DENY; // Spigot is dumb!
         this.event = event;
         fire(); // Explicitly don't use `fire(event)` due to spigot bork

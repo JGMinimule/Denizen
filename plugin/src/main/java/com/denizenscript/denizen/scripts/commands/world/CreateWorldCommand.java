@@ -3,7 +3,6 @@ package com.denizenscript.denizen.scripts.commands.world;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Settings;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -12,6 +11,7 @@ import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.scripts.commands.Holdable;
 import com.denizenscript.denizencore.utilities.AsciiMatcher;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
@@ -20,23 +20,23 @@ import org.bukkit.WorldType;
 import java.io.File;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public class CreateWorldCommand extends AbstractCommand implements Holdable {
 
     public CreateWorldCommand() {
         setName("createworld");
-        setSyntax("createworld [<name>] (generator:<id>) (worldtype:<type>) (environment:<environment>) (copy_from:<world>) (seed:<seed>) (settings:<json>)");
-        setRequiredArguments(1, 7);
+        setSyntax("createworld [<name>] (generator:<id>) (worldtype:<type>) (environment:<environment>) (copy_from:<world>) (seed:<seed>) (settings:<json>) (generate_structures:true/false)");
+        setRequiredArguments(1, 8);
+        setPrefixesHandled("generator", "worldtype", "environment", "copy_from", "seed", "settings", "generate_structures");
         isProcedural = false;
     }
 
     // <--[command]
     // @Name CreateWorld
-    // @Syntax createworld [<name>] (generator:<id>) (worldtype:<type>) (environment:<environment>) (copy_from:<world>) (seed:<seed>) (settings:<json>)
+    // @Syntax createworld [<name>] (generator:<id>) (worldtype:<type>) (environment:<environment>) (copy_from:<world>) (seed:<seed>) (settings:<json>) (generate_structures:true/false)
     // @Required 1
-    // @Maximum 7
+    // @Maximum 8
     // @Short Creates a new world, or loads an existing world.
     // @Synonyms LoadWorld
     // @Group world
@@ -44,15 +44,18 @@ public class CreateWorldCommand extends AbstractCommand implements Holdable {
     // @Description
     // This command creates a new minecraft world with the specified name, or loads an existing world by that name.
     //
-    // Optionally specify a plugin-based world generator by it's generator ID.
-    // If you want an empty void world, you can use "generator:denizen:void".
+    // Optionally specify a plugin-based world generator by its generator ID.
+    // If you want an empty void world with a void biome, you can use "denizen:void".
+    // If you want an empty void world with vanilla biomes, you can use "denizen:void_biomes".
     //
     // Optionally specify additional generator settings as JSON input.
     //
     // Optionally specify a world type which can be specified with 'worldtype:' (defaults to NORMAL).
     // For all world types, see: <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/WorldType.html>
     //
-    // Optionally specify an environment (defaults to NORMAL, can also be NETHER or THE_END).
+    // Optionally specify an environment (defaults to NORMAL, can also be NETHER, THE_END).
+    //
+    // Optionally choose whether to generate structures in this world.
     //
     // Optionally specify an existing world to copy files from.
     // The 'copy_from' argument is ~waitable. Refer to <@link language ~waitable>.
@@ -81,50 +84,15 @@ public class CreateWorldCommand extends AbstractCommand implements Holdable {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        if (arg.startsWith("environment:")) {
-            for (World.Environment env : World.Environment.values()) {
-                addOne.accept("environment:" + env);
-            }
-        }
-        if (arg.startsWith("worldtype:")) {
-            for (WorldType type : WorldType.values()) {
-                addOne.accept("worldtype:" + type);
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addWithPrefix("environment:", World.Environment.values());
+        tab.addWithPrefix("worldtype:", WorldType.values());
     }
 
     @Override
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("generator")
-                    && arg.matchesPrefix("generator", "g")) {
-                scriptEntry.addObject("generator", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("worldtype")
-                    && arg.matchesPrefix("worldtype")
-                    && arg.matchesEnum(WorldType.values())) {
-                scriptEntry.addObject("worldtype", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("environment")
-                    && arg.matchesPrefix("environment")
-                    && arg.matchesEnum(World.Environment.values())) {
-                scriptEntry.addObject("environment", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("copy_from")
-                    && arg.matchesPrefix("copy_from")) {
-                scriptEntry.addObject("copy_from", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("settings")
-                    && arg.matchesPrefix("settings")) {
-                scriptEntry.addObject("settings", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("seed")
-                    && arg.matchesPrefix("seed", "s")
-                    && arg.matchesInteger()) {
-                scriptEntry.addObject("seed", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("world_name")) {
+            if (!scriptEntry.hasObject("world_name")) {
                 scriptEntry.addObject("world_name", arg.asElement());
             }
             else {
@@ -134,10 +102,6 @@ public class CreateWorldCommand extends AbstractCommand implements Holdable {
         if (!scriptEntry.hasObject("world_name")) {
             throw new InvalidArgumentsException("Must specify a world name.");
         }
-        if (!scriptEntry.hasObject("worldtype")) {
-            scriptEntry.addObject("worldtype", new ElementTag("NORMAL"));
-        }
-        scriptEntry.defaultObject("environment", new ElementTag("NORMAL"));
     }
 
     public static HashSet<String> excludedExtensionsForCopyFrom = new HashSet<>(Collections.singleton("lock"));
@@ -153,24 +117,46 @@ public class CreateWorldCommand extends AbstractCommand implements Holdable {
     @Override
     public void execute(ScriptEntry scriptEntry) {
         ElementTag worldName = scriptEntry.getElement("world_name");
-        ElementTag generator = scriptEntry.getElement("generator");
-        ElementTag worldType = scriptEntry.getElement("worldtype");
-        ElementTag environment = scriptEntry.getElement("environment");
-        ElementTag copy_from = scriptEntry.getElement("copy_from");
-        ElementTag settings = scriptEntry.getElement("settings");
-        ElementTag seed = scriptEntry.getElement("seed");
+        ElementTag generator = scriptEntry.argForPrefixAsElement("generator", null);
+        ElementTag worldType = scriptEntry.argForPrefixAsElement("worldtype", "NORMAL");
+        ElementTag environment = scriptEntry.argForPrefixAsElement("environment", "NORMAL");
+        ElementTag copy_from = scriptEntry.argForPrefixAsElement("copy_from", null);
+        ElementTag settings = scriptEntry.argForPrefixAsElement("settings", null);
+        ElementTag seed = scriptEntry.argForPrefixAsElement("seed", null);
+        ElementTag generateStructures = scriptEntry.argForPrefixAsElement("generate_structures", null);
         if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), worldName, generator, environment, copy_from, settings, worldType, seed);
+            Debug.report(scriptEntry, getName(), worldName, generator, environment, copy_from, settings, worldType, seed, generateStructures);
         }
         if (Bukkit.getWorld(worldName.asString()) != null) {
             Debug.echoDebug(scriptEntry, "CreateWorld doing nothing, world by that name already loaded.");
             scriptEntry.setFinished(true);
             return;
         }
-        if (!Settings.cache_createWorldSymbols && forbiddenSymbols.containsAnyMatch(worldName.asString())) {
-            Debug.echoError("Cannot use world names with non-alphanumeric symbols due to security settings in Denizen/config.yml.");
-            scriptEntry.setFinished(true);
-            return;
+        if (!Settings.cache_createWorldSymbols) {
+            if (forbiddenSymbols.containsAnyMatch(worldName.asString())) {
+                Debug.echoError("Cannot use world names with non-alphanumeric symbols due to security settings in Denizen/config.yml.");
+                scriptEntry.setFinished(true);
+                return;
+            }
+        }
+        else if (!Settings.cache_createWorldWeirdPaths) {
+            String cleaned = worldName.asLowerString().replace('\\', '/');
+            while (cleaned.contains("//")) {
+                cleaned = cleaned.replace("//", "/");
+            }
+            if (cleaned.startsWith("/")) {
+                cleaned = cleaned.substring(1);
+            }
+            if (cleaned.startsWith("plugins/")) {
+                Debug.echoError("CreateWorld cannot create a world inside the plugins folder due to security settings in Denizen/config.yml.");
+                scriptEntry.setFinished(true);
+                return;
+            }
+            if (cleaned.startsWith("..")) {
+                Debug.echoError("CreateWorld cannot create a world with a raised path (contains '..') due to security settings in Denizen/config.yml.");
+                scriptEntry.setFinished(true);
+                return;
+            }
         }
         final File newFolder = new File(Bukkit.getWorldContainer(), worldName.asString());
         if (!Utilities.canWriteToFile(newFolder)) {
@@ -178,23 +164,35 @@ public class CreateWorldCommand extends AbstractCommand implements Holdable {
             scriptEntry.setFinished(true);
             return;
         }
+        WorldType enumWorldType;
+        World.Environment enumEnvironment;
+        try {
+            enumWorldType = WorldType.valueOf(worldType.asString().toUpperCase());
+            enumEnvironment = World.Environment.valueOf(environment.asString().toUpperCase());
+        }
+        catch (IllegalArgumentException ex) {
+            Debug.echoError("Invalid worldtype or environment: " + ex.getMessage());
+            scriptEntry.setFinished(true);
+            return;
+        }
+        if (copy_from != null && !Settings.cache_createWorldSymbols && forbiddenSymbols.containsAnyMatch(copy_from.asString())) {
+            Debug.echoError("Cannot use copy_from world names with non-alphanumeric symbols due to security settings in Denizen/config.yml.");
+            scriptEntry.setFinished(true);
+            return;
+        }
         Supplier<Boolean> copyRunnable = () -> {
             try {
-                if (!Settings.cache_createWorldSymbols && forbiddenSymbols.containsAnyMatch(copy_from.asString())) {
-                    Debug.echoError("Cannot use copy_from world names with non-alphanumeric symbols due to security settings in Denizen/config.yml.");
-                    return false;
-                }
                 File folder = new File(Bukkit.getWorldContainer(), copy_from.asString().replace("w@", ""));
                 if (!Utilities.canReadFile(folder)) {
-                    Debug.echoError("Cannot copy from that folder path due to security settings in Denizen/config.yml.");
+                    Debug.echoError(scriptEntry, "Cannot copy from that folder path due to security settings in Denizen/config.yml.");
                     return false;
                 }
                 if (!folder.exists() || !folder.isDirectory()) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Invalid copy from world folder - does not exist!");
+                    Debug.echoError(scriptEntry, "Invalid copy from world folder - does not exist!");
                     return false;
                 }
                 if (newFolder.exists()) {
-                    Debug.echoError("Cannot copy to new world - that folder already exists.");
+                    Debug.echoError(scriptEntry, "Cannot copy to new world - that folder already exists.");
                     return false;
                 }
                 CoreUtilities.copyDirectory(folder, newFolder, excludedExtensionsForCopyFrom);
@@ -209,7 +207,7 @@ public class CreateWorldCommand extends AbstractCommand implements Holdable {
                 }
             }
             catch (Throwable ex) {
-                Debug.echoError(ex);
+                Debug.echoError(scriptEntry, ex);
                 return false;
             }
             return true;
@@ -217,8 +215,11 @@ public class CreateWorldCommand extends AbstractCommand implements Holdable {
         Runnable createRunnable = () -> {
             World world;
             WorldCreator worldCreator = WorldCreator.name(worldName.asString())
-                    .environment(World.Environment.valueOf(environment.asString().toUpperCase()))
-                    .type(WorldType.valueOf(worldType.asString().toUpperCase()));
+                    .environment(enumEnvironment)
+                    .type(enumWorldType);
+            if (generateStructures != null) {
+                worldCreator.generateStructures(generateStructures.asBoolean());
+            }
             if (generator != null) {
                 worldCreator.generator(generator.asString());
             }

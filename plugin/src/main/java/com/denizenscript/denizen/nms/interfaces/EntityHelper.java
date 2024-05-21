@@ -1,76 +1,50 @@
 package com.denizenscript.denizen.nms.interfaces;
 
-import com.denizenscript.denizen.nms.util.BoundingBox;
 import com.denizenscript.denizen.nms.util.jnbt.CompoundTag;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.LocationTag;
-import com.denizenscript.denizencore.utilities.debugging.Debug;
+import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizencore.objects.core.MapTag;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.CreatureSpawner;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.*;
+import org.bukkit.event.entity.EntityDamageByBlockEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.player.PlayerFishEvent;
-import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.meta.MapMeta;
+import org.bukkit.util.BoundingBox;
+import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
-import java.util.*;
+import java.util.List;
+import java.util.UUID;
 
 public abstract class EntityHelper {
 
-    public void setInvisible(Entity entity, boolean invisible) {
-        // Do nothing on older versions
+    public abstract void setInvisible(Entity entity, boolean invisible);
+
+    public abstract boolean isInvisible(Entity entity);
+
+    public abstract void setPose(Entity entity, Pose pose);
+
+    public void setSneaking(Entity entity, boolean sneak) {
+        if (entity instanceof Player player) {
+            player.setSneaking(sneak);
+        }
+        setPose(entity, sneak ? Pose.SNEAKING : Pose.STANDING);
     }
-
-    public abstract double getAbsorption(LivingEntity entity);
-
-    public abstract void setAbsorption(LivingEntity entity, double value);
-
-    public abstract void setSneaking(Entity player, boolean sneak);
 
     public abstract double getDamageTo(LivingEntity attacker, Entity target);
 
-    public abstract String getRawHoverText(Entity entity);
-
-    public List<String> getDiscoveredRecipes(Player player) {
-        throw new UnsupportedOperationException();
-    }
-
-    public void setRiptide(Entity entity, boolean state) {
-        Debug.echoError("Riptide control not available on this server version.");
-    }
-
-    public void setCarriedItem(Enderman entity, ItemStack item) {
-        entity.setCarriedMaterial(item.getData());
-    }
-
-    public abstract int getBodyArrows(Entity entity);
-
-    public abstract void setBodyArrows(Entity entity, int numArrows);
-
-    public abstract double getArrowDamage(Entity arrow);
-
-    public abstract void setArrowDamage(Entity arrow, double damage);
-
-    public abstract String getArrowPickupStatus(Entity entity);
-
-    public abstract void setArrowPickupStatus(Entity entity, String status);
-
-    public abstract Entity getFishHook(PlayerFishEvent event);
-
-    public abstract ItemStack getItemFromTrident(Entity entity);
-
-    public abstract void setItemForTrident(Entity entity, ItemStack item);
+    public abstract void setRiptide(Entity entity, boolean state);
 
     public abstract void forceInteraction(Player player, Location location);
-
-    public abstract Entity getEntity(World world, UUID uuid);
-
-    public abstract void setTarget(Creature entity, LivingEntity target);
 
     public abstract CompoundTag getNbtData(Entity entity);
 
@@ -79,10 +53,6 @@ public abstract class EntityHelper {
     public abstract void stopFollowing(Entity follower);
 
     public abstract void stopWalking(Entity entity);
-
-    public abstract double getSpeed(Entity entity);
-
-    public abstract void setSpeed(Entity entity, double speed);
 
     public abstract void follow(final Entity target, final Entity follower, final double speed, final double lead,
                                 final double maxRange, final boolean allowWander, final boolean teleport);
@@ -102,19 +72,112 @@ public abstract class EntityHelper {
      */
     public abstract void rotate(Entity entity, float yaw, float pitch);
 
-    public abstract float getBaseYaw(Entity entity);
+    public abstract float getBaseYaw(LivingEntity entity);
 
     // Taken from C2 NMS class for less dependency on C2
     public abstract void look(Entity entity, float yaw, float pitch);
 
-    public static class MapTraceResult {
-        public Location hitLocation;
-        public BlockFace angle;
+    public MapTag mapTrace(LivingEntity inputEntity) {
+        double range = 200;
+        Location start = inputEntity.getEyeLocation();
+        Vector startVec = start.toVector();
+        Vector direction = start.getDirection();
+        double bestDist = Double.MAX_VALUE;
+        ItemFrame best = null;
+        Vector bestHitPos = null;
+        BlockFace bestHitFace = null;
+        for (Entity entity : start.getWorld().getNearbyEntities(start.clone().add(direction.clone().multiply(50)), 100, 100, 100, (e) -> e instanceof ItemFrame itemFrame && itemFrame.getItem().getType() == Material.FILLED_MAP)) {
+            double centerDist = entity.getLocation().distanceSquared(start);
+            if (centerDist > bestDist) {
+                continue;
+            }
+            ItemFrame frame = (ItemFrame) entity;
+            double EXP_RATE = 0.125;
+            double expandX = 0, expandY = 0, expandZ = 0;
+            BlockFace face = frame.getFacing();
+            switch (face) {
+                case SOUTH, NORTH -> {
+                    expandX = EXP_RATE;
+                    expandY = EXP_RATE;
+                }
+                case EAST, WEST -> {
+                    expandZ = EXP_RATE;
+                    expandY = EXP_RATE;
+                }
+                case UP, DOWN -> {
+                    expandX = EXP_RATE;
+                    expandZ = EXP_RATE;
+                }
+            }
+            RayTraceResult traced = frame.getBoundingBox().expand(expandX, expandY, expandZ).rayTrace(startVec, direction, range);
+            if (traced == null || traced.getHitBlockFace() == null || traced.getHitBlockFace() != face) {
+                continue;
+            }
+            bestDist = centerDist;
+            best = frame;
+            bestHitPos = traced.getHitPosition();
+            bestHitFace = face;
+        }
+        if (best == null) {
+            return null;
+        }
+        double x = 0;
+        double y = 0;
+        double basex = bestHitPos.getX() - Math.floor(bestHitPos.getX());
+        double basey = bestHitPos.getY() - Math.floor(bestHitPos.getY());
+        double basez = bestHitPos.getZ() - Math.floor(bestHitPos.getZ());
+        switch (bestHitFace) {
+            case NORTH -> {
+                x = 128f - (basex * 128f);
+                y = 128f - (basey * 128f);
+            }
+            case SOUTH -> {
+                x = basex * 128f;
+                y = 128f - (basey * 128f);
+            }
+            case WEST -> {
+                x = basez * 128f;
+                y = 128f - (basey * 128f);
+            }
+            case EAST -> {
+                x = 128f - (basez * 128f);
+                y = 128f - (basey * 128f);
+            }
+            case UP -> {
+                x = basex * 128f;
+                y = basez * 128f;
+            }
+            case DOWN -> {
+                x = basex * 128f;
+                y = 128f - (basez * 128f);
+            }
+        }
+        MapMeta map = (MapMeta) best.getItem().getItemMeta();
+        switch (best.getRotation()) {
+            case CLOCKWISE_45, FLIPPED_45 -> { // 90 deg
+                double origX = x;
+                x = y;
+                y = 128f - origX;
+            }
+            case CLOCKWISE, COUNTER_CLOCKWISE -> { // 180 deg
+                x = 128f - x;
+                y = 128f - y;
+            }
+            case CLOCKWISE_135, COUNTER_CLOCKWISE_45 -> { // 270 deg
+                double origX2 = x;
+                x = 128f - y;
+                y = origX2;
+            }
+        }
+        MapTag result = new MapTag();
+        result.putObject("x", new ElementTag(Math.round(x)));
+        result.putObject("y", new ElementTag(Math.round(y)));
+        result.putObject("entity", new EntityTag(best));
+        result.putObject("map", new ElementTag(map.hasMapId() ? map.getMapId() : 0));
+        return result;
     }
 
     public abstract boolean canTrace(World world, Vector start, Vector end);
-
-    public abstract MapTraceResult mapTrace(LivingEntity from, double range);
 
     public Location faceLocation(Location from, Location at) {
         Vector direction = from.toVector().subtract(at.toVector()).normalize();
@@ -122,6 +185,10 @@ public abstract class EntityHelper {
         newLocation.setYaw(180 - (float) Math.toDegrees(Math.atan2(direction.getX(), direction.getZ())));
         newLocation.setPitch(90 - (float) Math.toDegrees(Math.acos(direction.getY())));
         return newLocation;
+    }
+
+    public boolean internalLook(Player player, Location at) {
+        return false;
     }
 
     /**
@@ -134,7 +201,12 @@ public abstract class EntityHelper {
         if (from.getWorld() != at.getWorld()) {
             return;
         }
-        Location origin = from instanceof LivingEntity ? ((LivingEntity) from).getEyeLocation()
+        if (EntityTag.isPlayer(from)) {
+            if (internalLook((Player) from, at)) {
+                return;
+            }
+        }
+        Location origin = from instanceof LivingEntity livingEntity ? livingEntity.getEyeLocation()
                 : new LocationTag(from.getLocation()).getBlockLocation().add(0.5, 0.5, 0.5);
         Location rotated = faceLocation(origin, at);
         rotate(from, rotated.getYaw(), rotated.getPitch());
@@ -292,93 +364,116 @@ public abstract class EntityHelper {
 
     public abstract void move(Entity entity, Vector vector);
 
+    public void fakeMove(Entity entity, Vector vector) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void fakeTeleport(Entity entity, Location location) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void clientResetLoc(Entity entity) {
+        throw new UnsupportedOperationException();
+    }
+
     public abstract void teleport(Entity entity, Location loc);
 
-    public abstract BoundingBox getBoundingBox(Entity entity);
+    public abstract void setBoundingBox(Entity entity, BoundingBox box);
 
-    public abstract void setBoundingBox(Entity entity, BoundingBox boundingBox);
+    public List<Player> getPlayersThatSee(Entity entity) { // TODO: once the minimum supported version is 1.20, remove from NMS
+        return List.copyOf(entity.getTrackedBy());
+    }
 
-    public abstract boolean isChestedHorse(Entity horse);
-
-    public abstract boolean isCarryingChest(Entity horse);
-
-    public abstract void setCarryingChest(Entity horse, boolean carrying);
-
-    public List<Player> getPlayersThatSee(Entity entity) {
+    public void sendAllUpdatePackets(Entity entity) {
         throw new UnsupportedOperationException();
     }
 
-    public void setTicksLived(Entity entity, int ticks) {
-        entity.setTicksLived(ticks);
+    public abstract void setTicksLived(Entity entity, int ticks);
+
+    public abstract void setHeadAngle(LivingEntity entity, float angle);
+
+    public void setGhastAttacking(Ghast ghast, boolean attacking) { // TODO: once minimum version is 1.19 or higher, remove from NMS
+        ghast.setCharging(attacking);
     }
 
-    public int getShulkerPeek(Entity entity) {
-        throw new UnsupportedOperationException();
-    }
+    public abstract void setEndermanAngry(Enderman enderman, boolean angry);
 
-    public void setShulkerPeek(Entity entity, int peek) {
-        throw new UnsupportedOperationException();
-    }
-
-    public void setHeadAngle(Entity entity, float angle) {
-        throw new UnsupportedOperationException();
-    }
-
-    public void setGhastAttacking(Entity entity, boolean attacking) {
-        throw new UnsupportedOperationException();
-    }
-
-    public void setEndermanAngry(Entity entity, boolean angry) {
-        throw new UnsupportedOperationException();
-    }
-
-    public static EntityDamageEvent fireFakeDamageEvent(Entity target, Entity source, EntityDamageEvent.DamageCause cause, float amount) {
-        EntityDamageEvent ede = source == null ? new EntityDamageEvent(target, cause, amount) : new EntityDamageByEntityEvent(source, target, cause, amount);
+    public static EntityDamageEvent fireFakeDamageEvent(Entity target, EntityTag source, Location sourceLoc, EntityDamageEvent.DamageCause cause, float amount) {
+        EntityDamageEvent ede;
+        if (source != null) {
+            ede = new EntityDamageByEntityEvent(source.getBukkitEntity(), target, cause, amount);
+        }
+        else if (sourceLoc != null) {
+            ede = new EntityDamageByBlockEvent(sourceLoc.getBlock(), target, cause, amount);
+        }
+        else {
+            ede = new EntityDamageEvent(target, cause, amount);
+        }
         Bukkit.getPluginManager().callEvent(ede);
         return ede;
     }
 
-    public void damage(LivingEntity target, float amount, Entity source, EntityDamageEvent.DamageCause cause) {
-        if (cause == null) {
-            if (source == null) {
-                target.damage(amount);
-            }
-            else {
-                target.damage(amount, source);
-            }
-        }
-        else {
-            EntityDamageEvent ede = fireFakeDamageEvent(target, source, cause, amount);
-            if (!ede.isCancelled()) {
-                target.setLastDamageCause(ede);
-                if (source == null) {
-                    target.damage(ede.getFinalDamage());
-                }
-                else {
-                    target.damage(ede.getFinalDamage(), source);
-                }
-                target.setLastDamageCause(ede);
-            }
-        }
+    public abstract void damage(LivingEntity target, float amount, EntityTag source, Location sourceLoc, EntityDamageEvent.DamageCause cause);
+
+    public abstract void setLastHurtBy(LivingEntity mob, LivingEntity damager);
+
+    public abstract void setFallingBlockType(FallingBlock fallingBlock, BlockData block);
+
+    public abstract EntityTag getMobSpawnerDisplayEntity(CreatureSpawner spawner);
+
+    public void setFireworkLifetime(Firework firework, int ticks) { // TODO: once minimum version is 1.19, remove from NMS
+        firework.setMaxLife(ticks);
     }
 
-    public void setLastHurtBy(LivingEntity mob, LivingEntity damager) {
+    public int getFireworkLifetime(Firework firework) { // TODO: once minimum version is 1.19, remove from NMS
+        return firework.getMaxLife();
+    }
+
+    public abstract int getInWaterTime(Zombie zombie);
+
+    public abstract void setInWaterTime(Zombie zombie, int ticks);
+
+    public abstract void setTrackingRange(Entity entity, int range);
+
+    public abstract boolean isAggressive(Mob mob);
+
+    public abstract void setAggressive(Mob mob, boolean aggressive);
+
+    public void setUUID(Entity entity, UUID id) {
         throw new UnsupportedOperationException();
     }
 
-    public void setFallingBlockType(FallingBlock entity, BlockData block) {
+    public float getStepHeight(Entity entity) {
         throw new UnsupportedOperationException();
     }
 
-    public EntityTag getMobSpawnerDisplayEntity(CreatureSpawner spawner) {
+    public void setStepHeight(Entity entity, float stepHeight) {
         throw new UnsupportedOperationException();
     }
 
-    public void setFireworkLifetime(Firework firework, int ticks) {
+    public List<Object> convertInternalEntityDataValues(Entity entity, MapTag internalData) {
         throw new UnsupportedOperationException();
     }
 
-    public int getFireworkLifetime(Firework firework) {
+    public void modifyInternalEntityData(Entity entity, MapTag internalData) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void startUsingItem(LivingEntity entity, EquipmentSlot hand) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void stopUsingItem(LivingEntity entity) {
+        throw new UnsupportedOperationException();
+    }
+
+    public abstract void openHorseInventory(Player player, AbstractHorse horse);
+
+    public CompoundTag getRawNBT(Entity entity) {
+        throw new UnsupportedOperationException();
+    }
+
+    public void modifyRawNBT(Entity entity, CompoundTag tag) {
         throw new UnsupportedOperationException();
     }
 }

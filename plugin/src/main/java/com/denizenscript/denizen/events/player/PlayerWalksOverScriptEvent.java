@@ -26,7 +26,7 @@ public class PlayerWalksOverScriptEvent extends BukkitScriptEvent implements Lis
     //
     // @Cancellable true
     //
-    // @Triggers when a player walks over a notable location.
+    // @Triggers when a player walks over a noted location. In most cases, it is preferable to use <@link event player enters area> with a small cuboid.
     //
     // @Context
     // <context.notable> returns an ElementTag of the notable location's name.
@@ -36,12 +36,10 @@ public class PlayerWalksOverScriptEvent extends BukkitScriptEvent implements Lis
     // -->
 
     public PlayerWalksOverScriptEvent() {
-        instance = this;
         registerCouldMatcher("player walks over notable");
         registerCouldMatcher("player walks over <'location'>");
     }
 
-    public static PlayerWalksOverScriptEvent instance;
     public String notable;
     public PlayerMoveEvent event;
 
@@ -53,11 +51,6 @@ public class PlayerWalksOverScriptEvent extends BukkitScriptEvent implements Lis
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerWalksOver";
     }
 
     @Override

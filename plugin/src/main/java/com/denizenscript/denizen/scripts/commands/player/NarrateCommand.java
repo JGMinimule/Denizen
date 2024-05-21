@@ -4,7 +4,7 @@ import com.denizenscript.denizen.scripts.containers.core.FormatScriptContainer;
 import com.denizenscript.denizen.tags.BukkitTagContext;
 import com.denizenscript.denizen.utilities.FormattedTextHelper;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -80,6 +80,7 @@ public class NarrateCommand extends AbstractCommand {
                 FormatScriptContainer format = ScriptRegistry.getScriptContainer(formatStr);
                 if (format == null) {
                     Debug.echoError("Could not find format script matching '" + formatStr + "'");
+                    return;
                 }
                 scriptEntry.addObject("format", new ScriptTag(format));
             }
@@ -96,7 +97,7 @@ public class NarrateCommand extends AbstractCommand {
                 scriptEntry.addObject("per_player", new ElementTag(true));
             }
             else if (!scriptEntry.hasObject("text")) {
-                scriptEntry.addObject("text", new ElementTag(arg.getRawValue()));
+                scriptEntry.addObject("text", arg.getRawElement());
             }
             else {
                 arg.reportUnhandled();

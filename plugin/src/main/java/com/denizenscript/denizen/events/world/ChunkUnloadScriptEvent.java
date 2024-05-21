@@ -1,10 +1,8 @@
 package com.denizenscript.denizen.events.world;
 
 import com.denizenscript.denizen.objects.ChunkTag;
-import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.utilities.Deprecations;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.world.ChunkUnloadEvent;
@@ -31,11 +29,9 @@ public class ChunkUnloadScriptEvent extends BukkitScriptEvent implements Listene
     // -->
 
     public ChunkUnloadScriptEvent() {
-        instance = this;
         registerCouldMatcher("chunk unloads");
     }
 
-    public static ChunkUnloadScriptEvent instance;
 
     public ChunkTag chunk;
     public ChunkUnloadEvent event;
@@ -49,18 +45,9 @@ public class ChunkUnloadScriptEvent extends BukkitScriptEvent implements Listene
     }
 
     @Override
-    public String getName() {
-        return "ChunkUnloads";
-    }
-
-    @Override
     public ObjectTag getContext(String name) {
         if (name.equals("chunk")) {
             return chunk;
-        }
-        else if (name.equals("world")) {
-            Deprecations.worldContext.warn();
-            return new WorldTag(event.getWorld());
         }
         return super.getContext(name);
     }

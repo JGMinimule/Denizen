@@ -1,10 +1,9 @@
 package com.denizenscript.denizen.objects.properties.entity;
 
-import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.EntityTag;
-import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.tags.Attribute;
 import org.bukkit.entity.Boat;
@@ -40,7 +39,7 @@ public class EntitySpeed implements Property {
             "speed"
     };
 
-    private EntitySpeed(EntityTag ent) {
+    public EntitySpeed(EntityTag ent) {
         entity = ent;
     }
 
@@ -58,7 +57,7 @@ public class EntitySpeed implements Property {
 
     public ElementTag getSpeed() {
         if (entity.isLivingEntity()) {
-            return new ElementTag(NMSHandler.getEntityHelper().getSpeed(entity.getBukkitEntity()));
+            return new ElementTag(entity.getLivingEntity().getAttribute(org.bukkit.attribute.Attribute.GENERIC_MOVEMENT_SPEED).getBaseValue());
         }
         else {
             if (entity.getBukkitEntity() instanceof Boat) {
@@ -85,6 +84,7 @@ public class EntitySpeed implements Property {
         // @group attributes
         // @description
         // Returns how fast the entity can move.
+        // Compatible with minecarts, boats, and living entities.
         // -->
         if (attribute.startsWith("speed")) {
             return getSpeed().getObjectAttribute(attribute.fulfill(1));
@@ -102,13 +102,14 @@ public class EntitySpeed implements Property {
         // @input ElementTag(Decimal)
         // @description
         // Sets how fast the entity can move.
+        // Compatible with minecarts, boats, and living entities.
         // @tags
         // <EntityTag.speed>
         // -->
         if (mechanism.matches("speed") && mechanism.requireDouble()) {
             double value = mechanism.getValue().asDouble();
             if (entity.isLivingEntity()) {
-                NMSHandler.getEntityHelper().setSpeed(entity.getBukkitEntity(), value);
+                entity.getLivingEntity().getAttribute(org.bukkit.attribute.Attribute.GENERIC_MOVEMENT_SPEED).setBaseValue(value);
             }
             else {
                 if (entity.getBukkitEntity() instanceof Boat) {

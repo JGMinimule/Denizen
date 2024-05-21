@@ -44,12 +44,10 @@ public class EntityKnocksbackEntityScriptEvent extends BukkitScriptEvent impleme
     // -->
 
     public EntityKnocksbackEntityScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> knocks back <entity>");
         registerSwitches("with");
     }
 
-    public static EntityKnocksbackEntityScriptEvent instance;
 
     public EntityTag entity;
     public EntityTag hitBy;
@@ -60,7 +58,7 @@ public class EntityKnocksbackEntityScriptEvent extends BukkitScriptEvent impleme
     public boolean matches(ScriptPath path) {
         String attacker = path.eventArgLowerAt(0);
         String target = path.eventArgLowerAt(3);
-        if (!tryEntity(hitBy, attacker) || (!tryEntity(entity, target))) {
+        if (!hitBy.tryAdvancedMatcher(attacker) || (!entity.tryAdvancedMatcher(target))) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation())) {
@@ -70,11 +68,6 @@ public class EntityKnocksbackEntityScriptEvent extends BukkitScriptEvent impleme
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityKnocksbackEntity";
     }
 
     @Override

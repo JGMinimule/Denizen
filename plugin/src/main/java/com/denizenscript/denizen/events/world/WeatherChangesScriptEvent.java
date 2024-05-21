@@ -27,11 +27,9 @@ public class WeatherChangesScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public WeatherChangesScriptEvent() {
-        instance = this;
         registerCouldMatcher("weather changes|rains|clears (in <world>)");
     }
 
-    public static WeatherChangesScriptEvent instance;
     public WorldTag world;
     public ElementTag weather;
     public WeatherChangeEvent event;
@@ -42,15 +40,10 @@ public class WeatherChangesScriptEvent extends BukkitScriptEvent implements List
         if (!cmd.equals("changes") && !cmd.equals(weather.asString())) {
             return false;
         }
-        if (path.eventArgLowerAt(2).equals("in") && !tryWorld(world, path.eventArgLowerAt(3))) {
+        if (path.eventArgLowerAt(2).equals("in") && !path.tryArgObject(3, world)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "WeatherChanges";
     }
 
     @Override

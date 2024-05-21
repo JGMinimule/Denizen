@@ -1,10 +1,12 @@
 package com.denizenscript.denizen.utilities.blocks;
 
 import com.denizenscript.denizen.Denizen;
+import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.NMSVersion;
 import com.denizenscript.denizen.objects.*;
 import com.denizenscript.denizen.scripts.commands.world.SchematicCommand;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
@@ -25,55 +27,90 @@ import java.util.HashSet;
 
 public class CuboidBlockSet implements BlockSet {
 
+    public static FullBlockData STRUCTURE_VOID = new FullBlockData(Material.STRUCTURE_VOID.createBlockData());
+
     public CuboidBlockSet() {
     }
 
-    public CuboidBlockSet(CuboidTag cuboid, Location center, boolean copyFlags) {
+    public void buildImmediate(AreaContainmentObject area, Location center, HashSet<Material> mask, boolean copyFlags) {
         hasFlags = copyFlags;
-        Location low = cuboid.pairs.get(0).low;
-        Location high = cuboid.pairs.get(0).high;
+        CuboidTag boundary;
+        if (area instanceof CuboidTag && ((CuboidTag) area).pairs.size() == 1) {
+            boundary = (CuboidTag) area;
+        }
+        else {
+            constraint = area;
+            boundary = area.getCuboidBoundary();
+        }
+        Location low = boundary.pairs.get(0).low;
+        Location high = boundary.pairs.get(0).high;
         x_width = (int) ((high.getX() - low.getX()) + 1);
         y_length = (int) ((high.getY() - low.getY()) + 1);
         z_height = (int) ((high.getZ() - low.getZ()) + 1);
         center_x = (int) (center.getX() - low.getX());
         center_y = (int) (center.getY() - low.getY());
         center_z = (int) (center.getZ() - low.getZ());
-        blocks = new FullBlockData[(x_width * y_length * z_height)];
+        blocks = new FullBlockData[x_width * y_length * z_height];
         int index = 0;
+        double lowX = low.getBlockX() + 0.5, lowY = low.getBlockY() + 0.5, lowZ = low.getBlockZ() + 0.5;
+        Location refLoc = low.clone();
         for (int x = 0; x < x_width; x++) {
             for (int y = 0; y < y_length; y++) {
                 for (int z = 0; z < z_height; z++) {
-                    blocks[index++] = new FullBlockData(low.clone().add(x, y, z).getBlock(), copyFlags);
+                    refLoc.setX(lowX + x);
+                    refLoc.setY(lowY + y);
+                    refLoc.setZ(lowZ + z);
+                    FullBlockData block = (constraint == null || constraint.doesContainLocation(refLoc)) ? new FullBlockData(refLoc.getBlock(), copyFlags) : STRUCTURE_VOID;
+                    if (block != STRUCTURE_VOID && mask != null && !mask.contains(block.data.getMaterial())) {
+                        block = STRUCTURE_VOID;
+                    }
+                    blocks[index++] = block;
                 }
             }
         }
     }
 
-    public void buildDelayed(CuboidTag cuboid, Location center, Runnable runme, long maxDelayMs, boolean copyFlags) {
+    public void buildDelayed(AreaContainmentObject area, Location center, HashSet<Material> mask, Runnable runme, long maxDelayMs, boolean copyFlags) {
         hasFlags = copyFlags;
-        Location low = cuboid.pairs.get(0).low;
-        Location high = cuboid.pairs.get(0).high;
+        CuboidTag boundary;
+        if (area instanceof CuboidTag && ((CuboidTag) area).pairs.size() == 1) {
+            boundary = (CuboidTag) area;
+        }
+        else {
+            constraint = area;
+            boundary = area.getCuboidBoundary();
+        }
+        Location low = boundary.pairs.get(0).low;
+        Location high = boundary.pairs.get(0).high;
         x_width = (int) ((high.getX() - low.getX()) + 1);
         y_length = (int) ((high.getY() - low.getY()) + 1);
         z_height = (int) ((high.getZ() - low.getZ()) + 1);
         center_x = (int) (center.getX() - low.getX());
         center_y = (int) (center.getY() - low.getY());
         center_z = (int) (center.getZ() - low.getZ());
-        final long goal = (long) (x_width * y_length * z_height);
-        blocks = new FullBlockData[(x_width * y_length * z_height)];
+        final long goal = (long)x_width * y_length * z_height;
+        blocks = new FullBlockData[x_width * y_length * z_height];
+        double lowX = low.getBlockX() + 0.5, lowY = low.getBlockY() + 0.5, lowZ = low.getBlockZ() + 0.5;
+        Location refLoc = low.clone();
         new BukkitRunnable() {
             int index = 0;
             @Override
             public void run() {
-                long start = System.currentTimeMillis();
+                long start = CoreUtilities.monotonicMillis();
                 while (index < goal) {
-                    long z = index % ((long) (z_height));
-                    long y = ((index - z) % ((long) (y_length * z_height))) / ((long) z_height);
-                    long x = (index - y - z) / ((long) (y_length * z_height));
-                    blocks[index] = new FullBlockData(low.clone().add(x, y, z).getBlock(), copyFlags);
+                    long z = index % ((long) z_height);
+                    long y = ((index - z) % ((long)y_length * z_height)) / ((long) z_height);
+                    long x = (index - y - z) / ((long)y_length * z_height);
+                    refLoc.setX(lowX + x);
+                    refLoc.setY(lowY + y);
+                    refLoc.setZ(lowZ + z);
+                    FullBlockData block = (constraint == null || constraint.doesContainLocation(refLoc)) ? new FullBlockData(refLoc.getBlock(), copyFlags) : STRUCTURE_VOID;
+                    if (block != STRUCTURE_VOID && mask != null && !mask.contains(block.data.getMaterial())) {
+                        block = STRUCTURE_VOID;
+                    }
+                    blocks[index] = block;
                     index++;
-                    if (System.currentTimeMillis() - start > maxDelayMs) {
-                        SchematicCommand.noPhys = false;
+                    if (CoreUtilities.monotonicMillis() - start > maxDelayMs) {
                         return;
                     }
                 }
@@ -85,6 +122,8 @@ public class CuboidBlockSet implements BlockSet {
             }
         }.runTaskTimer(Denizen.getInstance(), 1, 1);
     }
+
+    public AreaContainmentObject constraint = null;
 
     public FullBlockData[] blocks = null;
 
@@ -103,6 +142,10 @@ public class CuboidBlockSet implements BlockSet {
     public int center_z;
 
     public ListTag entities = null;
+
+    public boolean isModifying = false;
+
+    public int readingProcesses = 0;
 
     public CuboidBlockSet duplicate() {
         CuboidBlockSet result = new CuboidBlockSet();
@@ -141,6 +184,14 @@ public class CuboidBlockSet implements BlockSet {
                 return BlockFace.EAST;
             case WEST:
                 return BlockFace.SOUTH;
+            case NORTH_EAST:
+                return BlockFace.NORTH_WEST;
+            case NORTH_WEST:
+                return BlockFace.SOUTH_WEST;
+            case SOUTH_WEST:
+                return BlockFace.SOUTH_EAST;
+            case SOUTH_EAST:
+                return BlockFace.NORTH_EAST;
             default:
                 return BlockFace.SELF;
         }
@@ -148,10 +199,18 @@ public class CuboidBlockSet implements BlockSet {
 
     public static HashSet<EntityType> copyTypes = new HashSet<>(Arrays.asList(EntityType.PAINTING, EntityType.ITEM_FRAME, EntityType.ARMOR_STAND));
 
-    public void buildEntities(CuboidTag cuboid, Location center) {
+    static {
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_20)) {
+            copyTypes.add(EntityType.BLOCK_DISPLAY);
+            copyTypes.add(EntityType.ITEM_DISPLAY);
+            copyTypes.add(EntityType.TEXT_DISPLAY);
+        }
+    }
+
+    public void buildEntities(AreaContainmentObject area, Location center) {
         entities = new ListTag();
-        for (Entity ent : cuboid.getWorld().getEntities()) {
-            if (cuboid.isInsideCuboid(ent.getLocation())) {
+        for (Entity ent : area.getCuboidBoundary().getEntitiesPossiblyWithin()) {
+            if (area.doesContainLocation(ent.getLocation())) {
                 if (copyTypes.contains(ent.getType())) {
                     EntityTag entTag = new EntityTag(ent);
                     if (entTag.isPlayer() || entTag.isNPC()) {
@@ -174,9 +233,9 @@ public class CuboidBlockSet implements BlockSet {
         }
         for (MapTag data : entities.filter(MapTag.class, CoreUtilities.noDebugContext)) {
             try {
-                LocationTag offset = data.getObject("offset").asType(LocationTag.class, CoreUtilities.noDebugContext);
-                int rotation = data.getObject("rotation").asType(ElementTag.class, CoreUtilities.noDebugContext).asInt();
-                EntityTag entity = data.getObject("entity").asType(EntityTag.class, CoreUtilities.noDebugContext);
+                LocationTag offset = data.getObjectAs("offset", LocationTag.class, CoreUtilities.noDebugContext);
+                int rotation = data.getElement("rotation").asInt();
+                EntityTag entity = data.getObjectAs("entity", EntityTag.class, CoreUtilities.noDebugContext);
                 if (entity == null || offset == null) {
                     continue;
                 }
@@ -192,7 +251,7 @@ public class CuboidBlockSet implements BlockSet {
                                 face = rotateFaceOne(face);
                             }
                             offset.add(face.getDirection().multiply(0.1)); // Compensate for hanging locations being very stupid
-                            mechs.add(new Mechanism("rotation", new ElementTag(face.name()), CoreUtilities.noDebugContext));
+                            mechs.add(new Mechanism("rotation", new ElementTag(face), CoreUtilities.noDebugContext));
                         }
                         else {
                             mechs.add(new Mechanism(mech.getName(), mech.value, CoreUtilities.noDebugContext));
@@ -206,7 +265,7 @@ public class CuboidBlockSet implements BlockSet {
                     }
                 }
                 Location spawnLoc = relative.clone().add(offset);
-                spawnLoc.setYaw(offset.getYaw() + rotation);
+                spawnLoc.setYaw(offset.getYaw() - rotation);
                 spawnLoc.setPitch(offset.getPitch());
                 entity.spawnAt(spawnLoc);
             }
@@ -235,26 +294,26 @@ public class CuboidBlockSet implements BlockSet {
             block.set(destBlock, false);
         }
         else {
-            FakeBlock.showFakeBlockTo(input.fakeTo, new LocationTag(destBlock.getLocation()), new MaterialTag(block.data), input.fakeDuration);
+            FakeBlock.showFakeBlockTo(input.fakeTo, new LocationTag(destBlock.getLocation()), new MaterialTag(block.data), input.fakeDuration, false);
         }
     }
 
     @Override
     public void setBlocksDelayed(final Runnable runme, final InputParams input, long maxDelayMs) {
-        final long goal = (long) (x_width * y_length * z_height);
+        final long goal = (long)x_width * y_length * z_height;
         new BukkitRunnable() {
             int index = 0;
             @Override
             public void run() {
                 SchematicCommand.noPhys = true;
-                long start = System.currentTimeMillis();
+                long start = CoreUtilities.monotonicMillis();
                 while (index < goal) {
                     int z = index % (z_height);
                     int y = ((index - z) % (y_length * z_height)) / z_height;
                     int x = (index - y - z) / (y_length * z_height);
                     setBlockSingle(blocks[index], x, y, z, input);
                     index++;
-                    if (System.currentTimeMillis() - start > maxDelayMs) {
+                    if (CoreUtilities.monotonicMillis() - start > maxDelayMs) {
                         SchematicCommand.noPhys = false;
                         return;
                     }
@@ -289,8 +348,8 @@ public class CuboidBlockSet implements BlockSet {
         }
         ListTag outEntities = new ListTag();
         for (MapTag data : entities.filter(MapTag.class, CoreUtilities.noDebugContext)) {
-            LocationTag offset = data.getObject("offset").asType(LocationTag.class, CoreUtilities.noDebugContext);
-            int rotation = data.getObject("rotation").asType(ElementTag.class, CoreUtilities.noDebugContext).asInt();
+            LocationTag offset = data.getObjectAs("offset", LocationTag.class, CoreUtilities.noDebugContext);
+            int rotation = data.getElement("rotation").asInt();
             offset = new LocationTag((String) null, offset.getZ(), offset.getY(), -offset.getX() + 1, offset.getYaw(), offset.getPitch());
             rotation += 90;
             while (rotation >= 360) {
@@ -324,14 +383,46 @@ public class CuboidBlockSet implements BlockSet {
         blocks = bd;
     }
 
+    public void flipEntities(int offsetMultiplier_X, int offsetMultiplier_Z) {
+        if (entities == null) {
+            return;
+        }
+        ListTag outEntities = new ListTag();
+        for (MapTag data : entities.filter(MapTag.class, CoreUtilities.noDebugContext)) {
+            int rotation = data.getElement("rotation").asInt();
+            LocationTag offset = data.getObjectAs("offset", LocationTag.class, CoreUtilities.noDebugContext);
+            float newYaw = offset.getYaw();
+            if (offsetMultiplier_X == -1) {
+                newYaw = -1 * (offset.getYaw() - 90) + 270;
+            } else if (offsetMultiplier_Z == -1) {
+                newYaw = 180 - offset.getYaw();
+            }
+            while (newYaw < 0 || newYaw >= 360) {
+                if (newYaw >= 360) {
+                    newYaw -= 360;
+                } else {
+                    newYaw += 360;
+                }
+            }
+            rotation += (offset.getYaw() - newYaw);
+            offset = new LocationTag((String) null, offset.getX() * offsetMultiplier_X, offset.getY(), offset.getZ() * offsetMultiplier_Z, newYaw, offset.getPitch());
+            data = data.duplicate();
+            data.putObject("offset", offset);
+            data.putObject("rotation", new ElementTag(rotation));
+            outEntities.addObject(data);
+        }
+        entities = outEntities;
+    }
+
     public void flipX() {
+        flipEntities(-1, 1);
         FullBlockData[] bd = new FullBlockData[blocks.length];
         int index = 0;
-        center_x = x_width - center_x;
+        center_x = x_width - center_x - 1;
         for (int x = x_width - 1; x >= 0; x--) {
             for (int y = 0; y < y_length; y++) {
                 for (int z = 0; z < z_height; z++) {
-                    bd[index++] = blockAt(x, y, z);
+                    bd[index++] = blockAt(x, y, z).flipX();
                 }
             }
         }
@@ -341,11 +432,11 @@ public class CuboidBlockSet implements BlockSet {
     public void flipY() {
         FullBlockData[] bd = new FullBlockData[blocks.length];
         int index = 0;
-        center_x = x_width - center_x;
+        center_y = y_length - center_y - 1;
         for (int x = 0; x < x_width; x++) {
             for (int y = y_length - 1; y >= 0; y--) {
                 for (int z = 0; z < z_height; z++) {
-                    bd[index++] = blockAt(x, y, z);
+                    bd[index++] = blockAt(x, y, z).flipY();
                 }
             }
         }
@@ -353,13 +444,14 @@ public class CuboidBlockSet implements BlockSet {
     }
 
     public void flipZ() {
+        flipEntities(1, -1);
         FullBlockData[] bd = new FullBlockData[blocks.length];
         int index = 0;
-        center_x = x_width - center_x;
+        center_z = z_height - center_z - 1;
         for (int x = 0; x < x_width; x++) {
             for (int y = 0; y < y_length; y++) {
                 for (int z = z_height - 1; z >= 0; z--) {
-                    bd[index++] = blockAt(x, y, z);
+                    bd[index++] = blockAt(x, y, z).flipZ();
                 }
             }
         }
@@ -368,20 +460,5 @@ public class CuboidBlockSet implements BlockSet {
 
     public FullBlockData blockAt(double X, double Y, double Z) {
         return blocks[(int) (Z + Y * z_height + X * z_height * y_length)];
-        // This calculation should produce the same result as the below nonsense:
-        /*
-        int index = 0;
-        for (int x = 0; x < x_width; x++) {
-            for (int y = 0; y < y_length; y++) {
-                for (int z = 0; z < z_height; z++) {
-                    if (x == X && y == Y && z == Z) {
-                        return blocks.get(index);
-                    }
-                    index++;
-                }
-            }
-        }
-        return null;
-        */
     }
 }

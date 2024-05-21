@@ -15,10 +15,7 @@ public class EntitySpawnerSpawnScriptEvent extends BukkitScriptEvent implements 
 
     // <--[event]
     // @Events
-    // spawner spawns entity
     // spawner spawns <entity>
-    //
-    // @Regex ^on spawner spawns [^\s]+$
     //
     // @Group Entity
     //
@@ -28,6 +25,8 @@ public class EntitySpawnerSpawnScriptEvent extends BukkitScriptEvent implements 
     //
     // @Triggers when an entity spawns from a monster spawner.
     //
+    // @Switch spawner:<location> to only process the event if the spawner's location matches.
+    //
     // @Context
     // <context.entity> returns the EntityTag that spawned.
     // <context.location> returns the LocationTag the entity will spawn at.
@@ -36,42 +35,26 @@ public class EntitySpawnerSpawnScriptEvent extends BukkitScriptEvent implements 
     // -->
 
     public EntitySpawnerSpawnScriptEvent() {
-        instance = this;
+        registerCouldMatcher("spawner spawns <entity>");
+        registerSwitches("spawner");
     }
 
-    public static EntitySpawnerSpawnScriptEvent instance;
     private EntityTag entity;
     private LocationTag location;
     private LocationTag spawnerLocation;
-    public SpawnerSpawnEvent event;
-
-    @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventLower.startsWith("spawner spawns")) {
-            return false;
-        }
-        if (!couldMatchEntity(path.eventArgLowerAt(2))) {
-            return false;
-        }
-        return true;
-    }
 
     @Override
     public boolean matches(ScriptPath path) {
-
-        if (!tryEntity(entity, path.eventArgLowerAt(2))) {
+        if (!path.tryArgObject(2, entity)) {
             return false;
         }
-
+        if (!path.tryObjectSwitch("spawner", spawnerLocation)) {
+            return false;
+        }
         if (!runInCheck(path, location)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "SpawnerSpawn";
     }
 
     @Override
@@ -81,15 +64,12 @@ public class EntitySpawnerSpawnScriptEvent extends BukkitScriptEvent implements 
 
     @Override
     public ObjectTag getContext(String name) {
-        switch (name) {
-            case "entity":
-                return entity;
-            case "location":
-                return location;
-            case "spawner_location":
-                return spawnerLocation;
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "entity" -> entity;
+            case "location" -> location;
+            case "spawner_location" -> spawnerLocation;
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler
@@ -98,7 +78,6 @@ public class EntitySpawnerSpawnScriptEvent extends BukkitScriptEvent implements 
         this.entity = new EntityTag(entity);
         location = new LocationTag(event.getLocation());
         spawnerLocation = new LocationTag(event.getSpawner().getLocation());
-        this.event = event;
         EntityTag.rememberEntity(entity);
         fire(event);
         EntityTag.forgetEntity(entity);

@@ -4,7 +4,7 @@ import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockSpreadEvent;
@@ -33,13 +33,11 @@ public class BlockSpreadsScriptEvent extends BukkitScriptEvent implements Listen
     // -->
 
     public BlockSpreadsScriptEvent() {
-        instance = this;
         registerCouldMatcher("block spreads");
         registerCouldMatcher("<block> spreads"); // NOTE: exists for historical compat reasons.
         registerSwitches("type");
     }
 
-    public static BlockSpreadsScriptEvent instance;
     public LocationTag location;
     public MaterialTag material;
     public BlockSpreadEvent event;
@@ -53,7 +51,7 @@ public class BlockSpreadsScriptEvent extends BukkitScriptEvent implements Listen
             return false;
         }
         if (!path.eventArgLowerAt(0).equals("block")) {
-            Deprecations.blockSpreads.warn(getTagContext(path));
+            BukkitImplDeprecations.blockSpreads.warn(getTagContext(path));
         }
         return true;
     }
@@ -63,10 +61,10 @@ public class BlockSpreadsScriptEvent extends BukkitScriptEvent implements Listen
         if (!runInCheck(path, location)) {
             return false;
         }
-        if (!tryMaterial(material, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, material)) {
             return false;
         }
-        if (path.switches.containsKey("type") && !tryMaterial(material, path.switches.get("type"))) {
+        if (!path.tryObjectSwitch("type", material)) {
             return false;
         }
         return super.matches(path);
@@ -74,18 +72,13 @@ public class BlockSpreadsScriptEvent extends BukkitScriptEvent implements Listen
     }
 
     @Override
-    public String getName() {
-        return "BlockSpreads";
-    }
-
-    @Override
     public ObjectTag getContext(String name) {
-        switch (name) {
-            case "location": return location;
-            case "material": return material;
-            case "source_location": return new LocationTag(event.getBlock().getLocation());
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "location" -> location;
+            case "material" -> material;
+            case "source_location" -> new LocationTag(event.getSource().getLocation());
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler

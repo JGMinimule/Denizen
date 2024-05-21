@@ -6,7 +6,6 @@ import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityRegainHealthEvent;
@@ -40,43 +39,31 @@ public class EntityHealsScriptEvent extends BukkitScriptEvent implements Listene
     // -->
 
     public EntityHealsScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> heals (because <'cause'>)");
     }
 
-    public static EntityHealsScriptEvent instance;
     public EntityTag entity;
     public ElementTag reason;
     public EntityRegainHealthEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
-
-        if (path.eventArgLowerAt(2).equals("because") &&
-                !path.eventArgLowerAt(3).equals(CoreUtilities.toLowerCase(reason.toString()))) {
+        if (path.eventArgLowerAt(2).equals("because") && !runGenericCheck(path.eventArgLowerAt(3), reason.toString())) {
             return false;
         }
-
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
-
         return super.matches(path);
     }
 
     @Override
-    public String getName() {
-        return "EntityHeals";
-    }
-
-    @Override
     public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag && ((ElementTag) determinationObj).isDouble()) {
-            event.setAmount(((ElementTag) determinationObj).asDouble());
+        if (determinationObj instanceof ElementTag element && element.isDouble()) {
+            event.setAmount(element.asDouble());
             return true;
         }
         return super.applyDetermination(path, determinationObj);
@@ -91,7 +78,7 @@ public class EntityHealsScriptEvent extends BukkitScriptEvent implements Listene
     public ObjectTag getContext(String name) {
         switch (name) {
             case "entity":
-                return entity;
+                return entity.getDenizenObject();
             case "reason":
                 return reason;
             case "amount":

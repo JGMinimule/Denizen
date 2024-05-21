@@ -35,21 +35,17 @@ public class EntitySwimScriptEvent extends BukkitScriptEvent implements Listener
     // -->
 
     public EntitySwimScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> toggles|starts|stops swimming");
     }
 
-    public static EntitySwimScriptEvent instance;
     public EntityTag entity;
     public boolean state;
 
     @Override
     public boolean matches(ScriptPath path) {
-
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
-
         String cmd = path.eventArgLowerAt(1);
         if (cmd.equals("starts") && !state) {
             return false;
@@ -57,16 +53,10 @@ public class EntitySwimScriptEvent extends BukkitScriptEvent implements Listener
         if (cmd.equals("stops") && state) {
             return false;
         }
-
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntitySwim";
     }
 
     @Override

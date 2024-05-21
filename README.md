@@ -3,7 +3,7 @@ The Denizen Scripting Language - Spigot Impl
 
 An implementation of the Denizen Scripting Language for Spigot servers, with strong Citizens interlinks to emphasize the power of using Denizen with NPCs!
 
-**Version 1.2.2**: Compatible with Spigot 1.14.4, 1.15.2, 1.16.5, and 1.17.1!
+**Version 1.3.0**: Compatible with Spigot 1.17.1, 1.18.2, 1.19.4, and 1.20.6!
 
 **Learn about Denizen from the Beginner's guide:** https://guide.denizenscript.com/guides/background/index.html
 
@@ -26,14 +26,37 @@ An implementation of the Denizen Scripting Language for Spigot servers, with str
 - **Citizens2 (NPC support)**: https://github.com/CitizensDev/Citizens2/
 - **Depenizen (Other plugin support)**: https://github.com/DenizenScript/Depenizen
 - **dDiscordBot (Adds a Discord bot to Denizen)**: https://github.com/DenizenScript/dDiscordBot
-- **Webizen (Adds a webserver to Denizen)**: https://github.com/DenizenScript/Webizen
 - **DenizenCore (Our core, needed for building)**: https://github.com/DenizenScript/Denizen-Core
 - **DenizenVSCode (extension for writing Denizen scripts in VS Code)**: https://github.com/DenizenScript/DenizenVSCode
 
 ### Building
 
-- Built against JDK 8, using maven `pom.xml` as project file.
+- Built against JDK 17, using maven `pom.xml` as project file.
 - Requires building all listed versions of Spigot via Spigot BuildTools: https://www.spigotmc.org/wiki/buildtools/
+
+### Maven
+
+```xml
+    <repository>
+        <id>citizens-repo</id>
+        <url>https://maven.citizensnpcs.co/repo</url>
+    </repository>
+    <dependencies>
+        <dependency>
+            <groupId>com.denizenscript</groupId>
+            <artifactId>denizen</artifactId>
+            <version>1.3.0-SNAPSHOT</version>
+            <type>jar</type>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+    </dependencies>
+```
 
 ### Licensing pre-note:
 
@@ -55,7 +78,7 @@ Copyright (C) 2013-2019 The Denizen Script Team, All Rights Reserved.
 
 The MIT License (MIT)
 
-Copyright (c) 2019-2021 The Denizen Script Team
+Copyright (c) 2019-2024 The Denizen Script Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

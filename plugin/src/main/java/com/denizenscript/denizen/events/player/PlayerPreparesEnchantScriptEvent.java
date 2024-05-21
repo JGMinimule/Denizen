@@ -2,7 +2,7 @@ package com.denizenscript.denizen.events.player;
 
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizen.objects.*;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -35,17 +35,15 @@ public class PlayerPreparesEnchantScriptEvent extends BukkitScriptEvent implemen
     // <context.offers> returns a ListTag of the available enchanting offers, each as a MapTag with keys 'cost', 'enchantment_type', and 'level'.
     //
     // @Determine
-    // "OFFERS:" + ListTag of MapTags to set the offers available. Cannot be a different size list than the size of context.offers.
+    // "OFFERS:<ListTag>" of MapTags to set the offers available. Cannot be a different size list than the size of context.offers.
     //
     // @Player Always.
     //
     // -->
 
     public PlayerPreparesEnchantScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerPreparesEnchantScriptEvent instance;
     public PrepareItemEnchantEvent event;
 
     @Override
@@ -61,16 +59,10 @@ public class PlayerPreparesEnchantScriptEvent extends BukkitScriptEvent implemen
 
     @Override
     public boolean matches(ScriptPath path) {
-        String eItem = path.eventArgLowerAt(2);
-        if (!tryItem(new ItemTag(event.getItem()), eItem)) {
+        if (!path.tryArgObject(2, new ItemTag(event.getItem()))) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerPreparesEnchant";
     }
 
     @Override
@@ -85,13 +77,13 @@ public class PlayerPreparesEnchantScriptEvent extends BukkitScriptEvent implemen
                 }
                 for (int i = 0; i < offers.size(); i++) {
                     MapTag map = MapTag.getMapFor(offers.getObject(i), getTagContext(path));
-                    event.getOffers()[i].setCost(new ElementTag(map.getObject("cost").toString()).asInt());
-                    ObjectTag enchantment = map.getObject("enchantment_type");
+                    event.getOffers()[i].setCost(map.getElement("cost").asInt());
+                    EnchantmentTag enchantment = map.getObjectAs("enchantment_type", EnchantmentTag.class, getTagContext(path));
                     if (enchantment == null) {
-                        enchantment = map.getObject("enchantment");
+                        enchantment = map.getObjectAs("enchantment", EnchantmentTag.class, getTagContext(path));
                     }
-                    event.getOffers()[i].setEnchantment(enchantment.asType(EnchantmentTag.class, getTagContext(path)).enchantment);
-                    event.getOffers()[i].setEnchantmentLevel(new ElementTag(map.getObject("level").toString()).asInt());
+                    event.getOffers()[i].setEnchantment(enchantment.enchantment);
+                    event.getOffers()[i].setEnchantmentLevel(map.getElement("level").asInt());
                 }
                 return true;
             }
@@ -101,7 +93,7 @@ public class PlayerPreparesEnchantScriptEvent extends BukkitScriptEvent implemen
 
     @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(new PlayerTag(event.getEnchanter()), null);
+        return new BukkitScriptEntryData(event.getEnchanter());
     }
 
     @Override

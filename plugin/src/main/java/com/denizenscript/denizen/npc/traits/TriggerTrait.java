@@ -5,7 +5,6 @@ import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.scripts.commands.npc.EngageCommand;
 import com.denizenscript.denizen.scripts.triggers.AbstractTrigger;
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.Settings;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
@@ -27,19 +26,13 @@ import java.util.Map.Entry;
 public class TriggerTrait extends Trait implements Listener {
 
     @Persist(value = "enabled", collectionType = HashMap.class)
-    private Map<String, Boolean> enabled = new HashMap<>();
+    public Map<String, Boolean> enabled = new HashMap<>();
     @Persist(value = "properly_set", collectionType = HashMap.class)
     public Map<String, Boolean> properly_set = new HashMap<>();
     @Persist(value = "duration", collectionType = HashMap.class)
     private Map<String, Double> duration = new HashMap<>();
     @Persist(value = "radius", collectionType = HashMap.class)
     private Map<String, Integer> radius = new HashMap<>();
-
-    public void report() {
-        Debug.log("enabled: " + enabled.entrySet().toString());
-        Debug.log("duration: " + duration.entrySet().toString());
-        Debug.log("radius: " + radius.entrySet().toString());
-    }
 
     public TriggerTrait() {
         super("triggers");
@@ -62,9 +55,12 @@ public class TriggerTrait extends Trait implements Listener {
             npc.removeTrait(TriggerTrait.class);
             return;
         }
-        for (String triggerName : Denizen.getInstance().triggerRegistry.list().keySet()) {
-            if (!enabled.containsKey(triggerName)) {
-                enabled.put(triggerName, Settings.triggerEnabled(triggerName));
+        for (Map.Entry<String, AbstractTrigger> trigger : Denizen.getInstance().triggerRegistry.list().entrySet()) {
+            if (!enabled.containsKey(trigger.getKey())) {
+                enabled.put(trigger.getKey(), Settings.triggerEnabled(trigger.getKey()));
+            }
+            if (enabled.get(trigger.getKey())) {
+                trigger.getValue().timesUsed++;
             }
         }
     }
@@ -87,6 +83,7 @@ public class TriggerTrait extends Trait implements Listener {
      */
     public String toggleTrigger(String triggerName, boolean toggle) {
         if (enabled.containsKey(triggerName.toUpperCase())) {
+            Denizen.getInstance().triggerRegistry.get(triggerName).timesUsed++;
             enabled.put(triggerName.toUpperCase(), toggle);
             properly_set.put(triggerName.toUpperCase(), true);
             return triggerName + " trigger is now " + (toggle ? "enabled." : "disabled.");
@@ -94,6 +91,10 @@ public class TriggerTrait extends Trait implements Listener {
         else {
             return triggerName + " trigger not found!";
         }
+    }
+
+    public boolean triggerNameIsValid(String triggerName) {
+        return enabled.containsKey(triggerName.toUpperCase());
     }
 
     public String toggleTrigger(String triggerName) {
@@ -118,7 +119,7 @@ public class TriggerTrait extends Trait implements Listener {
     }
 
     public boolean isEnabled(String triggerName) {
-        if (!new NPCTag(npc).getCitizen().hasTrait(AssignmentTrait.class)) {
+        if (!npc.hasTrait(AssignmentTrait.class)) {
             return false;
         }
         return enabled.getOrDefault(triggerName.toUpperCase(), false);
@@ -174,7 +175,7 @@ public class TriggerTrait extends Trait implements Listener {
             return false;
         }
         // Check engaged
-        if (EngageCommand.getEngaged(npc)) {
+        if (EngageCommand.getEngaged(npc, player)) {
             return false;
         }
         // Set cool down
@@ -197,27 +198,15 @@ public class TriggerTrait extends Trait implements Listener {
     }
 
     public TriggerContext trigger(AbstractTrigger triggerClass, PlayerTag player, Map<String, ObjectTag> context) {
-
         String trigger_type = triggerClass.getName();
-
-        // Check cool down, return false if not yet met
         if (!Denizen.getInstance().triggerRegistry.checkCooldown(npc, player, triggerClass)) {
             return new TriggerContext(false);
         }
-
         if (context == null) {
             context = new HashMap<>();
         }
-
-        // Check engaged
-        if (EngageCommand.getEngaged(npc)) {
-
-            // Put the trigger_type into context
+        if (EngageCommand.getEngaged(npc, player)) {
             context.put("trigger_type", new ElementTag(trigger_type));
-
-            //
-            // On Unavailable Action
-
             // TODO: Should this be refactored?
             if (new NPCTag(npc).action("unavailable", player, context).containsCaseInsensitive("available")) {
                 // If determined available, continue on...
@@ -227,13 +216,8 @@ public class TriggerTrait extends Trait implements Listener {
                 return new TriggerContext(false);
             }
         }
-
-        // Set cool down
         Denizen.getInstance().triggerRegistry.setCooldown(npc, player, triggerClass, getCooldownDuration(trigger_type));
-
-        // Grab the determination of the action
         ListTag determination = new NPCTag(npc).action(trigger_type, player, context);
-
         return new TriggerContext(determination, true);
     }
 
@@ -241,7 +225,7 @@ public class TriggerTrait extends Trait implements Listener {
      * Contains whether the trigger successfully 'triggered' and any context that was
      * available while triggering or attempting to trigger.
      */
-    public class TriggerContext {
+    public static class TriggerContext {
 
         public TriggerContext(boolean triggered) {
             this.triggered = triggered;

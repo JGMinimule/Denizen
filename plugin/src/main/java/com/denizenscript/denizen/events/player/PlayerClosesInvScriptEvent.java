@@ -36,10 +36,8 @@ public class PlayerClosesInvScriptEvent extends BukkitScriptEvent implements Lis
     // -->
 
     public PlayerClosesInvScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerClosesInvScriptEvent instance;
 
     public InventoryTag inventory;
     private PlayerTag player;
@@ -58,7 +56,7 @@ public class PlayerClosesInvScriptEvent extends BukkitScriptEvent implements Lis
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryInventory(inventory, path.eventArgLowerAt(2))) {
+        if (!path.tryArgObject(2, inventory)) {
             return false;
         }
         LocationTag loc = inventory.getLocation();
@@ -69,11 +67,6 @@ public class PlayerClosesInvScriptEvent extends BukkitScriptEvent implements Lis
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerClosesInventory";
     }
 
     @Override

@@ -9,7 +9,7 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import net.milkbowl.vault.economy.Economy;
 
@@ -36,9 +36,9 @@ public class MoneyCommand extends AbstractCommand {
     //
     // @Description
     // Give money to, take money from, and set the balance of a player.
-    // If no quantity is specified it defaults to '1'. You can specify a list of
-    // players to give to or take from. If no player(s) are specified defaults to the attached player.
-    // NOTE: This requires an economy plugin. May work for offline players depending on economy plugin.
+    // If no quantity is specified it defaults to '1'.
+    // You can specify a list of players to give to or take from. If no player(s) are specified, defaults to the attached player.
+    // NOTE: This requires an economy plugin or script, and Vault. May work for offline players depending on economy plugin.
     //
     // @Tags
     // <PlayerTag.money>
@@ -49,11 +49,11 @@ public class MoneyCommand extends AbstractCommand {
     //
     // @Usage
     // Use to take 10 money from a player.
-    // - money take quantity:10 from:<[player]>
+    // - money take quantity:10 players:<[player]>
     //
     // @Usage
     // Use to give all players on the server 100 money.
-    // - money give quantity:100 to:<server.players>
+    // - money give quantity:100 players:<server.players>
     //
     // @Usage
     // Use to set the money of all online players to 250.
@@ -74,14 +74,14 @@ public class MoneyCommand extends AbstractCommand {
         }
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("action")
-                    && arg.matchesEnum(Action.values())) {
+                    && arg.matchesEnum(Action.class)) {
                 scriptEntry.addObject("action", arg.asElement());
             }
             else if (!scriptEntry.hasObject("quantity")
                     && arg.matchesPrefix("quantity", "qty", "q")
                     && arg.matchesFloat()) {
                 if (arg.matchesPrefix("q", "qty")) {
-                    Deprecations.qtyTags.warn(scriptEntry);
+                    BukkitImplDeprecations.qtyTags.warn(scriptEntry);
                 }
                 scriptEntry.addObject("quantity", arg.asElement());
             }

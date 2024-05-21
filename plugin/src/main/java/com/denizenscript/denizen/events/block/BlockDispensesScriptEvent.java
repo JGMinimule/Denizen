@@ -4,9 +4,7 @@ import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
-import com.denizenscript.denizencore.objects.ArgumentHelper;
 import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.utilities.Deprecations;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockDispenseEvent;
@@ -37,11 +35,9 @@ public class BlockDispensesScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public BlockDispensesScriptEvent() {
-        instance = this;
         registerCouldMatcher("<block> dispenses <item>");
     }
 
-    public static BlockDispensesScriptEvent instance;
     public LocationTag location;
     public ItemTag item;
     private MaterialTag material;
@@ -52,20 +48,13 @@ public class BlockDispensesScriptEvent extends BukkitScriptEvent implements List
         if (!runInCheck(path, location)) {
             return false;
         }
-
-        String iTest = path.eventArgLowerAt(2);
-        if  (!iTest.equals("item") && !tryItem(item, iTest)) {
+        if  (!path.tryArgObject(2, item)) {
             return false;
         }
-        if (!tryMaterial(material, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, material)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "BlockDispenses";
     }
 
     @Override
@@ -84,11 +73,6 @@ public class BlockDispensesScriptEvent extends BukkitScriptEvent implements List
                 event.setItem(item.getItemStack());
                 return true;
             }
-        }
-        if (ArgumentHelper.matchesDouble(determinationObj.toString())) {
-            Deprecations.blockDispensesItemDetermination.warn();
-            event.setVelocity(event.getVelocity().multiply(Double.parseDouble(determinationObj.toString())));
-            return true;
         }
         return super.applyDetermination(path, determinationObj);
     }

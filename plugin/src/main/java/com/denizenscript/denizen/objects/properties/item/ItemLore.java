@@ -8,7 +8,7 @@ import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.tags.Attribute;
-import com.denizenscript.denizencore.tags.core.EscapeTagBase;
+import com.denizenscript.denizencore.tags.core.EscapeTagUtil;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 
 import java.util.List;
@@ -41,7 +41,7 @@ public class ItemLore implements Property {
         return item.getItemMeta() != null && item.getItemMeta().hasLore();
     }
 
-    private ItemLore(ItemTag _item) {
+    public ItemLore(ItemTag _item) {
         item = _item;
     }
 
@@ -85,7 +85,7 @@ public class ItemLore implements Property {
     }
 
     public ListTag getLoreList() {
-        List<String> lore = NMSHandler.getItemHelper().getLore(item);
+        List<String> lore = NMSHandler.itemHelper.getLore(item);
         if (lore == null) {
             return null;
         }
@@ -126,11 +126,11 @@ public class ItemLore implements Property {
             for (int i = 0; i < lore.size(); i++) {
                 String loreLine = lore.get(i);
                 if (lore.wasLegacy) {
-                    loreLine = EscapeTagBase.unEscape(loreLine);
+                    loreLine = EscapeTagUtil.unEscape(loreLine);
                 }
                 lore.set(i, CoreUtilities.clearNBSPs(loreLine));
             }
-            NMSHandler.getItemHelper().setLore(item, lore);
+            NMSHandler.itemHelper.setLore(item, lore);
         }
     }
 }

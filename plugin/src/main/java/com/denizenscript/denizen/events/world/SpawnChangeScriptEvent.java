@@ -28,25 +28,18 @@ public class SpawnChangeScriptEvent extends BukkitScriptEvent implements Listene
     // -->
 
     public SpawnChangeScriptEvent() {
-        instance = this;
         registerCouldMatcher("spawn changes");
         registerSwitches("for");
     }
 
-    public static SpawnChangeScriptEvent instance;
     public SpawnChangeEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (path.switches.containsKey("world") && !tryWorld(new WorldTag(event.getWorld()), path.switches.get("world"))) {
+        if (!path.tryObjectSwitch("world", new WorldTag(event.getWorld()))) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "SpawnChange";
     }
 
     @Override

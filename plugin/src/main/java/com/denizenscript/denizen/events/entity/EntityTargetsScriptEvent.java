@@ -7,7 +7,6 @@ import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityTargetEvent;
@@ -24,7 +23,7 @@ public class EntityTargetsScriptEvent extends BukkitScriptEvent implements Liste
     //
     // @Cancellable true
     //
-    // @Triggers when an entity targets a new entity.
+    // @Triggers when an entity targets a new entity - usually a hostile mob preparing to attack something.
     //
     // @Context
     // <context.entity> returns the targeting entity.
@@ -39,11 +38,9 @@ public class EntityTargetsScriptEvent extends BukkitScriptEvent implements Liste
     // -->
 
     public EntityTargetsScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> targets (<entity>) (because <'cause'>)");
     }
 
-    public static EntityTargetsScriptEvent instance;
     public EntityTag entity;
     public ElementTag reason;
     public EntityTag target;
@@ -52,26 +49,21 @@ public class EntityTargetsScriptEvent extends BukkitScriptEvent implements Liste
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
         String victim = path.eventArgLowerAt(2);
-        if (!victim.equals("in") && !victim.equals("because") && !victim.equals("") && !tryEntity(target, victim)) {
+        if (!victim.equals("in") && !victim.equals("because") && !victim.equals("") && (target == null || !target.tryAdvancedMatcher(victim))) {
             return false;
         }
         if (!runInCheck(path, location)) {
             return false;
         }
         int index = path.eventArgLowerAt(3).equals("because") ? 3 : (path.eventArgAt(2).equals("because") ? 2 : -1);
-        if (index > 0 && !path.eventArgLowerAt(index + 1).equals(CoreUtilities.toLowerCase(reason.toString()))) {
+        if (index > 0 && !path.tryArgObject(index + 1, reason)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityTargets";
     }
 
     @Override
@@ -91,16 +83,12 @@ public class EntityTargetsScriptEvent extends BukkitScriptEvent implements Liste
 
     @Override
     public ObjectTag getContext(String name) {
-        if (name.equals("entity")) {
-            return entity.getDenizenObject();
-        }
-        else if (name.equals("reason")) {
-            return reason;
-        }
-        else if (name.equals("target") && target != null) {
-            return target.getDenizenObject();
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "entity" -> entity.getDenizenObject();
+            case "reason" -> reason;
+            case "target" -> target == null ? null : target.getDenizenObject();
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler
@@ -112,5 +100,4 @@ public class EntityTargetsScriptEvent extends BukkitScriptEvent implements Liste
         this.event = event;
         fire(event);
     }
-
 }

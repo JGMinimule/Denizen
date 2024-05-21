@@ -7,6 +7,7 @@ import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
+import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
@@ -30,6 +31,7 @@ public class PlayerDragsInInvScriptEvent extends BukkitScriptEvent implements Li
     // @Group Player
     //
     // @Switch in_area:<area> replaces the default 'in:<area>' for this event.
+    // @Switch drag_type:<type> to only run the event if the given drag type (SINGLE or EVEN) was used.
     //
     // @Location true
     //
@@ -43,16 +45,15 @@ public class PlayerDragsInInvScriptEvent extends BukkitScriptEvent implements Li
     // <context.clicked_inventory> returns the InventoryTag that was clicked in.
     // <context.slots> returns a ListTag of the slot numbers dragged through.
     // <context.raw_slots> returns a ListTag of the raw slot numbers dragged through.
+    // <context.drag_type> returns either SINGLE or EVEN depending on whether the player used their left or right mouse button.
     //
     // @Player Always.
     //
     // -->
 
     public PlayerDragsInInvScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerDragsInInvScriptEvent instance;
 
     public Inventory inventory;
     public ItemTag item;
@@ -71,21 +72,19 @@ public class PlayerDragsInInvScriptEvent extends BukkitScriptEvent implements Li
         String arg3 = path.eventArgLowerAt(3);
         String arg4 = path.eventArgLowerAt(4);
         String inv = arg2.equals("in") ? arg3 : arg3.equals("in") ? arg4 : "";
-        if (!inv.equals("") && !tryInventory(dInv, inv)) {
+        if (!inv.equals("") && !dInv.tryAdvancedMatcher(inv)) {
             return false;
         }
-        if (!arg2.equals("in") && !tryItem(item, arg2)) {
+        if (!arg2.equals("in") && !item.tryAdvancedMatcher(arg2)) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation(), "in_area")) {
             return false;
         }
+        if (!runGenericSwitchCheck(path, "drag_type", event.getType().name())) {
+            return false;
+        }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerDragsInInventory";
     }
 
     @Override
@@ -115,6 +114,8 @@ public class PlayerDragsInInvScriptEvent extends BukkitScriptEvent implements Li
             case "clicked_inventory":
                 return InventoryTag.mirrorBukkitInventory(event.getView()
                         .getInventory(event.getRawSlots().stream().findFirst().orElse(0)));
+            case "drag_type":
+                return new ElementTag(event.getType());
         }
         return super.getContext(name);
     }

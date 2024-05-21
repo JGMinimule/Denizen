@@ -2,7 +2,6 @@ package com.denizenscript.denizen.events.player;
 
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.MaterialTag;
-import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -38,12 +37,10 @@ public class PlayerStatisticIncrementsScriptEvent extends BukkitScriptEvent impl
     // -->
 
     public PlayerStatisticIncrementsScriptEvent() {
-        instance = this;
         registerCouldMatcher("player statistic increments");
         registerCouldMatcher("player statistic <'statistic'> increments");
     }
 
-    public static PlayerStatisticIncrementsScriptEvent instance;
     public Statistic statistic;
     public PlayerStatisticIncrementEvent event;
 
@@ -72,13 +69,8 @@ public class PlayerStatisticIncrementsScriptEvent extends BukkitScriptEvent impl
     }
 
     @Override
-    public String getName() {
-        return "PlayerStatisticIncrements";
-    }
-
-    @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(PlayerTag.mirrorBukkitPlayer(event.getPlayer()), null);
+        return new BukkitScriptEntryData(event.getPlayer());
     }
 
     @Override

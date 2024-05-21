@@ -28,21 +28,20 @@ public class PlayerLoginScriptEvent extends BukkitScriptEvent implements Listene
     // @Warning Generally avoid this event. This is not a way to get a 'first join' event. This is an internal technical event, with specific uses (eg custom whitelisting).
     //
     // @Context
-    // <context.hostname> returns an ElementTag of the player's hostname.
+    // <context.hostname> returns an ElementTag of the player's IP address.
+    // <context.server_hostname> returns an ElementTag of the server address that the player used to connect to the server.
     //
     // @Determine
     // "KICKED" to kick the player from the server.
-    // "KICKED:" + ElementTag to kick the player and specify a message to show.
+    // "KICKED:<ElementTag>" to kick the player and specify a message to show.
     //
     // @Player Always.
     //
     // -->
 
     public PlayerLoginScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerLoginScriptEvent instance;
     public PlayerLoginEvent event;
 
     @Override
@@ -57,11 +56,6 @@ public class PlayerLoginScriptEvent extends BukkitScriptEvent implements Listene
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerLogin";
     }
 
     @Override
@@ -84,10 +78,11 @@ public class PlayerLoginScriptEvent extends BukkitScriptEvent implements Listene
 
     @Override
     public ObjectTag getContext(String name) {
-        if (name.equals("hostname")) {
-            return new ElementTag(event.getAddress().toString());
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "hostname" -> new ElementTag(event.getAddress().toString());
+            case "server_hostname" -> new ElementTag(event.getHostname());
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler

@@ -1,21 +1,22 @@
 package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.Denizen;
+import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizen.objects.properties.material.MaterialSwitchable;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.*;
 import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
-import com.denizenscript.denizencore.objects.notable.Notable;
-import com.denizenscript.denizencore.objects.notable.NoteManager;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.block.Bell;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.Bisected;
 import org.bukkit.block.data.BlockData;
@@ -23,20 +24,19 @@ import org.bukkit.block.data.type.TrapDoor;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Consumer;
 
 public class SwitchCommand extends AbstractCommand {
 
     public SwitchCommand() {
         setName("switch");
-        setSyntax("switch [<location>|...] (state:[{toggle}/on/off]) (duration:<value>) (no_physics)");
+        setSyntax("switch [<location>|...] (state:{toggle}/on/off) (duration:<value>) (no_physics)");
         setRequiredArguments(1, 4);
         isProcedural = false;
     }
 
     // <--[command]
     // @Name Switch
-    // @Syntax switch [<location>|...] (state:[{toggle}/on/off]) (duration:<value>) (no_physics)
+    // @Syntax switch [<location>|...] (state:{toggle}/on/off) (duration:<value>) (no_physics)
     // @Required 1
     // @Maximum 4
     // @Short Switches state of the block.
@@ -56,6 +56,7 @@ public class SwitchCommand extends AbstractCommand {
     // - Single-use interactables like buttons, note blocks, dispensers, droppers, ...
     // - Redstone interactables like repeaters, ...
     // - Special interactables like tripwires, ...
+    // - Bells as a special case will ring when you use 'switch' on them, ...
     // - Almost any other block with an interaction handler.
     //
     // This will generally (but not always) function equivalently to a user right-clicking the block
@@ -86,10 +87,8 @@ public class SwitchCommand extends AbstractCommand {
     private Map<Location, Integer> taskMap = new HashMap<>(32);
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Notable note : NoteManager.notesByType.get(LocationTag.class)) {
-            addOne.accept(NoteManager.getSavedId(note));
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addNotesOfType(LocationTag.class);
     }
 
     @Override
@@ -108,7 +107,7 @@ public class SwitchCommand extends AbstractCommand {
                 scriptEntry.addObject("duration", arg.asType(DurationTag.class));
             }
             else if (!scriptEntry.hasObject("state") &&
-                    arg.matchesEnum(SwitchState.values())) {
+                    arg.matchesEnum(SwitchState.class)) {
                 scriptEntry.addObject("switchstate", new ElementTag(arg.getValue().toUpperCase()));
             }
             else {
@@ -170,6 +169,10 @@ public class SwitchCommand extends AbstractCommand {
             Debug.echoError("Cannot switch block of type '" + materialTag.getMaterial().name() + "'");
             return;
         }
+        if (materialTag.getMaterial() == Material.BELL) {
+            NMSHandler.blockHelper.ringBell((Bell) block.getState());
+            return;
+        }
         boolean currentState = switchable.getState();
         if ((switchState.equals(SwitchState.ON) && !currentState) || (switchState.equals(SwitchState.OFF) && currentState) || switchState.equals(SwitchState.TOGGLE)) {
             switchable.setState(!currentState);
@@ -201,7 +204,7 @@ public class SwitchCommand extends AbstractCommand {
                 AdjustBlockCommand.applyPhysicsAt(interactLocation);
             }
             if (scriptEntry.dbCallShouldDebug()) {
-                Debug.echoDebug(scriptEntry, "Switched " + block.getType().toString() + "! Current state now: " + (switchState(block) ? "ON" : "OFF"));
+                Debug.echoDebug(scriptEntry, "Switched " + block.getType() + "! Current state now: " + (switchState(block) ? "ON" : "OFF"));
             }
         }
     }

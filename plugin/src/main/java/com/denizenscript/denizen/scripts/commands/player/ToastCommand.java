@@ -2,9 +2,8 @@ package com.denizenscript.denizen.scripts.commands.player;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.interfaces.AdvancementHelper;
 import com.denizenscript.denizen.nms.util.Advancement;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.PlayerTag;
@@ -77,11 +76,11 @@ public class ToastCommand extends AbstractCommand {
             }
             else if (!scriptEntry.hasObject("frame")
                     && arg.matchesPrefix("frame", "f")
-                    && arg.matchesEnum(Advancement.Frame.values())) {
+                    && arg.matchesEnum(Advancement.Frame.class)) {
                 scriptEntry.addObject("frame", arg.asElement());
             }
             else if (!scriptEntry.hasObject("text")) {
-                scriptEntry.addObject("text", new ElementTag(arg.getRawValue()));
+                scriptEntry.addObject("text", arg.getRawElement());
             }
             else {
                 arg.reportUnhandled();
@@ -115,12 +114,11 @@ public class ToastCommand extends AbstractCommand {
                 new NamespacedKey(Denizen.getInstance(), UUID.randomUUID().toString()), null,
                 icon.getItemStack(), text.asString(), "", null,
                 Advancement.Frame.valueOf(frame.asString().toUpperCase()), true, false, true, 0, 0, 1);
-        final AdvancementHelper advancementHelper = NMSHandler.getAdvancementHelper();
         for (PlayerTag target : targets) {
             Player player = target.getPlayerEntity();
             if (player != null) {
-                advancementHelper.grant(advancement, player);
-                advancementHelper.revoke(advancement, player);
+                NMSHandler.advancementHelper.grant(advancement, player);
+                NMSHandler.advancementHelper.revoke(advancement, player);
             }
         }
     }

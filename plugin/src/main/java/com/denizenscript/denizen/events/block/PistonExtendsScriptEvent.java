@@ -37,12 +37,10 @@ public class PistonExtendsScriptEvent extends BukkitScriptEvent implements Liste
     // -->
 
     public PistonExtendsScriptEvent() {
-        instance = this;
         registerCouldMatcher("piston extends");
         registerCouldMatcher("<block> extends");
     }
 
-    public static PistonExtendsScriptEvent instance;
     public LocationTag location;
     public MaterialTag material;
     public BlockPistonExtendEvent event;
@@ -53,15 +51,10 @@ public class PistonExtendsScriptEvent extends BukkitScriptEvent implements Liste
         if (!runInCheck(path, location)) {
             return false;
         }
-        if (!mat.equals("piston") && !tryMaterial(material, mat)) {
+        if (!mat.equals("piston") && !material.tryAdvancedMatcher(mat)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PistonExtends";
     }
 
     @Override

@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.entity;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
@@ -10,7 +10,7 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import net.citizensnpcs.api.trait.trait.Equipment;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
@@ -62,7 +62,7 @@ public class HeadCommand extends AbstractCommand {
 
     @Override
     public void execute(ScriptEntry scriptEntry) {
-        Deprecations.headCommand.warn(scriptEntry);
+        BukkitImplDeprecations.headCommand.warn(scriptEntry);
         List<EntityTag> entities = (List<EntityTag>) scriptEntry.getObject("entities");
         ElementTag skin = scriptEntry.getElement("skin");
         MaterialTag material = scriptEntry.getObjectTag("material");
@@ -95,7 +95,7 @@ public class HeadCommand extends AbstractCommand {
                     entity.getLivingEntity().getEquipment().setHelmet(item);
                 }
                 else {
-                    Debug.echoError(scriptEntry.getResidingQueue(), entity.identify() + " is not a living entity!");
+                    Debug.echoError(scriptEntry, entity.identify() + " is not a living entity!");
                 }
             }
         }

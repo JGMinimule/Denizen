@@ -2,7 +2,8 @@ package com.denizenscript.denizen.scripts.commands.player;
 
 import com.denizenscript.denizen.utilities.Utilities;
 import com.denizenscript.denizen.utilities.blocks.FakeBlock;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizen.utilities.command.TabCompleteHelper;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizen.objects.PlayerTag;
@@ -14,11 +15,9 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-import org.bukkit.Material;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class ShowFakeCommand extends AbstractCommand {
 
@@ -80,12 +79,8 @@ public class ShowFakeCommand extends AbstractCommand {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Material material : Material.values()) {
-            if (material.isBlock()) {
-                addOne.accept(material.name());
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        TabCompleteHelper.tabCompleteBlockMaterials(tab);
     }
 
     @Override
@@ -145,10 +140,10 @@ public class ShowFakeCommand extends AbstractCommand {
         int i = 0;
         for (LocationTag loc : locations) {
             if (!shouldCancel) {
-                FakeBlock.showFakeBlockTo(players, loc, materials.get(i % materials.size()), duration);
+                FakeBlock.showFakeBlockTo(players, loc.getBlockLocation(), materials.get(i % materials.size()), duration, locations.size() < 5);
             }
             else {
-                FakeBlock.stopShowingTo(players, loc);
+                FakeBlock.stopShowingTo(players, loc.getBlockLocation());
             }
             i++;
         }

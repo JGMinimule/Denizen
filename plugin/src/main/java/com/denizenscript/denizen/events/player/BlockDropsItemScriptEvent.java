@@ -41,10 +41,8 @@ public class BlockDropsItemScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public BlockDropsItemScriptEvent() {
-        instance = this;
     }
 
-    public static BlockDropsItemScriptEvent instance;
     public LocationTag location;
     public MaterialTag material;
     public BlockDropItemEvent event;
@@ -65,14 +63,14 @@ public class BlockDropsItemScriptEvent extends BukkitScriptEvent implements List
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryMaterial(material, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, material)) {
             return false;
         }
         String item = path.eventArgLowerAt(2);
         if (!item.equals("item")) {
             boolean anyMatch = false;
             for (Item itemEnt : event.getItems()) {
-                if (tryItem(new ItemTag(itemEnt.getItemStack()), item)) {
+                if (new ItemTag(itemEnt.getItemStack()).tryAdvancedMatcher(item)) {
                     anyMatch = true;
                     break;
                 }
@@ -88,13 +86,8 @@ public class BlockDropsItemScriptEvent extends BukkitScriptEvent implements List
     }
 
     @Override
-    public String getName() {
-        return "BlockDropsItem";
-    }
-
-    @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(PlayerTag.mirrorBukkitPlayer(event.getPlayer()), null);
+        return new BukkitScriptEntryData(event.getPlayer());
     }
 
     @Override
@@ -131,5 +124,4 @@ public class BlockDropsItemScriptEvent extends BukkitScriptEvent implements List
             EntityTag.forgetEntity(item);
         }
     }
-
 }

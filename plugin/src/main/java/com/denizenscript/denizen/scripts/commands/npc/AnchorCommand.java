@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.npc;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
@@ -57,7 +57,7 @@ public class AnchorCommand extends AbstractCommand {
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("action")
-                    && arg.matchesEnum(Action.values())) {
+                    && arg.matchesEnum(Action.class)) {
                 scriptEntry.addObject("action", Action.valueOf(arg.getValue().toUpperCase()));
             }
             else if (!scriptEntry.hasObject("range")
@@ -115,7 +115,7 @@ public class AnchorCommand extends AbstractCommand {
             case REMOVE: {
                 Anchor n = anchors.getAnchor(id.asString());
                 if (n == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Invalid anchor name '" + id.asString() + "'");
+                    Debug.echoError(scriptEntry, "Invalid anchor name '" + id.asString() + "'");
                 }
                 else {
                     anchors.removeAnchor(n);

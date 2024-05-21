@@ -28,7 +28,7 @@ public class PlayerEmptiesBucketScriptEvent extends BukkitScriptEvent implements
     // @Cancellable true
     //
     // @Context
-    // <context.item> returns the ItemTag of the bucket being emptied.
+    // <context.item> returns the ItemTag of the bucket being emptied (just material, other properties are lost - use 'player.item_in_hand' if you need full data).
     // <context.location> returns the LocationTag of the block clicked with the bucket.
     // <context.relative> returns the LocationTag of the block in front of the clicked block.
     //
@@ -37,12 +37,10 @@ public class PlayerEmptiesBucketScriptEvent extends BukkitScriptEvent implements
     // -->
 
     public PlayerEmptiesBucketScriptEvent() {
-        instance = this;
         registerCouldMatcher("player empties bucket");
         registerCouldMatcher("player empties <item>");
     }
 
-    public static PlayerEmptiesBucketScriptEvent instance;
 
     public ItemTag item;
     public MaterialTag material;
@@ -52,15 +50,10 @@ public class PlayerEmptiesBucketScriptEvent extends BukkitScriptEvent implements
     @Override
     public boolean matches(ScriptPath path) {
         String iTest = path.eventArgLowerAt(2);
-        if ((!iTest.equals("bucket") && !tryItem(item, iTest)) || !runInCheck(path, location)) {
+        if ((!iTest.equals("bucket") && !item.tryAdvancedMatcher(iTest)) || !runInCheck(path, location)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerEmptiesBucket";
     }
 
     @Override

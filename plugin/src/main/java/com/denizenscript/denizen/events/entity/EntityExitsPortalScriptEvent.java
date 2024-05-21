@@ -14,16 +14,13 @@ public class EntityExitsPortalScriptEvent extends BukkitScriptEvent implements L
 
     // <--[event]
     // @Events
-    // entity exits portal
     // <entity> exits portal
-    //
-    // @Regex ^on [^\s]+ exits portal$
     //
     // @Group Entity
     //
     // @Location true
     //
-    // @Triggers when an entity exits a portal.
+    // @Triggers when an entity exits a portal. This uses Spigot 'EntityPortalExitEvent' which seems to no longer be called on modern server versions.
     //
     // @Context
     // <context.entity> returns the EntityTag.
@@ -36,43 +33,23 @@ public class EntityExitsPortalScriptEvent extends BukkitScriptEvent implements L
     // -->
 
     public EntityExitsPortalScriptEvent() {
-        instance = this;
+        registerCouldMatcher("<entity> exits portal");
     }
 
-    public static EntityExitsPortalScriptEvent instance;
     public EntityTag entity;
     public LocationTag location;
     public EntityPortalExitEvent event;
 
     @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventLower.contains("exits portal")) {
-            return false;
-        }
-        if (!couldMatchEntity(path.eventArgLowerAt(0))) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
     public boolean matches(ScriptPath path) {
         String target = path.eventArgLowerAt(0);
-
-        if (!tryEntity(entity, target)) {
+        if (!entity.tryAdvancedMatcher(target)) {
             return false;
         }
-
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityExitsPortal";
     }
 
     @Override

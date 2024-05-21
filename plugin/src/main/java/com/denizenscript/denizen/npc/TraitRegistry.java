@@ -1,6 +1,5 @@
 package com.denizenscript.denizen.npc;
 
-import com.denizenscript.denizen.npc.speech.DenizenChat;
 import com.denizenscript.denizen.npc.traits.*;
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.trait.TraitInfo;
@@ -15,6 +14,7 @@ public class TraitRegistry {
         CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(HealthTrait.class).withName("health"));
         CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(HungerTrait.class).withName("hunger"));
         CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(InvisibleTrait.class).withName("invisible"));
+        CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(MirrorEquipmentTrait.class).withName("mirrorequipment"));
         CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(MirrorNameTrait.class).withName("mirrorname"));
         CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(MirrorTrait.class).withName("mirror"));
         CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(MobproxTrait.class).withName("mobprox"));
@@ -24,8 +24,5 @@ public class TraitRegistry {
         CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(SleepingTrait.class).withName("sleeping"));
         CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(SneakingTrait.class).withName("sneaking"));
         CitizensAPI.getTraitFactory().registerTrait(TraitInfo.create(TriggerTrait.class).withName("triggers"));
-
-        // Register Speech AI
-        CitizensAPI.getSpeechFactory().register(DenizenChat.class, "denizen_chat");
     }
 }

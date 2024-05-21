@@ -2,8 +2,8 @@ package com.denizenscript.denizen.scripts.commands.item;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.scripts.containers.core.ItemScriptHelper;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizen.utilities.command.TabCompleteHelper;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.LocationTag;
@@ -13,7 +13,6 @@ import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.entity.Item;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -25,7 +24,6 @@ import org.bukkit.util.Vector;
 
 import java.util.HashSet;
 import java.util.UUID;
-import java.util.function.Consumer;
 
 public class DisplayItemCommand extends AbstractCommand implements Listener {
 
@@ -74,15 +72,8 @@ public class DisplayItemCommand extends AbstractCommand implements Listener {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Material material : Material.values()) {
-            if (material.isItem()) {
-                addOne.accept(material.name());
-            }
-        }
-        for (String itemScript : ItemScriptHelper.item_scripts.keySet()) {
-            addOne.accept(itemScript);
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        TabCompleteHelper.tabCompleteItems(tab);
     }
 
     @Override
@@ -144,7 +135,7 @@ public class DisplayItemCommand extends AbstractCommand implements Listener {
             event.setCancelled(true);
             Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.getInstance(), () -> {
                 if (event.getEntity().isValid() && !event.getEntity().isDead()) {
-                    NMSHandler.getEntityHelper().setTicksLived(event.getEntity(), -1000);
+                    NMSHandler.entityHelper.setTicksLived(event.getEntity(), -1000);
                 }
             }, 1);
         }
@@ -164,14 +155,14 @@ public class DisplayItemCommand extends AbstractCommand implements Listener {
         dropped.setGravity(false);
         dropped.setPickupDelay(32767);
         int ticks = duration.getTicksAsInt();
-        NMSHandler.getEntityHelper().setTicksLived(dropped, ticks <= 0 ? -32768 : -ticks);
+        NMSHandler.entityHelper.setTicksLived(dropped, ticks <= 0 ? -32768 : -ticks);
         if (!dropped.isValid()) {
             Debug.echoDebug(scriptEntry, "Item failed to spawned (likely blocked by some plugin).");
             return;
         }
         final UUID itemUUID = dropped.getUniqueId();
         protectedEntities.add(itemUUID);
-        scriptEntry.addObject("dropped", new EntityTag(dropped));
+        scriptEntry.saveObject("dropped", new EntityTag(dropped));
         if (ticks > 0) {
             Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.getInstance(),
                     () -> {

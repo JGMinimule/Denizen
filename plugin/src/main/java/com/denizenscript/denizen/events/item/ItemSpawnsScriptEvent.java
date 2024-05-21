@@ -14,10 +14,7 @@ public class ItemSpawnsScriptEvent extends BukkitScriptEvent implements Listener
 
     // <--[event]
     // @Events
-    // item spawns
     // <item> spawns
-    //
-    // @Regex ^on [^\s]+ spawns$
     //
     // @Group Item
     //
@@ -35,48 +32,23 @@ public class ItemSpawnsScriptEvent extends BukkitScriptEvent implements Listener
     // -->
 
     public ItemSpawnsScriptEvent() {
-        instance = this;
+        registerCouldMatcher("<item> spawns");
     }
 
-    public static ItemSpawnsScriptEvent instance;
     public ItemTag item;
     public LocationTag location;
     public EntityTag entity;
     public ItemSpawnEvent event;
 
     @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventArgLowerAt(1).equals("spawns")) {
-            return false;
-        }
-        String arg = path.eventArgLowerAt(2);
-        if (arg.length() > 0 && !arg.equals("in")) {
-            return false;
-        }
-        if (!couldMatchItem(path.eventArgLowerAt(0))) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
     public boolean matches(ScriptPath path) {
-        String item_test = path.eventArgLowerAt(0);
-
-        if (!tryItem(item, item_test)) {
+        if (!path.tryArgObject(0, item)) {
             return false;
         }
-
         if (!runInCheck(path, location)) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "ItemSpawns";
     }
 
     @Override

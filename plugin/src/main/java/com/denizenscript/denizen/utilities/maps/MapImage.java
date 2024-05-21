@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.utilities.maps;
 
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.PlayerTag;
 import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapPalette;
@@ -127,7 +127,7 @@ public class MapImage extends MapObject {
             }
             int x = getX(player);
             int y = getY(player);
-            NMSHandler.getPacketHelper().setMapData(mapCanvas, bytes, x, y, this);
+            NMSHandler.packetHelper.setMapData(mapCanvas, bytes, x, y, this);
         }
         catch (Throwable ex) {
             Debug.echoError(ex);
@@ -158,7 +158,7 @@ public class MapImage extends MapObject {
         temp.getRGB(0, 0, width, height, pixels, 0, width);
         byte[] result = new byte[width * height];
         for (int i = 0; i < pixels.length; i++) {
-            result[i] = matchColor(new Color(pixels[i]));
+            result[i] = matchColor(new Color(pixels[i], true));
         }
         return result;
     }
@@ -199,5 +199,4 @@ public class MapImage extends MapObject {
         double weightB = 2 + (255 - rmean) / 256.0;
         return weightR * r * r + weightG * g * g + weightB * b * b;
     }
-
 }

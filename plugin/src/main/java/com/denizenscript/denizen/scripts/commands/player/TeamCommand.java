@@ -1,14 +1,19 @@
 package com.denizenscript.denizen.scripts.commands.player;
 
-import com.denizenscript.denizen.utilities.ScoreboardHelper;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.NMSVersion;
+import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.PlayerTag;
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
-import com.denizenscript.denizencore.objects.Argument;
+import com.denizenscript.denizen.utilities.PaperAPITools;
+import com.denizenscript.denizen.utilities.ScoreboardHelper;
+import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
+import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
+import com.denizenscript.denizencore.scripts.commands.generator.*;
+import com.denizenscript.denizencore.tags.TagContext;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.ChatColor;
 import org.bukkit.scoreboard.Scoreboard;
@@ -21,6 +26,7 @@ public class TeamCommand extends AbstractCommand {
         setSyntax("team (id:<scoreboard>/{main}) [name:<team>] (add:<entry>|...) (remove:<entry>|...) (prefix:<prefix>) (suffix:<suffix>) (option:<type> status:<status>) (color:<color>)");
         setRequiredArguments(2, 9);
         isProcedural = false;
+        autoCompile();
     }
 
     // <--[command]
@@ -35,7 +41,9 @@ public class TeamCommand extends AbstractCommand {
     // The Team command allows you to control a scoreboard team.
     //
     // Use the "prefix" or "suffix" arguments to modify a team's playername prefix and suffix.
-    // NOTE: Prefixes and suffixes cannot be longer than 16 characters!
+    //
+    // The "entry" value can be a player's name to affect that player, or an entity's UUID to affect that entity.
+    // You can alternately input a raw PlayerTag or EntityTag, and they will be automatically translated to the name/UUID internally.
     //
     // Use the "color" argument to set the team color (for glowing, names, etc). Must be from <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/ChatColor.html>.
     //
@@ -50,11 +58,11 @@ public class TeamCommand extends AbstractCommand {
     //
     // @Usage
     // Use to add a player to a team.
-    // - team name:red add:<player.name>
+    // - team name:red add:<player>
     //
     // @Usage
-    // Use to add an NPC to a team.
-    // - team name:blue add:<npc.name>
+    // Use to add some mob to a team.
+    // - team name:blue add:<player.location.find_entities[monster].within[10]>
     //
     // @Usage
     // Use to change the prefix for a team.
@@ -65,92 +73,24 @@ public class TeamCommand extends AbstractCommand {
     // - team name:red option:name_tag_visibility status:never
     // -->
 
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
-        String name = null;
-        String prefix = null;
-        String suffix = null;
-        for (Argument arg : scriptEntry) {
-            if (arg.matchesPrefix("id")
-                    && !scriptEntry.hasObject("id")) {
-                scriptEntry.addObject("id", arg.asElement());
-            }
-            else if (arg.matchesPrefix("name")
-                    && !scriptEntry.hasObject("name")) {
-                ElementTag nameElement = arg.asElement();
-                name = nameElement.asString();
-                scriptEntry.addObject("name", nameElement);
-            }
-            else if (arg.matchesPrefix("add")
-                    && !scriptEntry.hasObject("add")) {
-                scriptEntry.addObject("add", arg.asType(ListTag.class));
-            }
-            else if (arg.matchesPrefix("remove")
-                    && !scriptEntry.hasObject("remove")) {
-                scriptEntry.addObject("remove", arg.asType(ListTag.class));
-            }
-            else if (arg.matchesPrefix("prefix")
-                    && !scriptEntry.hasObject("prefix")) {
-                ElementTag prefixElement = arg.asElement();
-                prefix = prefixElement.asString();
-                scriptEntry.addObject("prefix", prefixElement);
-            }
-            else if (arg.matchesPrefix("suffix")
-                    && !scriptEntry.hasObject("suffix")) {
-                ElementTag suffixElement = arg.asElement();
-                suffix = suffixElement.asString();
-                scriptEntry.addObject("suffix", suffixElement);
-            }
-            else if (arg.matchesPrefix("color")
-                    && arg.matchesEnum(ChatColor.values())
-                    && !scriptEntry.hasObject("color")) {
-                scriptEntry.addObject("color", arg.asElement());
-            }
-            else if (arg.matchesPrefix("option")
-                    && !scriptEntry.hasObject("option")
-                    && (arg.matchesEnum(Team.Option.values())
-                    || arg.matches("friendly_fire", "see_invisible"))) {
-                scriptEntry.addObject("option", arg.asElement());
-            }
-            else if (arg.matchesPrefix("status")
-                    && !scriptEntry.hasObject("status")
-                    && arg.matchesEnum(Team.OptionStatus.values())) {
-                scriptEntry.addObject("status", arg.asElement());
-            }
-            else {
-                arg.reportUnhandled();
-            }
+    public static void autoExecute(ScriptEntry scriptEntry,
+                                   @ArgName("id") @ArgPrefixed @ArgDefaultText("main") ElementTag id,
+                                   @ArgName("name") @ArgPrefixed @ArgDefaultNull ElementTag name,
+                                   @ArgName("add") @ArgPrefixed @ArgDefaultNull ListTag addEntities,
+                                   @ArgName("remove") @ArgPrefixed @ArgDefaultNull ListTag removeEntities,
+                                   @ArgName("prefix") @ArgPrefixed @ArgDefaultNull ElementTag prefix,
+                                   @ArgName("suffix") @ArgPrefixed @ArgDefaultNull ElementTag suffix,
+                                   @ArgName("option") @ArgPrefixed @ArgDefaultNull ElementTag option,
+                                   @ArgName("status") @ArgPrefixed @ArgDefaultNull Team.OptionStatus status,
+                                   @ArgName("color") @ArgPrefixed @ArgDefaultNull ChatColor color) {
+        if (!NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18) && name.asString().length() > 16) {
+            throw new InvalidArgumentsRuntimeException("Must specify a team name between 1 and 16 characters!");
         }
-        if (name == null || name.length() == 0 || name.length() > 16) {
-            throw new InvalidArgumentsException("Must specify a team name between 1 and 16 characters!");
+        if (addEntities == null && removeEntities == null && option == null && color == null && prefix == null && suffix == null) {
+            throw new InvalidArgumentsRuntimeException("Must specify something to do with the team!");
         }
-        if (!scriptEntry.hasObject("add") && !scriptEntry.hasObject("remove")
-                && !scriptEntry.hasObject("option") && !scriptEntry.hasObject("color")
-                && !scriptEntry.hasObject("prefix") && !scriptEntry.hasObject("suffix")) {
-            throw new InvalidArgumentsException("Must specify something to do with the team!");
-        }
-        if ((prefix != null && prefix.length() > 64) || (suffix != null && suffix.length() > 64)) {
-            throw new InvalidArgumentsException("Prefixes and suffixes must be 64 characters or less!");
-        }
-        if (scriptEntry.hasObject("option") != scriptEntry.hasObject("status")) {
-            throw new InvalidArgumentsException("Option and Status arguments must go together!");
-        }
-        scriptEntry.defaultObject("id", new ElementTag("main"));
-    }
-
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag id = scriptEntry.getElement("id");
-        ElementTag name = scriptEntry.getElement("name");
-        ListTag add = scriptEntry.getObjectTag("add");
-        ListTag remove = scriptEntry.getObjectTag("remove");
-        ElementTag prefix = scriptEntry.getElement("prefix");
-        ElementTag suffix = scriptEntry.getElement("suffix");
-        ElementTag option = scriptEntry.getElement("option");
-        ElementTag status = scriptEntry.getElement("status");
-        ElementTag color = scriptEntry.getElement("color");
-        if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), id, name, add, remove, prefix, suffix, color, option, status);
+        if ((option == null) != (status == null)) {
+            throw new InvalidArgumentsRuntimeException("Option and Status arguments must go together!");
         }
         Scoreboard board;
         if (id.asString().equalsIgnoreCase("main")) {
@@ -166,56 +106,69 @@ public class TeamCommand extends AbstractCommand {
         }
         Team team = board.getTeam(name.asString());
         if (team == null) {
-            String low = CoreUtilities.toLowerCase(name.asString());
+            String low = name.asLowerString();
             team = board.getTeams().stream().filter(t -> CoreUtilities.toLowerCase(t.getName()).equals(low)).findFirst().orElse(null);
             if (team == null) {
                 team = board.registerNewTeam(name.asString());
             }
         }
-        if (add != null) {
-            for (String string : add) {
-                if (string.startsWith("p@")) {
-                    string = PlayerTag.valueOf(string, scriptEntry.context).getName();
-                }
-                if (!team.hasEntry(string)) {
-                    team.addEntry(string);
+        if (removeEntities != null) {
+            for (ObjectTag obj : removeEntities.objectForms) {
+                String remove = translateEntry(obj, scriptEntry.context);
+                if (remove != null) {
+                    team.removeEntry(remove);
                 }
             }
         }
-        if (remove != null) {
-            for (String string : remove) {
-                if (string.startsWith("p@")) {
-                    string = PlayerTag.valueOf(string, scriptEntry.context).getName();
-                }
-                if (team.hasEntry(string)) {
-                    team.removeEntry(string);
+        if (addEntities != null) {
+            for (ObjectTag obj : addEntities.objectForms) {
+                String add = translateEntry(obj, scriptEntry.context);
+                if (add != null) {
+                    team.addEntry(add);
                 }
             }
         }
         if (option != null) {
-            String optName = CoreUtilities.toLowerCase(option.asString());
-            String statusName = CoreUtilities.toLowerCase(status.asString());
-            if (optName.equals("friendly_fire")) {
-                team.setAllowFriendlyFire(statusName.equals("always"));
-            }
-            else if (optName.equals("see_invisible")) {
-                team.setCanSeeFriendlyInvisibles(statusName.equals("always"));
-            }
-            else {
-                team.setOption(Team.Option.valueOf(optName.toUpperCase()), Team.OptionStatus.valueOf(statusName.toUpperCase()));
+            switch (option.asLowerString()) {
+                case "friendly_fire" -> {
+                    team.setAllowFriendlyFire(status == Team.OptionStatus.ALWAYS);
+                }
+                case "see_invisible" -> {
+                    team.setCanSeeFriendlyInvisibles(status == Team.OptionStatus.ALWAYS);
+                }
+                default -> {
+                    if (option.matchesEnum(Team.Option.class)) {
+                        team.setOption(option.asEnum(Team.Option.class), status);
+                    }
+                    else {
+                        throw new InvalidArgumentsRuntimeException("Option doesn't exist!");
+                    }
+                }
             }
         }
         if (prefix != null) {
-            team.setPrefix(prefix.asString());
+            PaperAPITools.instance.setTeamPrefix(team, prefix.asString());
         }
         if (suffix != null) {
-            team.setSuffix(suffix.asString());
+            PaperAPITools.instance.setTeamSuffix(team, suffix.asString());
         }
         if (color != null) {
-            team.setColor(ChatColor.valueOf(color.asString().toUpperCase()));
+            team.setColor(color);
         }
         if (team.getEntries().isEmpty()) {
             team.unregister();
+        }
+    }
+
+    public static String translateEntry(ObjectTag obj, TagContext context) {
+        if (obj.shouldBeType(PlayerTag.class)) {
+            return obj.asType(PlayerTag.class, context).getName();
+        }
+        else if (obj.shouldBeType(EntityTag.class)) {
+            return obj.asType(EntityTag.class, context).getUUID().toString();
+        }
+        else {
+            return obj.toString();
         }
     }
 }

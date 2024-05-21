@@ -1,41 +1,59 @@
 package com.denizenscript.denizen.objects;
 
+import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
+import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.NMSVersion;
+import com.denizenscript.denizen.nms.interfaces.ItemHelper;
+import com.denizenscript.denizen.nms.util.jnbt.StringTag;
 import com.denizenscript.denizen.objects.properties.item.*;
 import com.denizenscript.denizen.scripts.containers.core.BookScriptContainer;
 import com.denizenscript.denizen.scripts.containers.core.ItemScriptContainer;
 import com.denizenscript.denizen.scripts.containers.core.ItemScriptHelper;
+import com.denizenscript.denizen.tags.BukkitTagContext;
 import com.denizenscript.denizen.utilities.Utilities;
 import com.denizenscript.denizen.utilities.nbt.CustomNBT;
+import com.denizenscript.denizencore.events.ScriptEvent;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
 import com.denizenscript.denizencore.flags.FlaggableObject;
 import com.denizenscript.denizencore.flags.MapTagFlagTracker;
-import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.objects.*;
-import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.util.jnbt.StringTag;
-import com.denizenscript.denizen.tags.BukkitTagContext;
 import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizencore.objects.core.ImageTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
+import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.objects.properties.PropertyParser;
 import com.denizenscript.denizencore.scripts.ScriptRegistry;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.utilities.debugging.Debuggable;
 import org.bukkit.Bukkit;
 import org.bukkit.Keyed;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.inventory.*;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.Recipe;
 import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.MapMeta;
+import org.bukkit.map.MapPalette;
+import org.bukkit.map.MapView;
 
+import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
 
@@ -44,6 +62,10 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
     // @prefix i
     // @base ElementTag
     // @implements FlaggableObject, PropertyHolderObject
+    // @ExampleTagBase player.item_in_hand
+    // @ExampleValues <player.item_in_hand>,stick,iron_sword
+    // @ExampleForReturns
+    // - give %VALUE%
     // @format
     // The identity format for items is the basic material type name, or an item script name. Other data is specified in properties.
     // For example, 'i@stick'.
@@ -63,16 +85,24 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
     // This object type is flaggable.
     // Flags on this object type will be stored in the item NBT.
     //
+    // @Matchable
+    // ItemTag matchers, sometimes identified as "<item>", often seen as "with:<item>":
+    // "potion": plaintext: matches if the item is any form of potion item.
+    // "script": plaintext: matches if the item is any form of script item.
+    // "item_flagged:<flag>": A Flag Matcher for item flags.
+    // "item_enchanted:<enchantment>": matches if the item is enchanted with the given enchantment name (excluding enchantment books). Allows advanced matchers.
+    // "raw_exact:<item>": matches based on exact raw item data comparison (almost always a bad idea to use).
+    // Item property format: will validate that the item material matches and all directly specified properties also match. Any properties not specified won't be checked.
+    //                       for example "stick[display=Hi]" will match any 'stick' with a displayname of 'hi', regardless of whether that stick has lore or not, or has enchantments or not, or etc.
+    // Item script names: matches if the item is a script item with the given item script name, using advanced matchers.
+    // If none of the above are used, uses MaterialTag matchables. Refer to MaterialTag matchable list above.
+    // Note that "item" plaintext is always true.
+    //
     // -->
 
     //////////////////
     //    OBJECT FETCHER
     ////////////////
-
-    @Deprecated
-    public static ItemTag valueOf(String string) {
-        return valueOf(string, null);
-    }
 
     public static ItemTag valueOf(String string, PlayerTag player, NPCTag npc) {
         return valueOf(string, new BukkitTagContext(player, npc, null));
@@ -101,7 +131,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
         string = CoreUtilities.toLowerCase(string);
         try {
             if (ScriptRegistry.containsScript(string, ItemScriptContainer.class)) {
-                ItemScriptContainer isc = ScriptRegistry.getScriptContainerAs(string, ItemScriptContainer.class);
+                ItemScriptContainer isc = ScriptRegistry.getScriptContainer(string);
                 // TODO: If a script does not contain tags, get the clean reference here.
                 stack = isc.getItemFrom(context);
                 if (stack == null && (context == null || context.showErrors())) {
@@ -109,7 +139,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
                 }
             }
             else if (ScriptRegistry.containsScript(string, BookScriptContainer.class)) {
-                BookScriptContainer book = ScriptRegistry.getScriptContainerAs(string, BookScriptContainer.class);
+                BookScriptContainer book = ScriptRegistry.getScriptContainer(string);
                 stack = book.getBookFrom(context);
                 if (stack == null && (context == null || context.showErrors())) {
                     Debug.echoError("Book script '" + book.getName() + "' returned a null item.");
@@ -120,12 +150,12 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
             }
         }
         catch (Exception ex) {
-            if (Debug.verbose) {
+            if (CoreConfiguration.debugVerbose) {
                 Debug.echoError(ex);
             }
         }
         try {
-            MaterialTag mat = MaterialTag.valueOf(string.toUpperCase(), context);
+            MaterialTag mat = MaterialTag.valueOf(string, context);
             if (mat != null) {
                 stack = new ItemTag(mat.getMaterial());
             }
@@ -137,7 +167,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
             if (!string.equalsIgnoreCase("none") && (context == null || context.showErrors())) {
                 Debug.log("Does not match a valid item ID or material: " + string);
             }
-            if (Debug.verbose) {
+            if (CoreConfiguration.debugVerbose) {
                 Debug.echoError(ex);
             }
         }
@@ -148,25 +178,18 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
     }
 
     public static boolean matches(String arg) {
-
         if (arg == null) {
             return false;
         }
-
-        // All ObjectTags should 'match' if there is a proper
-        // ObjectFetcher identifier
         if (CoreUtilities.toLowerCase(arg).startsWith("i@")) {
             return true;
         }
-
-        // Try a quick and simple item/book script match
         if (ScriptRegistry.containsScript(arg, ItemScriptContainer.class)) {
             return true;
         }
         else if (ScriptRegistry.containsScript(arg, BookScriptContainer.class)) {
             return true;
         }
-
         if (valueOf(arg, CoreUtilities.noDebugContext) != null) {
             return true;
         }
@@ -225,7 +248,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
 
     @Override
     public void reapplyTracker(AbstractFlagTracker tracker) {
-        if (tracker instanceof MapTagFlagTracker && ((MapTagFlagTracker) tracker).map.map.isEmpty()) {
+        if (tracker instanceof MapTagFlagTracker && ((MapTagFlagTracker) tracker).map.isEmpty()) {
             setItemStack(CustomNBT.removeCustomNBT(getItemStack(), "flags", "Denizen"));
         }
         else {
@@ -296,7 +319,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
                 if (!thisMeta.hasDisplayName()) {
                     return -1;
                 }
-                if (comparedItemMeta.getDisplayName().toUpperCase().startsWith(thisMeta.getDisplayName().toUpperCase())) {
+                if (CoreUtilities.toLowerCase(comparedItemMeta.getDisplayName()).startsWith(CoreUtilities.toLowerCase(thisMeta.getDisplayName()))) {
                     if (thisMeta.getDisplayName().length() > comparedItemMeta.getDisplayName().length()) {
                         determination++;
                     }
@@ -340,31 +363,23 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
         return determination;
     }
 
-    /**
-     * Check whether this item contains the lore specific
-     * to item scripts.
-     *
-     * @return True if it does, otherwise false
-     */
     public boolean isItemscript() {
-        return ItemScriptHelper.isItemscript(getItemStack());
+        return ItemScriptHelper.isItemscript(item);
     }
 
     public String getScriptName() {
-        ItemScriptContainer cont = ItemScriptHelper.getItemScriptContainer(getItemStack());
-        if (cont != null) {
-            return cont.getName();
-        }
-        else {
-            return null;
-        }
+        return ItemScriptHelper.getItemScriptNameText(item);
+    }
+
+    public void setItemScriptName(String name) {
+        setItemStack(NMSHandler.itemHelper.addNbtData(getItemStack(), "DenizenItemScript", new StringTag(CoreUtilities.toLowerCase(name))));
     }
 
     public void setItemScript(ItemScriptContainer script) {
-        if (script.contains("NO_ID", String.class) && Boolean.valueOf(script.getString("NO_ID"))) {
+        if (script.contains("NO_ID", String.class) && Boolean.parseBoolean(script.getString("NO_ID"))) {
             return;
         }
-        setItemStack(NMSHandler.getItemHelper().addNbtData(getItemStack(), "DenizenItemScript", new StringTag(CoreUtilities.toLowerCase(script.getName()))));
+        setItemScriptName(script.getName());
     }
 
     public Material getBukkitMaterial() {
@@ -373,10 +388,6 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
 
     public MaterialTag getMaterial() {
         return new MaterialTag(getBukkitMaterial());
-    }
-
-    public String getMaterialName() {
-        return CoreUtilities.toLowerCase(getBukkitMaterial().name());
     }
 
     public void setAmount(int value) {
@@ -423,7 +434,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
     //  DSCRIPT ARGUMENT METHODS
     /////////////////////////
 
-    private String prefix = getObjectType();
+    private String prefix = "Item";
 
     @Override
     public String getPrefix() {
@@ -437,16 +448,19 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
     }
 
     @Override
-    public String getObjectType() {
-        return "Item";
-    }
-
-    @Override
     public String identify() {
         if (item == null || item.getType() == Material.AIR) {
             return "i@air";
         }
-        return "i@" + getMaterial().identifyNoPropertiesNoIdentifier().replace("m@", "") + PropertyParser.getPropertiesString(this);
+        return "i@" + getMaterial().identifyNoPropertiesNoIdentifier() + PropertyParser.getPropertiesString(this);
+    }
+
+    @Override
+    public String debuggable() {
+        if (item == null || item.getType() == Material.AIR) {
+            return "<LG>i@<Y>air";
+        }
+        return "<LG>i@<Y>" + getMaterial().identifyNoPropertiesNoIdentifier() + PropertyParser.getPropertiesDebuggable(this);
     }
 
     @Override
@@ -472,6 +486,11 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
     }
 
     @Override
+    public Object getJavaObject() {
+        return getItemStack();
+    }
+
+    @Override
     public boolean isUnique() {
         return false;
     }
@@ -481,7 +500,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
         return !getBukkitMaterial().isAir();
     }
 
-    public static void registerTags() {
+    public static void register() {
 
         AbstractFlagTracker.registerFlagHandlers(tagProcessor);
         PropertyParser.registerPropertyTagHandlers(ItemTag.class, tagProcessor);
@@ -555,7 +574,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
         // <@link mechanism ItemTag.inventory_contents>, and <@link tag ItemTag.inventory_contents>.
         // -->
         tagProcessor.registerTag(ElementTag.class, "has_inventory", (attribute, object) -> {
-            return new ElementTag(ItemInventory.describes(object));
+            return new ElementTag(ItemInventoryContents.describes(object));
         });
 
         // <--[tag]
@@ -596,6 +615,23 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
         });
 
         // <--[tag]
+        // @attribute <ItemTag.placed_material>
+        // @returns MaterialTag
+        // @group conversion
+        // @description
+        // Returns the MaterialTag that this item would place as a block, if it is a block-like item.
+        // For example, the "redstone" item will return a "redstone_wire" block.
+        // Returns null if the item doesn't place as a block.
+        // -->
+        tagProcessor.registerTag(ObjectTag.class, "placed_material", (attribute, object) -> {
+            BlockData data = NMSHandler.itemHelper.getPlacedBlock(object.getBukkitMaterial());
+            if (data == null) {
+                return null;
+            }
+            return new MaterialTag(data);
+        });
+
+        // <--[tag]
         // @attribute <ItemTag.json>
         // @returns ElementTag
         // @group conversion
@@ -605,7 +641,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
         // Generally, prefer tags like <@link tag ElementTag.on_hover.type> with type 'show_item'.
         // -->
         tagProcessor.registerTag(ElementTag.class, "json", (attribute, object) -> {
-            return new ElementTag(NMSHandler.getItemHelper().getJsonString(object.item));
+            return new ElementTag(NMSHandler.itemHelper.getJsonString(object.item));
         });
 
         // <--[tag]
@@ -651,28 +687,38 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
         // If the item is a scripted item, returns a list of all recipe IDs created by the item script.
         // Others, returns a list of all recipe IDs that the server lists as capable of crafting the item.
         // Returns a list in the Namespace:Key format, for example "minecraft:gold_nugget".
-        // Optionally, specify a recipe type (CRAFTING, FURNACE, COOKING, BLASTING, SHAPED, SHAPELESS, SMOKING, STONECUTTING)
+        // Optionally, specify a recipe type (CRAFTING, FURNACE, COOKING, BLASTING, SHAPED, SHAPELESS, SMOKING, STONECUTTING, BREWING)
         // to limit to just recipes of that type.
+        // Brewing recipes are only supported on Paper, and only custom ones are available.
         // -->
         tagProcessor.registerTag(ListTag.class, "recipe_ids", (attribute, object) -> {
             String type = attribute.hasParam() ? CoreUtilities.toLowerCase(attribute.getParam()) : null;
-            ItemScriptContainer container = object.isItemscript() ? ItemScriptHelper.getItemScriptContainer(object.getItemStack()) : null;
+            ItemScriptContainer container = ItemScriptHelper.getItemScriptContainer(object.getItemStack());
             ListTag list = new ListTag();
-            for (Recipe recipe : Bukkit.getRecipesFor(object.getItemStack())) {
-                if (!Utilities.isRecipeOfType(recipe, type)) {
-                    continue;
+            Consumer<NamespacedKey> addRecipe = (recipe) -> {
+                if (CoreUtilities.equalsIgnoreCase(recipe.getNamespace(), "denizen")) {
+                    if (container != ItemScriptHelper.recipeIdToItemScript.get(recipe.toString())) {
+                        return;
+                    }
                 }
-                if (recipe instanceof Keyed) {
-                    NamespacedKey key = ((Keyed) recipe).getKey();
-                    if (key.getNamespace().equalsIgnoreCase("denizen")) {
-                        if (container != ItemScriptHelper.recipeIdToItemScript.get(key.toString())) {
-                            continue;
-                        }
+                else if (container != null) {
+                    return;
+                }
+                list.add(recipe.toString());
+            };
+            if (type == null || !type.equals("brewing")) {
+                for (Recipe recipe : Bukkit.getRecipesFor(object.getItemStack())) {
+                    if (recipe instanceof Keyed keyedRecipe && Utilities.isRecipeOfType(recipe, type)) {
+                        addRecipe.accept(keyedRecipe.getKey());
                     }
-                    else if (container != null) {
-                        continue;
+                }
+            }
+            if (Denizen.supportsPaper && NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18) && (type == null || type.equals("brewing"))) {
+                for (Map.Entry<NamespacedKey, ItemHelper.BrewingRecipe> entry : NMSHandler.itemHelper.getCustomBrewingRecipes().entrySet()) {
+                    ItemStack result = entry.getValue().result();
+                    if (object.getBukkitMaterial() == result.getType() && (object.getItemStack().getDurability() == -1 || object.getItemStack().getDurability() == result.getDurability())) {
+                        addRecipe.accept(entry.getKey());
                     }
-                    list.add(key.toString());
                 }
             }
             return list;
@@ -690,19 +736,50 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
             return new ElementTag(object.formattedName());
         });
 
-        // <--[tag]
-        // @attribute <ItemTag.advanced_matches[<matcher>]>
-        // @returns ElementTag(Boolean)
-        // @group element checking
+        // <--[mechanism]
+        // @object ItemTag
+        // @name material
+        // @input MaterialTag
         // @description
-        // Returns whether the item matches some matcher text, using the system behind <@link language Advanced Script Event Matching>.
+        // Changes the item's material to the given material.
+        // Only copies the base material type, not any advanced block-data material properties.
+        // Note that this may cause some properties of the item to be lost.
+        // @tags
+        // <ItemTag.material>
         // -->
-        tagProcessor.registerTag(ElementTag.class, "advanced_matches", (attribute, object) -> {
-            if (!attribute.hasParam()) {
-                return null;
-            }
-            return new ElementTag(BukkitScriptEvent.tryItem(object, attribute.getParam()));
+        tagProcessor.registerMechanism("material", true, MaterialTag.class, (object, mechanism, material) -> {
+            object.item.setType(material.getMaterial());
         });
+
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_20)) {
+
+            // <--[tag]
+            // @attribute <ItemTag.map_to_image[<player>]>
+            // @returns ImageTag
+            // @description
+            // Returns an image of a filled map item's contents.
+            // Must specify a player for the map to render for, as if that player is holding the map.
+            // Note that this does not include cursors, as their rendering is entirely client-side.
+            // -->
+            tagProcessor.registerTag(ImageTag.class, PlayerTag.class, "map_to_image", (attribute, object, input) -> {
+                if (!(object.getItemMeta() instanceof MapMeta mapMeta)) {
+                    return null;
+                }
+                MapView mapView = mapMeta.getMapView();
+                if (mapView == null) {
+                    attribute.echoError("Invalid map item: must have contents.");
+                    return null;
+                }
+                byte[] data = NMSHandler.itemHelper.renderMap(mapView, input.getPlayerEntity());
+                BufferedImage image = new BufferedImage(128, 128, BufferedImage.TYPE_INT_ARGB);
+                for (int x = 0; x < 128; x++) {
+                    for (int y = 0; y < 128; y++) {
+                        image.setRGB(x, y, MapPalette.getColor(data[y * 128 + x]).getRGB());
+                    }
+                }
+                return new ImageTag(image);
+            });
+        }
     }
 
     public String formattedName() {
@@ -710,7 +787,7 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
         if (id.equals("air")) {
             return "nothing";
         }
-        if (id.equals("ice") || id.equals("dirt") || id.endsWith("copper")) {
+        if (id.equals("ice") || id.equals("dirt") || id.endsWith("copper") || id.endsWith("cream")) {
             return id;
         }
         if (getItemStack().getAmount() > 1) {
@@ -769,27 +846,166 @@ public class ItemTag implements ObjectTag, Adjustable, FlaggableObject {
 
     @Override
     public void adjust(Mechanism mechanism) {
+        tagProcessor.processMechanism(this, mechanism);
+    }
 
-        // <--[mechanism]
-        // @object ItemTag
-        // @name material
-        // @input MaterialTag
-        // @description
-        // Changes the item's material to the given material.
-        // Only copies the base material type, not any advanced block-data material properties.
-        // Note that this may cause some properties of the item to be lost.
-        // @tags
-        // <ItemTag.material>
-        // -->
-        if (mechanism.matches("material") && mechanism.requireObject(MaterialTag.class)) {
-            item.setType(mechanism.valueAsType(MaterialTag.class).getMaterial());
+    public static class ItemPropertyMatchHelper {
+
+        public ItemTag properItem;
+
+        public static class PropertyComparison {
+
+            public String compareValue;
+
+            public PropertyParser.PropertyGetter getter;
+
+            public PropertyComparison(String compareValue, PropertyParser.PropertyGetter getter) {
+                this.compareValue = compareValue;
+                this.getter = getter;
+            }
         }
 
-        CoreUtilities.autoPropertyMechanism(this, mechanism);
+        public List<PropertyComparison> comparisons = new ArrayList<>();
+
+        public final boolean doesMatch(ItemTag item) {
+            if (item == null) {
+                return false;
+            }
+            if (item.getBukkitMaterial() != properItem.getBukkitMaterial()) {
+                Debug.verboseLog("[ItemPropertyMatchHelper] deny because material mismatch");
+                return false;
+            }
+            for (PropertyComparison comparison : comparisons) {
+                Property p = comparison.getter.get(item);
+                if (p == null) {
+                    Debug.verboseLog("[ItemPropertyMatchHelper] deny because property is null");
+                    return false;
+                }
+                String val = p.getPropertyString();
+                if (comparison.compareValue == null) {
+                    if (val != null) {
+                        Debug.verboseLog("[ItemPropertyMatchHelper] deny because nullity");
+                        return false;
+                    }
+                }
+                else {
+                    if (val == null || !CoreUtilities.equalsIgnoreCase(comparison.compareValue, val)) {
+                        Debug.verboseLog("[ItemPropertyMatchHelper] deny because unequal");
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public String toString() {
+            return "item=" + properItem + ", comparisons=" + comparisons.stream().map(c -> c.compareValue).collect(Collectors.joining(", "));
+        }
+    }
+
+    public static LinkedHashMap<String, ItemPropertyMatchHelper> matchHelperCache = new LinkedHashMap<>();
+
+    public static int MAX_MATCH_HELPER_CACHE = 1024;
+
+    public static ItemPropertyMatchHelper getPropertyMatchHelper(String text) {
+        if (CoreConfiguration.debugVerbose) {
+            Debug.verboseLog("[ItemPropertyMatchHelper] getting helper for " + text);
+        }
+        ItemPropertyMatchHelper matchHelper = matchHelperCache.get(text);
+        if (matchHelper != null) {
+            return matchHelper;
+        }
+        ItemTag item = valueOf(text, CoreUtilities.noDebugContext);
+        if (item == null) {
+            Debug.verboseLog("[ItemPropertyMatchHelper] rejecting item because it's null");
+            return null;
+        }
+        matchHelper = new ItemPropertyMatchHelper();
+        matchHelper.properItem = item;
+        List<String> propertiesGiven = ObjectFetcher.separateProperties(text);
+        if (propertiesGiven == null) {
+            return matchHelper;
+        }
+        PropertyParser.ClassPropertiesInfo itemInfo = PropertyParser.propertiesByClass.get(ItemTag.class);
+        for (int i = 1; i < propertiesGiven.size(); i++) {
+            String property = propertiesGiven.get(i);
+            int equalSign = property.indexOf('=');
+            if (equalSign == -1) {
+                if (CoreConfiguration.debugVerbose) {
+                    Debug.verboseLog("[ItemPropertyMatchHelper] rejecting item because " + property + " lacks an equal sign");
+                }
+                return null;
+            }
+            String label = ObjectFetcher.unescapeProperty(property.substring(0, equalSign));
+            PropertyParser.PropertyGetter getter = itemInfo.propertiesByMechanism.get(label);
+            if (getter == null) {
+                continue;
+            }
+            Property realProp = getter.get(item);
+            if (realProp == null) {
+                continue;
+            }
+            matchHelper.comparisons.add(new ItemPropertyMatchHelper.PropertyComparison(realProp.getPropertyString(), getter));
+        }
+        if (matchHelperCache.size() > MAX_MATCH_HELPER_CACHE) {
+            String firstMost = matchHelperCache.keySet().iterator().next();
+            matchHelperCache.remove(firstMost);
+        }
+        if (CoreConfiguration.debugVerbose) {
+            Debug.verboseLog("[ItemPropertyMatchHelper] stored final result as " + matchHelper);
+        }
+        matchHelperCache.put(text, matchHelper);
+        return matchHelper;
     }
 
     @Override
     public boolean advancedMatches(String matcher) {
-        return BukkitScriptEvent.tryItem(this, matcher);
+        String matcherLow = CoreUtilities.toLowerCase(matcher);
+        if (matcherLow.contains(":")) {
+            if (matcherLow.startsWith("item_flagged:")) {
+                if (getBukkitMaterial().isAir()) {
+                    return false;
+                }
+                return BukkitScriptEvent.coreFlaggedCheck(matcher.substring("item_flagged:".length()), getFlagTracker());
+            }
+            else if (matcherLow.startsWith("item_enchanted:")) {
+                String enchMatcher = matcher.substring("item_enchanted:".length());
+                if (getBukkitMaterial().isAir() || !getItemMeta().hasEnchants()) {
+                    return false;
+                }
+                for (Enchantment enchant : getItemMeta().getEnchants().keySet()) {
+                    if (BukkitScriptEvent.runGenericCheck(enchMatcher, enchant.getKey().getKey())) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            else if (matcherLow.startsWith("raw_exact:")) {
+                ItemTag compareItem = ItemTag.valueOf(matcher.substring("raw_exact:".length()), CoreUtilities.errorButNoDebugContext);
+                return compareItem != null && compareItem.matchesRawExact(this);
+            }
+        }
+        if (matcherLow.equals("potion") && CoreUtilities.toLowerCase(getBukkitMaterial().name()).contains("potion")) {
+            return true;
+        }
+        boolean isItemScript = isItemscript();
+        if (matcherLow.equals("script") && isItemScript) {
+            return true;
+        }
+        if (matcher.contains("[") && matcher.endsWith("]")) {
+            ItemPropertyMatchHelper helper = getPropertyMatchHelper(matcher);
+            if (helper == null) {
+                return false;
+            }
+            return helper.doesMatch(this);
+        }
+        if (isItemScript) {
+            ScriptEvent.MatchHelper matchHelper = BukkitScriptEvent.createMatcher(matcher);
+            if (matchHelper.doesMatch(getScriptName())) {
+                return true;
+            }
+        }
+        return MaterialTag.advancedMatchesInternal(getBukkitMaterial(), matcher, !isItemScript);
     }
 }

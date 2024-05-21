@@ -1,16 +1,17 @@
 package com.denizenscript.denizen.npc.traits;
 
 import com.denizenscript.denizen.Denizen;
+import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import net.citizensnpcs.api.persistence.Persist;
 import net.citizensnpcs.api.trait.Trait;
-import net.citizensnpcs.util.PlayerAnimation;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.data.type.Bed;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Pose;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -28,7 +29,7 @@ public class SleepingTrait extends Trait {
         if (npc == null || bedLocation == null || !npc.isSpawned()) {
             return;
         }
-        if (!Utilities.checkLocation((LivingEntity) npc.getEntity(), bedLocation, 1)) {
+        if (!Utilities.checkLocation((LivingEntity) npc.getEntity(), bedLocation, 2)) {
             wakeUp();
             Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.getInstance(), () -> {
                 if (npc.hasTrait(SleepingTrait.class) && !npc.getOrAddTrait(SleepingTrait.class).isSleeping()) {
@@ -56,7 +57,7 @@ public class SleepingTrait extends Trait {
                 ((Player) npc.getEntity()).sleep(bedLocation.clone(), true);
             }
             else {
-                PlayerAnimation.SLEEP.play((Player) npc.getEntity());
+                NMSHandler.entityHelper.setPose(npc.getEntity(), Pose.SLEEPING);
             }
         }
         else {
@@ -101,8 +102,7 @@ public class SleepingTrait extends Trait {
             Debug.echoError("NPC " + npc.getId() + " cannot sleep: invalid bed location.");
             return;
         }
-        //TODO Adjust the .add()
-        npc.getEntity().teleport(location.clone().add(0.5, 0, 0.5));
+        npc.getEntity().teleport(location.clone());
         bedLocation = location.clone();
         internalSleepNow();
     }
@@ -122,7 +122,7 @@ public class SleepingTrait extends Trait {
             if (((Player) npc.getEntity()).isSleeping()) {
                 ((Player) npc.getEntity()).wakeup(false);
             }
-            PlayerAnimation.STOP_SLEEPING.play((Player) npc.getEntity());
+            NMSHandler.entityHelper.setPose(npc.getEntity(), Pose.STANDING);
         }
         bedLocation = null;
     }

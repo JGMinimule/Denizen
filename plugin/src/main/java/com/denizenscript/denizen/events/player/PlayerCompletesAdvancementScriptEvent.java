@@ -1,6 +1,5 @@
 package com.denizenscript.denizen.events.player;
 
-import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -27,17 +26,20 @@ public class PlayerCompletesAdvancementScriptEvent extends BukkitScriptEvent imp
     //
     // @Context
     // <context.criteria> returns all the criteria present in this advancement.
-    // <context.advancement> returns the name of advancement completed.
+    // <context.advancement> returns the completed advancement's minecraft ID key.
+    // <context.message> returns an ElementTag of the advancement message (only on Paper).
+    //
+    // @Determine
+    // ElementTag to change the advancement message (only on Paper).
+    // "NO_MESSAGE" to hide the advancement message (only on Paper).
     //
     // @Player Always.
     //
     // -->
 
     public PlayerCompletesAdvancementScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerCompletesAdvancementScriptEvent instance;
     public PlayerAdvancementDoneEvent event;
 
     @Override
@@ -54,13 +56,8 @@ public class PlayerCompletesAdvancementScriptEvent extends BukkitScriptEvent imp
     }
 
     @Override
-    public String getName() {
-        return "PlayerCompletesAdvancement";
-    }
-
-    @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(PlayerTag.mirrorBukkitPlayer(event.getPlayer()), null);
+        return new BukkitScriptEntryData(event.getPlayer());
     }
 
     @Override

@@ -7,7 +7,6 @@ import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
 import org.bukkit.Material;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -77,7 +76,7 @@ public class PlayerClicksInInventoryScriptEvent extends BukkitScriptEvent implem
     // @Switch with:<item> to only process the event if a specified cursor item was used.
     // @Switch in_area:<area> replaces the default 'in:<area>' for this event.
     // @Switch action:<action> to only process the event if a specified action occurred.
-    // @Switch slot:<slot> to only process the event if a specified slot or slot_type was clicked.
+    // @Switch slot:<slot> to only process the event if a specified slot or slot_type was clicked. For slot input options, see <@link language Slot Inputs>.
     //
     // @Location true
     //
@@ -91,7 +90,7 @@ public class PlayerClicksInInventoryScriptEvent extends BukkitScriptEvent implem
     // <context.clicked_inventory> returns the InventoryTag that was clicked in.
     // <context.cursor_item> returns the item the Player is clicking with.
     // <context.click> returns an ElementTag with the name of the click type. Click type list: <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/event/inventory/ClickType.html>
-    // <context.slot_type> returns an ElementTag with the name of the slot type that was clicked.
+    // <context.slot_type> returns an ElementTag with the name of the slot type that was clicked. Slot type list: <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/event/inventory/InventoryType.SlotType.html>
     // <context.slot> returns an ElementTag with the number of the slot that was clicked.
     // <context.raw_slot> returns an ElementTag with the raw number of the slot that was clicked.
     // <context.is_shift_click> returns true if 'shift' was used while clicking.
@@ -106,12 +105,10 @@ public class PlayerClicksInInventoryScriptEvent extends BukkitScriptEvent implem
     // -->
 
     public PlayerClicksInInventoryScriptEvent() {
-        instance = this;
         registerCouldMatcher("player (<'click_type'>) clicks (<item>) in <inventory>");
         registerSwitches("with", "in_area", "action", "slot");
     }
 
-    public static PlayerClicksInInventoryScriptEvent instance;
 
     public InventoryTag inventory;
     public ItemTag item;
@@ -152,7 +149,7 @@ public class PlayerClicksInInventoryScriptEvent extends BukkitScriptEvent implem
             return false;
         }
         String clickedItemText = path.eventArgLowerAt(hasClickType ? 3 : 2);
-        if (!clickedItemText.equals("in") && !tryItem(item, clickedItemText)) {
+        if (!clickedItemText.equals("in") && !item.tryAdvancedMatcher(clickedItemText)) {
             return false;
         }
         int inIndex = -1;
@@ -161,7 +158,7 @@ public class PlayerClicksInInventoryScriptEvent extends BukkitScriptEvent implem
                 inIndex = i;
             }
         }
-        if (!tryInventory(inventory, path.eventArgLowerAt(inIndex + 1))) {
+        if (!inventory.tryAdvancedMatcher(path.eventArgLowerAt(inIndex + 1))) {
             return false;
         }
         if (!runWithCheck(path, cursor)) {
@@ -176,7 +173,7 @@ public class PlayerClicksInInventoryScriptEvent extends BukkitScriptEvent implem
         if (!runGenericSwitchCheck(path, "action", event.getAction().name())) {
             return false;
         }
-        if (!runGenericSwitchCheck(path, "slot", String.valueOf(event.getSlot() + 1)) && !runGenericSwitchCheck(path, "slot", event.getSlotType().name())) {
+        if (!trySlot(path, "slot", event.getWhoClicked(), event.getSlot()) && !runGenericSwitchCheck(path, "slot", event.getSlotType().name())) {
             return false;
         }
         return super.matches(path);
@@ -192,13 +189,8 @@ public class PlayerClicksInInventoryScriptEvent extends BukkitScriptEvent implem
     }
 
     @Override
-    public String getName() {
-        return "PlayerClicksInInventory";
-    }
-
-    @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(new PlayerTag((Player) event.getWhoClicked()), null);
+        return new BukkitScriptEntryData(event.getWhoClicked());
     }
 
     @Override
@@ -213,13 +205,13 @@ public class PlayerClicksInInventoryScriptEvent extends BukkitScriptEvent implem
             return cursor;
         }
         else if (name.equals("click")) {
-            return new ElementTag(event.getClick().name());
+            return new ElementTag(event.getClick());
         }
         else if (name.equals("action")) {
-            return new ElementTag(event.getAction().name());
+            return new ElementTag(event.getAction());
         }
         else if (name.equals("slot_type")) {
-            return new ElementTag(event.getSlotType().name());
+            return new ElementTag(event.getSlotType());
         }
         else if (name.equals("is_shift_click")) {
             return new ElementTag(event.isShiftClick());

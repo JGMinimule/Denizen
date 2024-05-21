@@ -1,7 +1,6 @@
 package com.denizenscript.denizen.objects.properties.item;
 
-import com.denizenscript.denizen.utilities.blocks.MaterialCompat;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.core.ListTag;
@@ -23,10 +22,14 @@ import java.util.List;
 
 public class ItemPatterns implements Property {
 
+    public static boolean isBannerOrShield(Material material) {
+        return material == Material.SHIELD || material.name().endsWith("_BANNER");
+    }
+
     public static boolean describes(ObjectTag item) {
         if (item instanceof ItemTag) {
             Material material = ((ItemTag) item).getBukkitMaterial();
-            return MaterialCompat.isBannerOrShield(material);
+            return isBannerOrShield(material);
         }
         return false;
     }
@@ -48,13 +51,13 @@ public class ItemPatterns implements Property {
             "patterns"
     };
 
-    private ItemPatterns(ItemTag item) {
+    public ItemPatterns(ItemTag item) {
         this.item = item;
     }
 
     ItemTag item;
 
-    private ListTag listPatterns() {
+    public ListTag listPatterns() {
         ListTag list = new ListTag();
         for (Pattern pattern : getPatterns()) {
             list.add(pattern.getColor().name() + "/" + pattern.getPattern().name());
@@ -62,7 +65,7 @@ public class ItemPatterns implements Property {
         return list;
     }
 
-    private List<Pattern> getPatterns() {
+    public List<Pattern> getPatterns() {
         ItemMeta itemMeta = item.getItemMeta();
         if (itemMeta instanceof BannerMeta) {
             return ((BannerMeta) itemMeta).getPatterns();
@@ -76,7 +79,7 @@ public class ItemPatterns implements Property {
         }
     }
 
-    private void setPatterns(List<Pattern> patterns) {
+    public void setPatterns(List<Pattern> patterns) {
         ItemMeta itemMeta = item.getItemMeta();
         if (itemMeta instanceof BannerMeta) {
             ((BannerMeta) itemMeta).setPatterns(patterns);

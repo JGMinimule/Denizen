@@ -2,7 +2,7 @@ package com.denizenscript.denizen.scripts.commands.player;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.nms.abstracts.Sidebar;
 import com.denizenscript.denizen.objects.PlayerTag;
@@ -43,10 +43,9 @@ public class SidebarCommand extends AbstractCommand {
     // @Group player
     //
     // @Description
-    // This command was created as a simpler replacement for using the Scoreboard command to display
-    // per-player sidebars. By using packets and dummies, it enables you to have non-flickering, fully
-    // functional sidebars without wasting processing speed and memory on creating new Scoreboards for
-    // every single player.
+    // This command was created as a simpler replacement for using the Scoreboard command to display per-player sidebars.
+    // By using packets and dummies, it enables you to have non-flickering, fully functional sidebars,
+    // without wasting processing speed and memory on creating new Scoreboards for  every single player.
     //
     // Using this command, you can add, remove, or set lines on the scoreboard.
     //
@@ -62,10 +61,9 @@ public class SidebarCommand extends AbstractCommand {
     //
     // You can remove by line value text, or by score number.
     //
-    // The per_player argument is also available, and helps to reduce the number of loops required for
-    // updating multiple players' sidebars. When it is specified, all tags in the command will fill based
-    // on each individual player in the players list. So, for example, you could have <player.name> on a
-    // lines and it will show each player specified their name on that line.
+    // The per_player argument is also available, and helps to reduce the number of loops required for updating multiple players' sidebars.
+    // When it is specified, all tags in the command will fill based on each individual player in the players list.
+    // So, for example, you could have <player.name> on a line and it will show each player specified their name on that line.
     //
     // @Tags
     // <PlayerTag.sidebar_lines>
@@ -110,7 +108,7 @@ public class SidebarCommand extends AbstractCommand {
         Action action = Action.SET;
         for (Argument arg : ArgumentHelper.interpret(scriptEntry, scriptEntry.getOriginalArguments())) {
             if (!scriptEntry.hasObject("action")
-                    && arg.matchesEnum(Action.values())) {
+                    && arg.matchesEnum(Action.class)) {
                 action = Action.valueOf(arg.getValue().toUpperCase());
             }
             else if (!scriptEntry.hasObject("title")
@@ -155,7 +153,7 @@ public class SidebarCommand extends AbstractCommand {
         if (action == Action.SET && scriptEntry.hasObject("scores") && !scriptEntry.hasObject("value")) {
             throw new InvalidArgumentsException("Must specify value(s) when setting scores!");
         }
-        scriptEntry.addObject("action", new ElementTag(action.name()));
+        scriptEntry.addObject("action", new ElementTag(action));
         scriptEntry.defaultObject("per_player", new ElementTag(false));
         scriptEntry.defaultObject("players", new ElementTag(Utilities.entryHasPlayer(scriptEntry) ? Utilities.getEntryPlayer(scriptEntry).identify() : "li@"));
     }
@@ -191,7 +189,6 @@ public class SidebarCommand extends AbstractCommand {
         ListTag value = null;
         ElementTag increment = null;
         ElementTag start = null;
-        String debug;
         if (per_player) {
             if (elTitle != null) {
                 perTitle = elTitle.asString();
@@ -208,11 +205,9 @@ public class SidebarCommand extends AbstractCommand {
             if (elStart != null) {
                 perStart = elStart.asString();
             }
-            debug = scriptEntry.dbCallShouldDebug() ? ((elTitle != null ? elTitle.debug() : "") +
-                    (elScores != null ? elScores.debug() : "") +
-                    (elValue != null ? elValue.debug() : "") +
-                    (elIncrement != null ? elIncrement.debug() : "") +
-                    (elStart != null ? elStart.debug() : "")) : null;
+            if (scriptEntry.dbCallShouldDebug()) {
+                Debug.report(scriptEntry, getName(), action, elTitle, elScores, elValue, elIncrement, elStart, db("players", players));
+            }
         }
         else {
             BukkitTagContext context = (BukkitTagContext) scriptEntry.getContext();
@@ -231,14 +226,9 @@ public class SidebarCommand extends AbstractCommand {
             if (elStart != null) {
                 start = new ElementTag(TagManager.tag(elStart.asString(), context));
             }
-            debug = scriptEntry.dbCallShouldDebug() ? ((title != null ? title.debug() : "") +
-                    (scores != null ? db("scores", scores) : "") +
-                    (value != null ? db("value", value) : "") +
-                    (increment != null ? increment.debug() : "") +
-                    (start != null ? start.debug() : "")) : null;
-        }
-        if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), action, debug, db("players", players));
+            if (scriptEntry.dbCallShouldDebug()) {
+                Debug.report(scriptEntry, getName(), action, title, scores, value, increment, start, db("players", players));
+            }
         }
         switch (Action.valueOf(action.asString())) {
             case ADD:
@@ -264,7 +254,7 @@ public class SidebarCommand extends AbstractCommand {
                         int index = start != null ? start.asInt() : (current.size() > 0 ? current.get(current.size() - 1).score : value.size());
                         int incr = increment != null ? increment.asInt() : -1;
                         for (int i = 0; i < value.size(); i++, index += incr) {
-                            int score = (scores != null && i < scores.size()) ? Integer.valueOf(scores.get(i)) : index;
+                            int score = (scores != null && i < scores.size()) ? Integer.parseInt(scores.get(i)) : index;
                             while (hasScoreAlready(current, score)) {
                                 score += (incr == 0 ? 1 : incr);
                             }
@@ -304,7 +294,7 @@ public class SidebarCommand extends AbstractCommand {
                     if (scores != null) {
                         try {
                             for (String scoreString : scores) {
-                                int score = Integer.valueOf(scoreString);
+                                int score = Integer.parseInt(scoreString);
                                 for (int i = 0; i < current.size(); i++) {
                                     if (current.get(i).score == score) {
                                         current.remove(i--);
@@ -430,7 +420,7 @@ public class SidebarCommand extends AbstractCommand {
                             int index = start != null ? start.asInt() : value.size();
                             int incr = increment != null ? increment.asInt() : -1;
                             for (int i = 0; i < value.size(); i++, index += incr) {
-                                int score = (scores != null && i < scores.size()) ? Integer.valueOf(scores.get(i)) : index;
+                                int score = (scores != null && i < scores.size()) ? Integer.parseInt(scores.get(i)) : index;
                                 current.add(new Sidebar.SidebarLine(value.get(i), score));
                             }
                         }
@@ -458,7 +448,7 @@ public class SidebarCommand extends AbstractCommand {
         Player player = denizenPlayer.getPlayerEntity();
         UUID uuid = player.getUniqueId();
         if (!sidebars.containsKey(uuid)) {
-            sidebars.put(uuid, NMSHandler.getInstance().createSidebar(player));
+            sidebars.put(uuid, NMSHandler.instance.createSidebar(player));
         }
         return sidebars.get(player.getUniqueId());
     }

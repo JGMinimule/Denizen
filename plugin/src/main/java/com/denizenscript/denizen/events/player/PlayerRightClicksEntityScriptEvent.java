@@ -6,7 +6,7 @@ import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
@@ -41,13 +41,11 @@ public class PlayerRightClicksEntityScriptEvent extends BukkitScriptEvent implem
     //
     // -->
 
-    public static PlayerRightClicksEntityScriptEvent instance;
     PlayerInteractEntityEvent event;
     EntityTag entity;
     ItemTag item;
 
     public PlayerRightClicksEntityScriptEvent() {
-        instance = this;
         registerCouldMatcher("player right clicks <entity>");
         registerSwitches("with", "type");
     }
@@ -55,28 +53,23 @@ public class PlayerRightClicksEntityScriptEvent extends BukkitScriptEvent implem
     @Override
     public boolean matches(ScriptPath path) {
         boolean isAt = path.eventArgLowerAt(3).equals("at");
-        if (!tryEntity(entity, path.eventArgLowerAt(isAt ? 4 : 3))) {
+        if (!entity.tryAdvancedMatcher(path.eventArgLowerAt(isAt ? 4 : 3))) {
             return false;
         }
-        if (!runInCheck(path, event.getPlayer().getLocation())) {
+        if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
         if (!runWithCheck(path, item)) {
             return false;
         }
         // Deprecated in favor of with: format
-        if (path.eventArgLowerAt(isAt ? 5 : 4).equals("with") && !tryItem(item, path.eventArgLowerAt(isAt ? 6 : 5))) {
+        if (path.eventArgLowerAt(isAt ? 5 : 4).equals("with") && !item.tryAdvancedMatcher(path.eventArgLowerAt(isAt ? 6 : 5))) {
             return false;
         }
-        if (path.switches.containsKey("type") && !tryEntity(entity, path.switches.get("type"))) {
+        if (!path.tryObjectSwitch("type", entity)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerRightClicksEntity";
     }
 
     @Override
@@ -86,21 +79,18 @@ public class PlayerRightClicksEntityScriptEvent extends BukkitScriptEvent implem
 
     @Override
     public ObjectTag getContext(String name) {
-        if (name.equals("entity")) {
-            return entity.getDenizenObject();
-        }
-        else if (name.equals("item")) {
-            return item;
-        }
-        else if (name.equals("hand")) {
-            return new ElementTag(event.getHand() == EquipmentSlot.OFF_HAND ? "offhand" : "mainhand");
-        }
-        else if (name.equals("location")) {
-            Deprecations.playerRightClicksEntityContext.warn();
-            return entity.getLocation();
-        }
-        else if (name.equals("click_position") && event instanceof PlayerInteractAtEntityEvent) {
-            return new LocationTag(((PlayerInteractAtEntityEvent) event).getClickedPosition());
+        switch (name) {
+            case "entity": return entity.getDenizenObject();
+            case "item": return item;
+            case "hand": return new ElementTag(event.getHand() == EquipmentSlot.OFF_HAND ? "offhand" : "mainhand");
+            case "location":
+                BukkitImplDeprecations.playerRightClicksEntityContext.warn();
+                return entity.getLocation();
+            case "click_position":
+                if (event instanceof PlayerInteractAtEntityEvent) {
+                    return new LocationTag(((PlayerInteractAtEntityEvent) event).getClickedPosition());
+                }
+                break;
         }
         return super.getContext(name);
     }
@@ -124,5 +114,4 @@ public class PlayerRightClicksEntityScriptEvent extends BukkitScriptEvent implem
         this.event = event;
         fire(event);
     }
-
 }

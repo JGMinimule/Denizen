@@ -3,7 +3,7 @@ package com.denizenscript.denizen.scripts.commands.entity;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.nms.interfaces.EntityHelper;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
@@ -154,7 +154,7 @@ public class RotateCommand extends AbstractCommand implements Holdable {
                 else if (infinite || ticks < maxTicks) {
                     for (EntityTag entity : entities) {
                         if (entity.isSpawned() && rotatingEntities.contains(entity.getUUID())) {
-                            NMSHandler.getEntityHelper().rotate(entity.getBukkitEntity(),
+                            NMSHandler.entityHelper.rotate(entity.getBukkitEntity(),
                                     EntityHelper.normalizeYaw(entity.getLocation().getYaw() + yaw.asFloat()),
                                     entity.getLocation().getPitch() + pitch.asFloat());
                         }

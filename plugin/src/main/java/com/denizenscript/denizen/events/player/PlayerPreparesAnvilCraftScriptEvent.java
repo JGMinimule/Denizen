@@ -44,10 +44,8 @@ public class PlayerPreparesAnvilCraftScriptEvent extends BukkitScriptEvent imple
     // -->
 
     public PlayerPreparesAnvilCraftScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerPreparesAnvilCraftScriptEvent instance;
     public PrepareAnvilEvent event;
     public ItemTag result;
     public PlayerTag player;
@@ -65,24 +63,16 @@ public class PlayerPreparesAnvilCraftScriptEvent extends BukkitScriptEvent imple
 
     @Override
     public boolean matches(ScriptPath path) {
-        String eItem = path.eventArgLowerAt(4);
-
-        if (!tryItem(result, eItem)) {
+        if (!path.tryArgObject(4, result)) {
             return false;
         }
-
         return super.matches(path);
     }
 
     @Override
-    public String getName() {
-        return "PlayerPreparesAnvilCraft";
-    }
-
-    @Override
     public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag && ((ElementTag) determinationObj).isInt()) {
-            event.getInventory().setRepairCost(((ElementTag) determinationObj).asInt());
+        if (determinationObj instanceof ElementTag element && element.isInt()) {
+            event.getInventory().setRepairCost(element.asInt());
             return true;
         }
         String determination = determinationObj.toString();
@@ -126,7 +116,6 @@ public class PlayerPreparesAnvilCraftScriptEvent extends BukkitScriptEvent imple
         this.event = event;
         result = new ItemTag(event.getResult());
         this.player = EntityTag.getPlayerFrom(humanEntity);
-        this.cancelled = false;
         fire(event);
     }
 }

@@ -29,13 +29,13 @@ public class MaterialUnstable implements Property {
             "unstable"
     };
 
-    private MaterialUnstable(MaterialTag _material) {
+    public MaterialUnstable(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.unstable>
@@ -45,7 +45,7 @@ public class MaterialUnstable implements Property {
         // @description
         // Returns whether this TNT block is unstable (explodes when punched).
         // -->
-        PropertyParser.<MaterialUnstable, ElementTag>registerStaticTag(ElementTag.class, "unstable", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialUnstable.class, ElementTag.class, "unstable", (attribute, material) -> {
             return new ElementTag(material.isUnstable());
         });
     }

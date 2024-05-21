@@ -23,25 +23,18 @@ public class WorldInitsScriptEvent extends BukkitScriptEvent implements Listener
     // -->
 
     public WorldInitsScriptEvent() {
-        instance = this;
         registerCouldMatcher("<world> initializes");
     }
 
-    public static WorldInitsScriptEvent instance;
     public WorldTag world;
     public WorldInitEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryWorld(world, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, world)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "WorldInits";
     }
 
     @Override

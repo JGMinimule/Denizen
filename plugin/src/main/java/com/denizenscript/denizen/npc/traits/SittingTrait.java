@@ -4,7 +4,6 @@ import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.objects.ChunkTag;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.NPCTag;
-import com.denizenscript.denizen.utilities.Utilities;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.MemoryNPCDataStore;
@@ -22,7 +21,6 @@ import org.bukkit.Location;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -38,36 +36,53 @@ public class SittingTrait extends Trait implements Listener {
     @Persist("chair location")
     private Location chairLocation = null;
 
+    private boolean hasSpawned = false;
+
     @Override
     public void run() {
-        if (!npc.isSpawned() || chairLocation == null) {
+        if (!npc.isSpawned() || chairLocation == null || !hasSpawned) {
             return;
         }
-        if (!Utilities.checkLocation((LivingEntity) npc.getEntity(), chairLocation, 2)) {
+        Location curLoc = npc.getEntity().getLocation();
+        if (curLoc.getWorld() != chairLocation.getWorld()) {
             stand();
-            if (Debug.verbose) {
-                Debug.log("NPC " + npc.getId() + " stood up because it moved away from its chair.");
-            }
+            Messaging.debug("(Denizen/SittingTrait) NPC", npc.getId(), "stood up because it change world.");
+            return;
+        }
+        double xoff = chairLocation.getX() - curLoc.getX(), zoff = chairLocation.getZ() - curLoc.getZ();
+        double dist = xoff * xoff + zoff * zoff;
+        if (dist > 4) {
+            stand();
+            Messaging.debug("(Denizen/SittingTrait) NPC", npc.getId(), "stood up because it moved away:", xoff, "on X and", zoff, "on Z");
+            return;
         }
     }
 
     @Override
     public void onSpawn() {
-        if (sitting) {
-            if (chairLocation == null) {
-                sit();
-            }
-            else {
-                chairLocation = chairLocation.clone();
-                chairLocation.setYaw(npc.getStoredLocation().getYaw());
-                chairLocation.setPitch(npc.getStoredLocation().getPitch());
-                Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.getInstance(), () -> sit(chairLocation), 1);
-            }
+        if (!sitting) {
+            Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.instance, () -> {
+                if (!sitting && npc != null) {
+                    npc.removeTrait(SittingTrait.class);
+                }
+            }, 1);
+            return;
+        }
+        hasSpawned = true;
+        if (chairLocation == null) {
+            sit();
+        }
+        else {
+            chairLocation = chairLocation.clone();
+            chairLocation.setYaw(npc.getStoredLocation().getYaw());
+            chairLocation.setPitch(npc.getStoredLocation().getPitch());
+            Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.getInstance(), () -> sit(chairLocation), 1);
         }
     }
 
     @Override
     public void onDespawn() {
+        hasSpawned = false;
         if (npc == null || npc.getEntity() == null) {
             return;
         }
@@ -104,24 +119,33 @@ public class SittingTrait extends Trait implements Listener {
     }
 
     private void standInternal() {
+        sitting = false;
+        safetyCleanup(chairLocation.clone());
+        if (!npc.isSpawned()) {
+            return;
+        }
         forceUnsit(npc.getEntity());
         if (chairLocation == null) {
             return;
         }
-        safetyCleanup(chairLocation.clone());
         npc.teleport(chairLocation.clone().add(0, 0.3, 0), PlayerTeleportEvent.TeleportCause.PLUGIN);
-        sitting = false;
     }
 
     public void sitInternal(Location location) {
-        safetyCleanup(location.clone());
-        new NPCTag(npc).action("sit", null);
-        npc.getEntity().teleport(location, PlayerTeleportEvent.TeleportCause.PLUGIN);
-        forceEntitySit(npc.getEntity(), location.clone(), false);
         sitting = true;
+        safetyCleanup(location.clone());
+        if (!npc.isSpawned()) {
+            return;
+        }
+        new NPCTag(npc).action("sit", null);
+        npc.teleport(location, PlayerTeleportEvent.TeleportCause.PLUGIN);
+        forceEntitySit(npc.getEntity(), location.clone(), 0);
     }
 
     public void safetyCleanup(Location loc) {
+        if (loc.getWorld() == null) {
+            return;
+        }
         for (Entity entity : loc.getWorld().getNearbyEntities(loc, 3, 3, 3)) {
             if (entity.getType() == EntityType.ARMOR_STAND && entity.getCustomName() != null && entity.getCustomName().equals(SIT_STAND_NAME) && entity.getPassengers().isEmpty()) {
                 ArmorStand stand = (ArmorStand) entity;
@@ -164,10 +188,8 @@ public class SittingTrait extends Trait implements Listener {
      */
     public void stand() {
         new NPCTag(npc).action("stand", null);
-
         standInternal();
         standInternal();
-
         chairLocation = null;
     }
 
@@ -213,7 +235,7 @@ public class SittingTrait extends Trait implements Listener {
 
     public NPC sitStandNPC = null;
 
-    public void forceEntitySit(Entity entity, Location location, boolean isRetry) {
+    public void forceEntitySit(Entity entity, Location location, int retryCount) {
         if (sitStandNPC != null) {
             sitStandNPC.destroy();
         }
@@ -227,7 +249,7 @@ public class SittingTrait extends Trait implements Listener {
         sitStandNPC = holder;
         if (npc != null) {
             holder.addTrait(new ClickRedirectTrait(npc));
-            Messaging.debug("(Denizen) SittingTrait: Spawning chair for", npc.getId(), "as id", holder.getId());
+            Messaging.debug("(Denizen/SittingTrait) Spawning chair for", npc.getId(), "as id", holder.getId());
         }
         ArmorStandTrait trait = holder.getOrAddTrait(ArmorStandTrait.class);
         trait.setGravity(false);
@@ -236,19 +258,19 @@ public class SittingTrait extends Trait implements Listener {
         trait.setSmall(true);
         trait.setMarker(true);
         trait.setVisible(false);
-        holder.data().set(NPC.NAMEPLATE_VISIBLE_METADATA, false);
-        holder.data().set(NPC.DEFAULT_PROTECTED_METADATA, true);
+        holder.data().set(NPC.Metadata.NAMEPLATE_VISIBLE, false);
+        holder.data().set(NPC.Metadata.DEFAULT_PROTECTED, true);
         boolean spawned = holder.spawn(location);
         if (!spawned || !holder.isSpawned()) {
-            if (isRetry) {
+            if (retryCount >= 4) {
                 Debug.echoError("NPC " + (npc == null ? "null" : npc.getId()) + " sit failed (" + spawned + "," + holder.isSpawned() + "): cannot spawn chair id "
                         + holder.getId() + " at " + new LocationTag(location).identifySimple() + " ChunkIsLoaded=" + new ChunkTag(location).isLoaded());
                 holder.destroy();
                 sitStandNPC = null;
             }
             else {
-                Messaging.debug("(Denizen) SittingTrait: retrying failed sit for", npc.getId());
-                Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.getInstance(), () -> { if (npc.isSpawned()) { forceEntitySit(entity, location, true); } }, 5);
+                Messaging.debug("(Denizen/SittingTrait) retrying failed sit for", npc.getId());
+                Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.getInstance(), () -> { if (npc.isSpawned()) { forceEntitySit(entity, location, retryCount + 1); } }, 5);
             }
             return;
         }

@@ -1,14 +1,10 @@
 package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.Denizen;
-import com.denizenscript.denizen.events.BukkitScriptEvent;
-import com.denizenscript.denizen.objects.PlayerTag;
+import com.denizenscript.denizen.objects.*;
 import com.denizenscript.denizen.utilities.Utilities;
 import com.denizenscript.denizen.utilities.blocks.*;
-import com.denizenscript.denizen.utilities.debugging.Debug;
-import com.denizenscript.denizen.objects.CuboidTag;
-import com.denizenscript.denizen.objects.LocationTag;
-import com.denizenscript.denizen.objects.MaterialTag;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
 import com.denizenscript.denizencore.objects.*;
@@ -43,7 +39,7 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
 
     public SchematicCommand() {
         setName("schematic");
-        setSyntax("schematic [create/load/unload/rotate/save/flip_x/flip_y/flip_z/paste (fake_to:<player>|... fake_duration:<duration>) (noair) (mask:<material_matcher>)] [name:<name>] (filename:<name>) (angle:<#>) (<location>) (<cuboid>) (delayed) (max_delay_ms:<#>) (entities) (flags)");
+        setSyntax("schematic [create/load/unload/rotate/save/flip_x/flip_y/flip_z/paste (fake_to:<player>|... fake_duration:<duration>) (noair) (mask:<material_matcher>)] [name:<name>] (filename:<name>) (angle:<#>) (<location>) (area:<area>) (delayed) (max_delay_ms:<#>) (entities) (flags)");
         setRequiredArguments(2, 13);
         TagManager.registerTagHandler(new TagRunnable.RootForm() {
             @Override
@@ -56,12 +52,12 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         Bukkit.getPluginManager().registerEvents(this, Denizen.getInstance());
         isProcedural = false;
         setBooleansHandled("noair", "delayed", "entities", "flags");
-        setPrefixesHandled("angle", "fake_duration", "mask", "name", "filename", "max_delay_ms", "fake_to");
+        setPrefixesHandled("angle", "fake_duration", "mask", "name", "filename", "max_delay_ms", "fake_to", "area");
     }
 
     // <--[command]
     // @Name Schematic
-    // @Syntax schematic [create/load/unload/rotate/save/flip_x/flip_y/flip_z/paste (fake_to:<player>|... fake_duration:<duration>) (noair) (mask:<material_matcher>)] [name:<name>] (filename:<name>) (angle:<#>) (<location>) (<cuboid>) (delayed) (max_delay_ms:<#>) (entities) (flags)
+    // @Syntax schematic [create/load/unload/rotate/save/flip_x/flip_y/flip_z/paste (fake_to:<player>|... fake_duration:<duration>) (noair) (mask:<material_matcher>)] [name:<name>] (filename:<name>) (angle:<#>) (<location>) (area:<area>) (delayed) (max_delay_ms:<#>) (entities) (flags)
     // @Group world
     // @Required 2
     // @Maximum 13
@@ -76,13 +72,17 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
     // All schematic command usages must specify the "name" argument, which is a unique global identifier of the schematic in memory.
     // This will be created by "create" or "load" options, and persist in memory until "unload" is used (or the server is restarted).
     //
-    // The 'create' option requires a cuboid region and a center location as input. This will create a new schematic in memory based on world data.
+    // The 'create' option requires an area and a center location as input.
+    // The area can be defined as any valid <@link ObjectType AreaObject>, such as a CuboidTag.
+    // Note that all schematics are internally tracked as cuboids, and other area shapes will only constrain the copy region.
+    // Note that the block boundaries of non-cuboid regions are defined by whether the region definition contains the center of a block.
+    // This will create a new schematic in memory based on world data.
     //
     // The "rotate angle:#" and "flip_x/y/z" options will apply the change to the copy of the schematic in memory, to later be pasted or saved.
     // This will rotate the set of blocks itself, the relative origin, and any directional blocks inside the schematic.
     // Rotation angles must be a multiple of 90 degrees.
     //
-    // When using 'paste', you can only specify 'angle:#' to have that paste rotated, without rotating the original schematic.
+    // When using 'paste', you can specify 'angle:#' to have that paste rotated, without rotating the original schematic.
     //
     // The "delayed" option makes the command non-instant. This is recommended for large schematics.
     // For 'save', 'load', and 'rotate', this processes async to prevent server lockup.
@@ -97,6 +97,7 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
     // The "noair" option skips air blocks in the pasted schematics- this means those air blocks will not replace any blocks in the target location.
     //
     // The "mask" option can be specified to limit what block types the schematic will be pasted over.
+    // When using "create" and "mask", any block that doesn't match the mask will become a structure void.
     //
     // The "fake_to" option can be specified to cause the schematic paste to be a fake (packet-based, see <@link command showfake>)
     // block set, instead of actually modifying the blocks in the world.
@@ -119,12 +120,12 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
     // <schematic[<name>].origin>
     // <schematic[<name>].blocks>
     // <schematic[<name>].exists>
-    // <schematic[<name>].cuboid[<origin location>]>
+    // <schematic[<name>].cuboid[<origin_location>]>
     // <schematic.list>
     //
     // @Usage
     // Use to create a new schematic from a cuboid and an origin location.
-    // - schematic create name:MySchematic <[my_cuboid]> <player.location>
+    // - schematic create name:MySchematic area:<[my_cuboid]> <player.location>
     //
     // @Usage
     // Use to load a schematic.
@@ -153,12 +154,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
     }
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        if (arg.startsWith("name:")) {
-            for (String schem : schematics.keySet()) {
-                addOne.accept("name:" + schem);
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addWithPrefix("name:", schematics.keySet());
     }
 
     private enum Type {CREATE, LOAD, UNLOAD, ROTATE, PASTE, SAVE, FLIP_X, FLIP_Y, FLIP_Z}
@@ -169,16 +166,16 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("type")
-                    && arg.matchesEnum(Type.values())) {
+                    && arg.matchesEnum(Type.class)) {
                 scriptEntry.addObject("type", new ElementTag(arg.getRawValue().toUpperCase()));
             }
             else if (!scriptEntry.hasObject("location")
                     && arg.matchesArgumentType(LocationTag.class)) {
                 scriptEntry.addObject("location", arg.asType(LocationTag.class).getBlockLocation());
             }
-            else if (!scriptEntry.hasObject("cuboid")
-                    && arg.matchesArgumentType(CuboidTag.class)) {
-                scriptEntry.addObject("cuboid", arg.asType(CuboidTag.class));
+            else if (!scriptEntry.hasObject("area")
+                    && arg.matchesArgumentType(CuboidTag.class)) { // Historical input format
+                scriptEntry.addObject("area", arg.asType(CuboidTag.class));
             }
             else {
                 arg.reportUnhandled();
@@ -191,32 +188,55 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
 
     public static void rotateSchem(CuboidBlockSet schematic, int angle, boolean delayed, Runnable callback) {
         Runnable rotateRunnable = () -> {
-            int ang = angle;
-            while (ang < 0) {
-                ang = 360 + ang;
-            }
-            while (ang >= 360) {
-                ang -= 360;
-            }
-            if (ang != 0) {
-                ang = 360 - ang;
-                while (ang > 0) {
-                    ang -= 90;
-                    schematic.rotateOne();
+            try {
+                int ang = angle;
+                while (ang < 0) {
+                    ang = 360 + ang;
+                }
+                while (ang >= 360) {
+                    ang -= 360;
+                }
+                if (ang != 0) {
+                    ang = 360 - ang;
+                    while (ang > 0) {
+                        ang -= 90;
+                        schematic.rotateOne();
+                    }
                 }
             }
-            Bukkit.getScheduler().runTask(Denizen.getInstance(), callback);
+            finally {
+                if (delayed) {
+                    Bukkit.getScheduler().runTask(Denizen.instance, () -> schematic.isModifying = false);
+                }
+                if (callback != null) {
+                    if (delayed) {
+                        Bukkit.getScheduler().runTask(Denizen.instance, callback);
+                    }
+                    else {
+                        callback.run();
+                    }
+                }
+            }
         };
         if (delayed) {
-            Bukkit.getScheduler().runTaskAsynchronously(Denizen.getInstance(), rotateRunnable);
+            schematic.isModifying = true;
+            Bukkit.getScheduler().runTaskAsynchronously(Denizen.instance, rotateRunnable);
         }
         else {
-            try {
-                rotateRunnable.run();
+            rotateRunnable.run();
+        }
+    }
+
+    public static void parseMask(ScriptEntry scriptEntry, String maskText, HashSet<Material> mask) {
+        if (maskText.startsWith("li@")) { // Back-compat: input used to be a list of materials
+            for (MaterialTag material : ListTag.valueOf(maskText, scriptEntry.getContext()).filter(MaterialTag.class, scriptEntry)) {
+                mask.add(material.getMaterial());
             }
-            finally {
-                if (callback != null) {
-                    callback.run();
+        }
+        else {
+            for (Material material : Material.values()) {
+                if (MaterialTag.advancedMatchesInternal(material, maskText, true)) {
+                    mask.add(material);
                 }
             }
         }
@@ -226,10 +246,7 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
     public void execute(final ScriptEntry scriptEntry) {
         ElementTag angle = scriptEntry.argForPrefixAsElement("angle", null);
         ElementTag type = scriptEntry.getElement("type");
-        ElementTag name = scriptEntry.argForPrefixAsElement("name", null);
-        if (name == null) {
-            throw new InvalidArgumentsRuntimeException("Missing name argument!");
-        }
+        ElementTag name = scriptEntry.requiredArgForPrefixAsElement("name");
         ElementTag filename = scriptEntry.argForPrefixAsElement("filename", null);
         boolean noair = scriptEntry.argAsBoolean("noair");
         boolean delayed = scriptEntry.argAsBoolean("delayed") || scriptEntry.shouldWaitFor();
@@ -240,9 +257,31 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         ElementTag mask = scriptEntry.argForPrefixAsElement("mask", null);
         List<PlayerTag> fakeTo = scriptEntry.argForPrefixList("fake_to", PlayerTag.class, true);
         DurationTag fakeDuration = scriptEntry.argForPrefix("fake_duration", DurationTag.class, true);
-        CuboidTag cuboid = scriptEntry.getObjectTag("cuboid");
+        CuboidTag legacyCuboid = scriptEntry.getObjectTag("area");
+        AreaContainmentObject areaVal = null;
+        if (legacyCuboid != null) {
+            areaVal = legacyCuboid;
+        }
+        else {
+            Argument areaArg = scriptEntry.argForPrefix("area");
+            if (areaArg != null) {
+                if (areaArg.object instanceof AreaContainmentObject) {
+                    areaVal = (AreaContainmentObject) areaArg.object;
+                }
+                else {
+                    ObjectTag reparsedArea = ObjectFetcher.pickObjectFor(areaArg.getValue(), scriptEntry.context);
+                    if (reparsedArea instanceof AreaContainmentObject) {
+                        areaVal = (AreaContainmentObject)  reparsedArea;
+                    }
+                    else {
+                        throw new InvalidArgumentsRuntimeException("Area input '" + areaArg.getValue() + "' is not a valid Area object");
+                    }
+                }
+            }
+        }
+        final AreaContainmentObject area = areaVal;
         if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), type, name, location, filename, cuboid, angle, db("noair", noair), db("delayed", delayed),
+            Debug.report(scriptEntry, getName(), type, name, location, filename, area, angle, db("noair", noair), db("delayed", delayed),
                     maxDelayMs, db("flags", flags), db("entities", copyEntities), mask, fakeDuration, db("fake_to", fakeTo));
         }
         CuboidBlockSet set;
@@ -251,26 +290,32 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         switch (ttype) {
             case CREATE: {
                 if (schematics.containsKey(name.asString().toUpperCase())) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Schematic file " + name.asString() + " is already loaded.");
+                    Debug.echoError(scriptEntry, "Schematic file " + name.asString() + " is already loaded.");
                     scriptEntry.setFinished(true);
                     return;
                 }
-                if (cuboid == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Missing cuboid argument!");
+                if (area == null) {
+                    Debug.echoError(scriptEntry, "Missing area argument!");
                     scriptEntry.setFinished(true);
                     return;
                 }
                 if (location == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Missing origin location argument!");
+                    Debug.echoError(scriptEntry, "Missing origin location argument!");
                     scriptEntry.setFinished(true);
                     return;
                 }
                 try {
+                    HashSet<Material> maskSet = null;
+                    if (mask != null) {
+                        String maskText = mask.asString();
+                        maskSet = new HashSet<>();
+                        parseMask(scriptEntry, maskText, maskSet);
+                    }
+                    set = new CuboidBlockSet();
                     if (delayed) {
-                        set = new CuboidBlockSet();
-                        set.buildDelayed(cuboid, location, () -> {
+                        set.buildDelayed(area, location, maskSet, () -> {
                             if (copyEntities) {
-                                set.buildEntities(cuboid, location);
+                                set.buildEntities(area, location);
                             }
                             schematics.put(name.asString().toUpperCase(), set);
                             scriptEntry.setFinished(true);
@@ -278,16 +323,16 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
                     }
                     else {
                         scriptEntry.setFinished(true);
-                        set = new CuboidBlockSet(cuboid, location, flags);
+                        set.buildImmediate(area, location, maskSet, flags);
                         if (copyEntities) {
-                            set.buildEntities(cuboid, location);
+                            set.buildEntities(area, location);
                         }
                         schematics.put(name.asString().toUpperCase(), set);
                     }
                 }
                 catch (Exception ex) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Error creating schematic object " + name.asString() + ".");
-                    Debug.echoError(scriptEntry.getResidingQueue(), ex);
+                    Debug.echoError(scriptEntry, "Error creating schematic object " + name.asString() + ".");
+                    Debug.echoError(scriptEntry, ex);
                     scriptEntry.setFinished(true);
                     return;
                 }
@@ -295,21 +340,20 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
             }
             case LOAD: {
                 if (schematics.containsKey(name.asString().toUpperCase())) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Schematic file " + name.asString() + " is already loaded.");
+                    Debug.echoError(scriptEntry, "Schematic file " + name.asString() + " is already loaded.");
                     scriptEntry.setFinished(true);
                     return;
                 }
-                String directory = URLDecoder.decode(System.getProperty("user.dir"));
-                File f = new File(directory + "/plugins/Denizen/schematics/" + fname + ".schem");
+                File f = new File(Denizen.getInstance().getDataFolder(), "schematics/" + fname + ".schem");
                 if (!Utilities.canReadFile(f)) {
                     Debug.echoError("Cannot read from that file path due to security settings in Denizen/config.yml.");
                     scriptEntry.setFinished(true);
                     return;
                 }
                 if (!f.exists()) {
-                    f = new File(directory + "/plugins/Denizen/schematics/" + fname + ".schematic");
+                    f = new File(Denizen.getInstance().getDataFolder(), "schematics/" + fname + ".schematic");
                     if (!f.exists()) {
-                        Debug.echoError("Schematic file " + fname + " does not exist. Are you sure it's in " + directory + "/plugins/Denizen/schematics/?");
+                        Debug.echoError("Schematic file " + fname + " does not exist. Are you sure it's in plugins/Denizen/schematics/?");
                         scriptEntry.setFinished(true);
                         return;
                     }
@@ -326,7 +370,7 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
                             scriptEntry.setFinished(true);
                         };
                         if (delayed) {
-                            Bukkit.getScheduler().runTask(Denizen.getInstance(), storeSchem);
+                            Bukkit.getScheduler().runTask(Denizen.instance, storeSchem);
                         }
                         else {
                             storeSchem.run();
@@ -334,11 +378,11 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
                     }
                     catch (Exception ex) {
                         Runnable showError = () -> {
-                            Debug.echoError(scriptEntry.getResidingQueue(), "Error loading schematic file " + name.asString() + ".");
-                            Debug.echoError(scriptEntry.getResidingQueue(), ex);
+                            Debug.echoError(scriptEntry, "Error loading schematic file " + name.asString() + ".");
+                            Debug.echoError(scriptEntry, ex);
                         };
                         if (delayed) {
-                            Bukkit.getScheduler().runTask(Denizen.getInstance(), showError);
+                            Bukkit.getScheduler().runTask(Denizen.instance, showError);
                         }
                         else {
                             showError.run();
@@ -348,7 +392,7 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
                     }
                 };
                 if (delayed) {
-                    Bukkit.getScheduler().runTaskAsynchronously(Denizen.getInstance(), loadRunnable);
+                    Bukkit.getScheduler().runTaskAsynchronously(Denizen.instance, loadRunnable);
                 }
                 else {
                     loadRunnable.run();
@@ -358,7 +402,7 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
             }
             case UNLOAD: {
                 if (!schematics.containsKey(name.asString().toUpperCase())) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Schematic file " + name.asString() + " is not loaded.");
+                    Debug.echoError(scriptEntry, "Schematic file " + name.asString() + " is not loaded.");
                     scriptEntry.setFinished(true);
                     return;
                 }
@@ -368,57 +412,76 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
             }
             case ROTATE: {
                 if (!schematics.containsKey(name.asString().toUpperCase())) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Schematic file " + name.asString() + " is not loaded.");
+                    Debug.echoError(scriptEntry, "Schematic file " + name.asString() + " is not loaded.");
                     scriptEntry.setFinished(true);
                     return;
                 }
                 if (angle == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Missing angle argument!");
+                    Debug.echoError(scriptEntry, "Missing angle argument!");
                     scriptEntry.setFinished(true);
                     return;
                 }
                 final CuboidBlockSet schematic = schematics.get(name.asString().toUpperCase());
+                if (schematic.isModifying || schematic.readingProcesses > 0) {
+                    Debug.echoError("Cannot rotate schematic: schematic is currently processing another instruction.");
+                    return;
+                }
                 rotateSchem(schematic, angle.asInt(), delayed, () -> scriptEntry.setFinished(true));
                 break;
             }
             case FLIP_X: {
                 if (!schematics.containsKey(name.asString().toUpperCase())) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Schematic file " + name.asString() + " is not loaded.");
+                    Debug.echoError(scriptEntry, "Schematic file " + name.asString() + " is not loaded.");
                     scriptEntry.setFinished(true);
                     return;
                 }
-                schematics.get(name.asString().toUpperCase()).flipX();
+                final CuboidBlockSet schematic = schematics.get(name.asString().toUpperCase());
+                if (schematic.isModifying || schematic.readingProcesses > 0) {
+                    Debug.echoError("Cannot flip schematic: schematic is currently processing another instruction.");
+                    return;
+                }
+                schematic.flipX();
                 scriptEntry.setFinished(true);
                 break;
             }
             case FLIP_Y: {
                 if (!schematics.containsKey(name.asString().toUpperCase())) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Schematic file " + name.asString() + " is not loaded.");
+                    Debug.echoError(scriptEntry, "Schematic file " + name.asString() + " is not loaded.");
                     scriptEntry.setFinished(true);
                     return;
                 }
-                schematics.get(name.asString().toUpperCase()).flipY();
+                final CuboidBlockSet schematic = schematics.get(name.asString().toUpperCase());
+                if (schematic.isModifying || schematic.readingProcesses > 0) {
+                    Debug.echoError("Cannot flip schematic: schematic is currently processing another instruction.");
+                    return;
+                }
+                schematic.flipY();
                 scriptEntry.setFinished(true);
                 break;
             }
             case FLIP_Z: {
                 if (!schematics.containsKey(name.asString().toUpperCase())) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Schematic file " + name.asString() + " is not loaded.");
+                    Debug.echoError(scriptEntry, "Schematic file " + name.asString() + " is not loaded.");
                     scriptEntry.setFinished(true);
                     return;
                 }
-                schematics.get(name.asString().toUpperCase()).flipZ();
+                final CuboidBlockSet schematic = schematics.get(name.asString().toUpperCase());
+                if (schematic.isModifying || schematic.readingProcesses > 0) {
+                    Debug.echoError("Cannot flip schematic: schematic is currently processing another instruction.");
+                    return;
+                }
+                schematic.flipZ();
                 scriptEntry.setFinished(true);
                 break;
             }
             case PASTE: {
                 if (!schematics.containsKey(name.asString().toUpperCase())) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Schematic file " + name.asString() + " is not loaded.");
+                    Debug.echoError(scriptEntry, "Schematic file " + name.asString() + " is not loaded.");
                     scriptEntry.setFinished(true);
                     return;
                 }
                 if (location == null) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Missing location argument!");
+                    Debug.echoError(scriptEntry, "Missing location argument!");
                     scriptEntry.setFinished(true);
                     return;
                 }
@@ -428,7 +491,7 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
                     input.noAir = noair;
                     input.fakeTo = fakeTo;
                     if (fakeTo != null && copyEntities) {
-                        Debug.echoError(scriptEntry.getResidingQueue(), "Cannot fake paste entities currently.");
+                        Debug.echoError(scriptEntry, "Cannot fake paste entities currently.");
                         scriptEntry.setFinished(true);
                         return;
                     }
@@ -439,27 +502,26 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
                     if (mask != null) {
                         String maskText = mask.asString();
                         input.mask = new HashSet<>();
-                        if (maskText.startsWith("li@")) { // Back-compat: input used to be a list of materials
-                            for (MaterialTag material : ListTag.valueOf(maskText, scriptEntry.getContext()).filter(MaterialTag.class, scriptEntry)) {
-                                input.mask.add(material.getMaterial());
-                            }
-                        }
-                        else {
-                            for (Material material : Material.values()) {
-                                if (BukkitScriptEvent.tryMaterial(material, maskText)) {
-                                    input.mask.add(material);
-                                }
-                            }
-                        }
+                        parseMask(scriptEntry, maskText, input.mask);
                     }
                     set = schematics.get(name.asString().toUpperCase());
+                    if (set.isModifying) {
+                        Debug.echoError("Cannot paste schematic: schematic is currently processing another instruction.");
+                        return;
+                    }
                     Consumer<CuboidBlockSet> pasteRunnable = (schematic) -> {
                         if (delayed) {
+                            schematic.readingProcesses++;
                             schematic.setBlocksDelayed(() -> {
-                                if (copyEntities) {
-                                    schematic.pasteEntities(location);
+                                try {
+                                    if (copyEntities) {
+                                        schematic.pasteEntities(location);
+                                    }
                                 }
-                                scriptEntry.setFinished(true);
+                                finally {
+                                    scriptEntry.setFinished(true);
+                                    schematic.readingProcesses--;
+                                }
                             }, input, maxDelayMs.asLong());
                         }
                         else {
@@ -479,8 +541,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
                     }
                 }
                 catch (Exception ex) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Exception pasting schematic file " + name.asString() + ".");
-                    Debug.echoError(scriptEntry.getResidingQueue(), ex);
+                    Debug.echoError(scriptEntry, "Exception pasting schematic file " + name.asString() + ".");
+                    Debug.echoError(scriptEntry, ex);
                     scriptEntry.setFinished(true);
                     return;
                 }
@@ -488,10 +550,14 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
             }
             case SAVE: {
                 if (!schematics.containsKey(name.asString().toUpperCase())) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Schematic file " + name.asString() + " is not loaded.");
+                    Debug.echoError(scriptEntry, "Schematic file " + name.asString() + " is not loaded.");
                     return;
                 }
                 set = schematics.get(name.asString().toUpperCase());
+                if (set.isModifying) {
+                    Debug.echoError("Cannot save schematic: schematic is currently processing another instruction.");
+                    return;
+                }
                 String directory = URLDecoder.decode(System.getProperty("user.dir"));
                 String extension = ".schem";
                 File f = new File(directory + "/plugins/Denizen/schematics/" + fname + extension);
@@ -507,19 +573,21 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
                         SpongeSchematicHelper.saveToSpongeStream(set, fs);
                         fs.flush();
                         fs.close();
-                        Bukkit.getScheduler().runTask(Denizen.getInstance(), () -> scriptEntry.setFinished(true));
                     }
                     catch (Exception ex) {
-                        Bukkit.getScheduler().runTask(Denizen.getInstance(), () -> {
-                            Debug.echoError(scriptEntry.getResidingQueue(), "Error saving schematic file " + fname + ".");
-                            Debug.echoError(scriptEntry.getResidingQueue(), ex);
+                        Bukkit.getScheduler().runTask(Denizen.instance, () -> {
+                            Debug.echoError(scriptEntry, "Error saving schematic file " + fname + ".");
+                            Debug.echoError(scriptEntry, ex);
                         });
-                        scriptEntry.setFinished(true);
-                        return;
                     }
+                    Bukkit.getScheduler().runTask(Denizen.instance, () -> {
+                        set.readingProcesses--;
+                        scriptEntry.setFinished(true);
+                    });
                 };
                 if (delayed) {
-                    Bukkit.getScheduler().runTaskAsynchronously(Denizen.getInstance(), saveRunnable);
+                    set.readingProcesses++;
+                    Bukkit.getScheduler().runTaskAsynchronously(Denizen.instance, saveRunnable);
                 }
                 else {
                     scriptEntry.setFinished(true);
@@ -545,7 +613,7 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         // Returns a list of all loaded schematics.
         // -->
         if (attribute.startsWith("list")) {
-            event.setReplaced(new ListTag(schematics.keySet()).getAttribute(attribute.fulfill(1)));
+            event.setReplacedObject(new ListTag(schematics.keySet()).getObjectAttribute(attribute.fulfill(1)));
         }
         if (id == null) {
             return;
@@ -553,11 +621,11 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         if (!schematics.containsKey(id)) {
             // Meta below
             if (attribute.startsWith("exists")) {
-                event.setReplaced(new ElementTag(false)
-                        .getAttribute(attribute.fulfill(1)));
+                event.setReplacedObject(new ElementTag(false)
+                        .getObjectAttribute(attribute.fulfill(1)));
                 return;
             }
-            Debug.echoError(attribute.getScriptEntry() != null ? attribute.getScriptEntry().getResidingQueue() : null, "Schematic file " + id + " is not loaded.");
+            Debug.echoError(attribute.getScriptEntry(), "Schematic file " + id + " is not loaded.");
             return;
         }
         CuboidBlockSet set = schematics.get(id);
@@ -569,8 +637,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         // Returns whether the schematic exists.
         // -->
         if (attribute.startsWith("exists")) {
-            event.setReplaced(new ElementTag(true)
-                    .getAttribute(attribute.fulfill(1)));
+            event.setReplacedObject(new ElementTag(true)
+                    .getObjectAttribute(attribute.fulfill(1)));
             return;
         }
 
@@ -581,8 +649,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         // Returns the height (Y) of the schematic.
         // -->
         if (attribute.startsWith("height")) {
-            event.setReplaced(new ElementTag(set.y_length)
-                    .getAttribute(attribute.fulfill(1)));
+            event.setReplacedObject(new ElementTag(set.y_length)
+                    .getObjectAttribute(attribute.fulfill(1)));
             return;
         }
 
@@ -593,8 +661,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         // Returns the length (Z) of the schematic.
         // -->
         if (attribute.startsWith("length")) {
-            event.setReplaced(new ElementTag(set.z_height)
-                    .getAttribute(attribute.fulfill(1)));
+            event.setReplacedObject(new ElementTag(set.z_height)
+                    .getObjectAttribute(attribute.fulfill(1)));
             return;
         }
 
@@ -605,8 +673,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         // Returns the width (X) of the schematic.
         // -->
         if (attribute.startsWith("width")) {
-            event.setReplaced(new ElementTag(set.x_width)
-                    .getAttribute(attribute.fulfill(1)));
+            event.setReplacedObject(new ElementTag(set.x_width)
+                    .getObjectAttribute(attribute.fulfill(1)));
             return;
         }
 
@@ -621,8 +689,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
             if (attribute.hasParam() && LocationTag.matches(attribute.getParam())) {
                 LocationTag location = attribute.paramAsType(LocationTag.class);
                 FullBlockData block = set.blockAt(location.getX(), location.getY(), location.getZ());
-                event.setReplaced(new MaterialTag(block.data)
-                        .getAttribute(attribute.fulfill(1)));
+                event.setReplacedObject(new MaterialTag(block.data)
+                        .getObjectAttribute(attribute.fulfill(1)));
                 return;
             }
         }
@@ -634,8 +702,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         // Returns the origin location of the schematic.
         // -->
         if (attribute.startsWith("origin")) {
-            event.setReplaced(new LocationTag(null, set.center_x, set.center_y, set.center_z)
-                    .getAttribute(attribute.fulfill(1)));
+            event.setReplacedObject(new LocationTag(null, set.center_x, set.center_y, set.center_z)
+                    .getObjectAttribute(attribute.fulfill(1)));
             return;
         }
 
@@ -646,8 +714,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         // Returns the number of blocks in the schematic.
         // -->
         if (attribute.startsWith("blocks")) {
-            event.setReplaced(new ElementTag(set.blocks.length)
-                    .getAttribute(attribute.fulfill(1)));
+            event.setReplacedObject(new ElementTag(set.blocks.length)
+                    .getObjectAttribute(attribute.fulfill(1)));
             return;
         }
 
@@ -659,8 +727,8 @@ public class SchematicCommand extends AbstractCommand implements Holdable, Liste
         // -->
         if (attribute.startsWith("cuboid") && attribute.hasParam()) {
             LocationTag origin = attribute.paramAsType(LocationTag.class);
-            event.setReplaced(set.getCuboid(origin)
-                    .getAttribute(attribute.fulfill(1)));
+            event.setReplacedObject(set.getCuboid(origin)
+                    .getObjectAttribute(attribute.fulfill(1)));
             return;
         }
     }

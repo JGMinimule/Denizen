@@ -9,7 +9,7 @@ import com.denizenscript.denizencore.objects.core.ScriptTag;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.tags.Attribute;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 
 public class ItemScript implements Property {
 
@@ -35,7 +35,7 @@ public class ItemScript implements Property {
             "script"
     };
 
-    private ItemScript(ItemTag _item) {
+    public ItemScript(ItemTag _item) {
         item = _item;
     }
 
@@ -49,7 +49,7 @@ public class ItemScript implements Property {
         }
 
         if (attribute.startsWith("has_script")) {
-            Deprecations.hasScriptTags.warn(attribute.context);
+            BukkitImplDeprecations.hasScriptTags.warn(attribute.context);
             return new ElementTag(item.isItemscript())
                     .getObjectAttribute(attribute.fulfill(1));
         }
@@ -61,9 +61,10 @@ public class ItemScript implements Property {
         // @group data
         // @description
         // Use ".script.name" instead.
+        // This deprecated tag may be useful for debugging items when item scripts may have been deleted.
         // -->
         if (attribute.startsWith("scriptname")) {
-            Deprecations.hasScriptTags.warn(attribute.context);
+            BukkitImplDeprecations.hasScriptTags.warn(attribute.context);
             if (item.isItemscript()) {
                 return new ElementTag(item.getScriptName())
                         .getObjectAttribute(attribute.fulfill(1));
@@ -102,9 +103,13 @@ public class ItemScript implements Property {
 
         // Undocumented as meant for internal usage.
 
-        if (mechanism.matches("script") && mechanism.requireObject(ScriptTag.class)) {
+        if (mechanism.matches("script") && mechanism.hasValue()) {
             ScriptTag script = mechanism.valueAsType(ScriptTag.class);
-            if (script.getContainer() instanceof ItemScriptContainer) {
+            if (script == null) {
+                mechanism.echoError("Invalid item script '" + mechanism.getValue().asString() + "' - doesn't exist. Applying anyway. Resultant item may be corrupt.");
+                item.setItemScriptName(mechanism.getValue().asString());
+            }
+            else if (script.getContainer() instanceof ItemScriptContainer) {
                 item.setItemScript((ItemScriptContainer) script.getContainer());
             }
             else {

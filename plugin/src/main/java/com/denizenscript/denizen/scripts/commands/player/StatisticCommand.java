@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.player;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizen.objects.PlayerTag;
@@ -14,8 +14,6 @@ import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import org.bukkit.Material;
 import org.bukkit.Statistic;
 import org.bukkit.entity.EntityType;
-
-import java.util.function.Consumer;
 
 public class StatisticCommand extends AbstractCommand {
 
@@ -36,7 +34,7 @@ public class StatisticCommand extends AbstractCommand {
     //
     // @Description
     // Changes the specified statistic for the player.
-    // For more info on statistics, see <@link url https://minecraft.fandom.com/wiki/Statistics>
+    // For more info on statistics, see <@link url https://minecraft.wiki/w/Statistics>
     // For statistic names, see <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Statistic.html>
     //
     // You can add, take, or set a numeric value to the statistic for the linked player.
@@ -65,10 +63,8 @@ public class StatisticCommand extends AbstractCommand {
     private enum Action {ADD, TAKE, SET}
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Statistic stat : Statistic.values()) {
-            addOne.accept(stat.name());
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.add(Statistic.values());
     }
 
     @Override
@@ -76,7 +72,7 @@ public class StatisticCommand extends AbstractCommand {
         boolean specified_players = false;
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("action")
-                    && arg.matchesEnum(Action.values())) {
+                    && arg.matchesEnum(Action.class)) {
                 scriptEntry.addObject("action", arg.asElement());
             }
             else if (arg.matchesPrefix("players")
@@ -86,7 +82,7 @@ public class StatisticCommand extends AbstractCommand {
                 specified_players = true;
             }
             else if (!scriptEntry.hasObject("statistic")
-                    && arg.matchesEnum(Statistic.values())) {
+                    && arg.matchesEnum(Statistic.class)) {
                 scriptEntry.addObject("statistic", arg.asElement());
             }
             else if (!scriptEntry.hasObject("amount")

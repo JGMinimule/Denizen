@@ -2,7 +2,7 @@ package com.denizenscript.denizen.scripts.commands.npc;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizen.objects.NPCTag;
@@ -120,18 +120,13 @@ public class BreakCommand extends AbstractCommand implements Holdable {
         final LocationTag location = scriptEntry.getObjectTag("location");
         final NPCTag npc = scriptEntry.getObjectTag("npc");
         ElementTag radius = scriptEntry.getElement("radius");
-
         final HashMap<String, ObjectTag> context = new HashMap<>();
         MaterialTag material = new MaterialTag(location.getBlock());
         context.put("location", location);
         context.put("material", material);
-
         if (scriptEntry.dbCallShouldDebug()) {
-
             Debug.report(scriptEntry, getName(), location, npc, radius);
-
         }
-
         final ScriptEntry se = scriptEntry;
         BlockBreaker.BlockBreakerConfiguration config = new BlockBreaker.BlockBreakerConfiguration();
         config.item(npc.getLivingEntity().getEquipment().getItemInMainHand());

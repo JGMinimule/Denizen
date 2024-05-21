@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.containers.core;
 
 import com.denizenscript.denizen.Denizen;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.objects.PlayerTag;
@@ -9,6 +9,7 @@ import com.denizenscript.denizen.scripts.triggers.AbstractTrigger;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.containers.ScriptContainer;
 import com.denizenscript.denizencore.utilities.YamlConfiguration;
+import com.denizenscript.denizencore.utilities.debugging.DebugInternals;
 import com.denizenscript.denizencore.utilities.text.StringHolder;
 
 import java.util.*;
@@ -39,23 +40,25 @@ public class InteractScriptContainer extends ScriptContainer {
     // Note that script commands ran in interact scripts by default have a delay between each command.
     // To override this delay, set 'speed: 0' on the container or change the relevant config setting.
     //
+    // Interact scripts can be automatically disabled by adding "enabled: false" as a root key (supports any load-time-parseable tags).
+    //
     // <code>
     // Interact_Script_Name:
     //
-    //   type: interact
+    //     type: interact
     //
-    //   # | All interact scripts MUST have this key!
-    //   steps:
+    //     # | All interact scripts MUST have this key!
+    //     steps:
     //
-    //     # The first step
-    //     1:
-    //       # Any trigger type here
-    //       click trigger:
-    //         script:
-    //         # Handle what happens when the NPC is clicked during step 1
-    //         - some commands
-    //       # Other triggers here
-    //     # other steps here
+    //         # The first step
+    //         1:
+    //             # Any trigger type here
+    //             click trigger:
+    //                 script:
+    //                     # Handle what happens when the NPC is clicked during step 1
+    //                     - some commands
+    //             # Other triggers here
+    //         # other steps here
     //
     // </code>
     //
@@ -231,7 +234,7 @@ public class InteractScriptContainer extends ScriptContainer {
                 }
             }
             catch (Exception ex) {
-                Debug.echoError("Warning: improperly defined " + trigger.getSimpleName() + " trigger for script '" + getName() + "' (basic formatting error?)!");
+                Debug.echoError("Warning: improperly defined " + DebugInternals.getClassNameOpti(trigger) + " trigger for script '" + getName() + "' (basic formatting error?)!");
                 Debug.echoError(ex);
             }
             return idMap;

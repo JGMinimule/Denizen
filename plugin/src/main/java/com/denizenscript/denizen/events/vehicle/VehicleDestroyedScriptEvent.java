@@ -41,10 +41,8 @@ public class VehicleDestroyedScriptEvent extends BukkitScriptEvent implements Li
     // -->
 
     public VehicleDestroyedScriptEvent() {
-        instance = this;
     }
 
-    public static VehicleDestroyedScriptEvent instance;
     public EntityTag vehicle;
     public EntityTag entity;
     public VehicleDestroyEvent event;
@@ -79,21 +77,16 @@ public class VehicleDestroyedScriptEvent extends BukkitScriptEvent implements Li
         String cmd = path.eventArgLowerAt(1);
         String veh = cmd.equals("destroyed") ? path.eventArgLowerAt(0) : path.eventArgLowerAt(2);
         String ent = cmd.equals("destroys") ? path.eventArgLowerAt(0) : "";
-        if (!tryEntity(vehicle, veh)) {
+        if (!vehicle.tryAdvancedMatcher(veh)) {
             return false;
         }
-        if (ent.length() > 0 && (entity == null || !tryEntity(entity, ent))) {
+        if (ent.length() > 0 && (entity == null || !entity.tryAdvancedMatcher(ent))) {
             return false;
         }
         if (!runInCheck(path, vehicle.getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "VehicleDestroyed";
     }
 
     @Override
@@ -107,7 +100,7 @@ public class VehicleDestroyedScriptEvent extends BukkitScriptEvent implements Li
             return vehicle;
         }
         else if (name.equals("entity") && entity != null) {
-            return entity;
+            return entity.getDenizenObject();
         }
         return super.getContext(name);
     }

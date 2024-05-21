@@ -39,11 +39,9 @@ public class EntityBreedScriptEvent extends BukkitScriptEvent implements Listene
     // -->
 
     public EntityBreedScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> breeds");
     }
 
-    public static EntityBreedScriptEvent instance;
     private EntityTag entity;
     private EntityTag breeder;
     private EntityTag father;
@@ -54,7 +52,7 @@ public class EntityBreedScriptEvent extends BukkitScriptEvent implements Listene
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation())) {
@@ -64,14 +62,9 @@ public class EntityBreedScriptEvent extends BukkitScriptEvent implements Listene
     }
 
     @Override
-    public String getName() {
-        return "EntityBreeds";
-    }
-
-    @Override
     public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag && ((ElementTag) determinationObj).isInt()) {
-            experience = ((ElementTag) determinationObj).asInt();
+        if (determinationObj instanceof ElementTag element && element.isInt()) {
+            experience = element.asInt();
             event.setExperience(experience);
             return true;
         }

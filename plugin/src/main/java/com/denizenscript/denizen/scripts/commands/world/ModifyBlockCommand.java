@@ -1,13 +1,13 @@
 package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.Denizen;
+import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.*;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
-import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.interfaces.WorldHelper;
+import com.denizenscript.denizen.utilities.command.TabCompleteHelper;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
-import com.denizenscript.denizencore.objects.*;
+import com.denizenscript.denizencore.objects.Argument;
+import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.core.ScriptTag;
@@ -16,6 +16,7 @@ import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.scripts.commands.Holdable;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.denizencore.utilities.ScriptUtilities;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -23,6 +24,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.Event;
@@ -39,7 +41,6 @@ import org.bukkit.scheduler.BukkitRunnable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class ModifyBlockCommand extends AbstractCommand implements Listener, Holdable {
 
@@ -110,12 +111,8 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Material material : Material.values()) {
-            if (material.isBlock()) {
-                addOne.accept(material.name());
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        TabCompleteHelper.tabCompleteBlockMaterials(tab);
     }
 
     @Override
@@ -216,7 +213,21 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
         if (obj instanceof LocationTag) {
             return (LocationTag) obj;
         }
-        return LocationTag.valueOf(obj.toString(), entry.context);
+        else {
+            return LocationTag.valueOf(obj.toString(), entry.context);
+        }
+    }
+
+    public static boolean isLocationBad(ScriptEntry entry, LocationTag loc) {
+        if (loc == null) {
+            Debug.echoError(entry, "Input is not a valid LocationTag");
+            return true;
+        }
+        if (loc.getWorld() == null) {
+            Debug.echoError(entry, "Input '" + loc + "' is missing a world value");
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -235,23 +246,20 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
         final PlayerTag source = scriptEntry.getObjectTag("source");
         ListTag percents = scriptEntry.getObjectTag("percents");
         if (percents != null && percents.size() != materials.size()) {
-            Debug.echoError(scriptEntry.getResidingQueue(), "Percents length != materials length");
+            Debug.echoError(scriptEntry, "Percents length != materials length");
             percents = null;
         }
         final List<MaterialTag> materialList = materials.filter(MaterialTag.class, scriptEntry);
+        for (MaterialTag mat : materialList) {
+            if (!mat.getMaterial().isBlock()) {
+                Debug.echoError("Material '" + mat.getMaterial().name() + "' is not a block material");
+                scriptEntry.setFinished(true);
+                return;
+            }
+        }
         if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), materials.debug()
-                    + physics.debug()
-                    + radiusElement.debug()
-                    + heightElement.debug()
-                    + depthElement.debug()
-                    + (natural == null ? "" : natural.debug())
-                    + delayed.debug()
-                    + maxDelayMs.debug()
-                    + (script != null ? script.debug() : "")
-                    + (percents != null ? percents.debug() : "")
-                    + (source != null ? source.debug() : "")
-                    +  (locations == null ? location_list.debug() : db("locations", locations)));
+            Debug.report(scriptEntry, getName(), materials, physics, radiusElement, heightElement, depthElement, natural,
+                    delayed, maxDelayMs, script, percents, source, (locations == null ? location_list : db("locations", locations)));
         }
         Player sourcePlayer = source == null ? null : source.getPlayerEntity();
         final boolean doPhysics = physics.asBoolean();
@@ -268,13 +276,16 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
         final List<Float> percs = percentages;
         if (locations == null && location_list == null) {
             Debug.echoError("Must specify a valid location!");
+            scriptEntry.setFinished(true);
             return;
         }
         if ((location_list != null && location_list.isEmpty()) || (locations != null && locations.isEmpty())) {
+            scriptEntry.setFinished(true);
             return;
         }
         if (materialList.isEmpty()) {
             Debug.echoError("Must specify a valid material!");
+            scriptEntry.setFinished(true);
             return;
         }
         no_physics = !doPhysics;
@@ -285,13 +296,18 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
                 @Override
                 public void run() {
                     try {
-                        long start = System.currentTimeMillis();
+                        long start = CoreUtilities.monotonicMillis();
                         LocationTag loc;
                         if (locations != null) {
                             loc = locations.get(0);
                         }
                         else {
                             loc = getLocAt(location_list, 0, scriptEntry);
+                        }
+                        if (isLocationBad(scriptEntry, loc)) {
+                            scriptEntry.setFinished(true);
+                            cancel();
+                            return;
                         }
                         boolean was_static = preSetup(loc);
                         while ((locations != null && locations.size() > index) || (location_list != null && location_list.size() > index)) {
@@ -302,9 +318,14 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
                             else {
                                 nLoc = getLocAt(location_list, index, scriptEntry);
                             }
+                            if (isLocationBad(scriptEntry, nLoc)) {
+                                scriptEntry.setFinished(true);
+                                cancel();
+                                return;
+                            }
                             handleLocation(nLoc, index, materialList, doPhysics, natural, radius, height, depth, percs, sourcePlayer, scriptEntry);
                             index++;
-                            if (System.currentTimeMillis() - start > maxDelay) {
+                            if (CoreUtilities.monotonicMillis() - start > maxDelay) {
                                 break;
                             }
                         }
@@ -331,17 +352,30 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
             else {
                 loc = getLocAt(location_list, 0, scriptEntry);
             }
+            if (isLocationBad(scriptEntry, loc)) {
+                scriptEntry.setFinished(true);
+                return;
+            }
             boolean was_static = preSetup(loc);
             int index = 0;
             if (locations != null) {
-                for (ObjectTag obj : locations) {
-                    handleLocation((LocationTag) obj, index, materialList, doPhysics, natural, radius, height, depth, percentages, sourcePlayer, scriptEntry);
+                for (LocationTag obj : locations) {
+                    if (isLocationBad(scriptEntry, obj)) {
+                        scriptEntry.setFinished(true);
+                        return;
+                    }
+                    handleLocation(obj, index, materialList, doPhysics, natural, radius, height, depth, percentages, sourcePlayer, scriptEntry);
                     index++;
                 }
             }
             else {
                 for (int i = 0; i < location_list.size(); i++) {
-                    handleLocation(getLocAt(location_list, i, scriptEntry), index, materialList, doPhysics, natural, radius, height, depth, percentages, sourcePlayer, scriptEntry);
+                    LocationTag obj = getLocAt(location_list, i, scriptEntry);
+                    if (isLocationBad(scriptEntry, obj)) {
+                        scriptEntry.setFinished(true);
+                        return;
+                    }
+                    handleLocation(obj, index, materialList, doPhysics, natural, radius, height, depth, percentages, sourcePlayer, scriptEntry);
                     index++;
                 }
             }
@@ -352,11 +386,10 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
 
     boolean preSetup(LocationTag loc0) {
         // Freeze the first world in the list.
-        WorldHelper worldHelper = NMSHandler.getWorldHelper();
         World world = loc0.getWorld();
-        boolean was_static = worldHelper.isStatic(world);
+        boolean was_static = NMSHandler.worldHelper.isStatic(world);
         if (no_physics) {
-            worldHelper.setStatic(world, true);
+            NMSHandler.worldHelper.setStatic(world, true);
         }
         return was_static;
     }
@@ -364,9 +397,18 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
     void postComplete(Location loc, boolean was_static) {
         // Unfreeze the first world in the list.
         if (no_physics) {
-            NMSHandler.getWorldHelper().setStatic(loc.getWorld(), was_static);
+            NMSHandler.worldHelper.setStatic(loc.getWorld(), was_static);
         }
         no_physics = false;
+    }
+
+    <T extends Event & Cancellable> boolean callEvent(T event, ScriptEntry scriptEntry) {
+        Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) {
+            Debug.echoDebug(scriptEntry, "Source event cancelled, not changing block.");
+            return true;
+        }
+        return false;
     }
 
     void handleLocation(LocationTag location, int index, List<MaterialTag> materialList, boolean doPhysics,
@@ -388,30 +430,28 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
                 return;
             }
         }
+        location = location.getBlockLocation();
         World world = location.getWorld();
-        location.setX(location.getBlockX());
-        location.setY(location.getBlockY());
-        location.setZ(location.getBlockZ());
         if (source != null) {
-            Event event;
             if (material.getMaterial() == Material.AIR) {
-                event = new BlockBreakEvent(location.getBlock(), source);
+                if (callEvent(new BlockBreakEvent(location.getBlock(), source), entry)) {
+                    return;
+                }
+                setBlock(location, material, doPhysics, natural);
             }
             else {
                 Block block = location.getBlock();
-                BlockState state = NMSHandler.getBlockHelper().generateBlockState(block, material.getMaterial());
-                state.setBlockData(material.getModernData());
-                event = new BlockPlaceEvent(block, state, block, new ItemTag(material, 1).getItemStack(), source, true, EquipmentSlot.HAND);
-            }
-            Bukkit.getPluginManager().callEvent(event);
-            if (((Cancellable) event).isCancelled()) {
-                if (entry.dbCallShouldDebug()) {
-                    Debug.echoDebug(entry, "Source event cancelled, not changing block.");
+                BlockState originalState = block.getState();
+                setBlock(location, material, doPhysics, natural);
+                if (callEvent(new BlockPlaceEvent(block, originalState, block, new ItemStack(material.getMaterial()), source, true, EquipmentSlot.HAND), entry)) {
+                    originalState.update(true, doPhysics);
+                    return;
                 }
-                return;
             }
         }
-        setBlock(location, material, doPhysics, natural);
+        else {
+            setBlock(location, material, doPhysics, natural);
+        }
         if (radius != 0) {
             for (int x = 0; x < 2 * radius + 1; x++) {
                 for (int z = 0; z < 2 * radius + 1; z++) {
@@ -448,10 +488,15 @@ public class ModifyBlockCommand extends AbstractCommand implements Listener, Hol
             physitick = tick;
         }
         if (!Utilities.isLocationYSafe(location)) {
-            Debug.echoError("Invalid modifyblock location: " + new LocationTag(location).toString());
+            Debug.echoError("Invalid modifyblock location: " + new LocationTag(location));
             return;
         }
         if (natural != null && material.getMaterial() == Material.AIR) {
+            int xp = NMSHandler.blockHelper.getExpDrop(location.getBlock(), natural.getItemStack());
+            if (xp > 0) {
+                ExperienceOrb orb = (ExperienceOrb) location.getWorld().spawnEntity(location, EntityType.EXPERIENCE_ORB);
+                orb.setExperience(xp);
+            }
             location.getBlock().breakNaturally(natural.getItemStack());
         }
         else {

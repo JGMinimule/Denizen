@@ -1,13 +1,11 @@
 package com.denizenscript.denizen.objects.properties.entity;
 
-import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.NMSVersion;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.properties.Property;
-import com.denizenscript.denizencore.tags.Attribute;
+import com.denizenscript.denizencore.objects.properties.PropertyParser;
 import org.bukkit.entity.Bee;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.PigZombie;
@@ -19,8 +17,8 @@ public class EntityAnger implements Property {
             return false;
         }
         Entity bukkitEntity = ((EntityTag) entity).getBukkitEntity();
-        return bukkitEntity instanceof PigZombie ||
-                (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_15) && bukkitEntity instanceof Bee);
+        return bukkitEntity instanceof PigZombie
+                || bukkitEntity instanceof Bee;
     }
 
     public static EntityAnger getFrom(ObjectTag entity) {
@@ -32,15 +30,11 @@ public class EntityAnger implements Property {
         }
     }
 
-    public static final String[] handledTags = new String[] {
-            "anger"
-    };
-
     public static final String[] handledMechs = new String[] {
             "anger"
     };
 
-    private EntityAnger(EntityTag entity) {
+    public EntityAnger(EntityTag entity) {
         this.entity = entity;
     }
 
@@ -57,20 +51,27 @@ public class EntityAnger implements Property {
     }
 
     public int getAnger() {
-        if (entity.getBukkitEntity() instanceof PigZombie) {
-            return ((PigZombie) entity.getBukkitEntity()).getAnger();
+        if (isPigZombie()) {
+            return getPigZombie().getAnger();
         }
         else {
-            return ((Bee) entity.getBukkitEntity()).getAnger();
+            return getBee().getAnger();
         }
     }
 
-    @Override
-    public ObjectTag getObjectAttribute(Attribute attribute) {
+    public boolean isPigZombie() {
+        return entity.getBukkitEntity() instanceof PigZombie;
+    }
 
-        if (attribute == null) {
-            return null;
-        }
+    public PigZombie getPigZombie() {
+        return (PigZombie) entity.getBukkitEntity();
+    }
+
+    public Bee getBee() {
+        return (Bee) entity.getBukkitEntity();
+    }
+
+    public static void register() {
 
         // <--[tag]
         // @attribute <EntityTag.anger>
@@ -80,12 +81,9 @@ public class EntityAnger implements Property {
         // @description
         // Returns the remaining anger time of a PigZombie or Bee.
         // -->
-        if (attribute.startsWith("anger")) {
-            return new DurationTag((long) getAnger())
-                    .getObjectAttribute(attribute.fulfill(1));
-        }
-
-        return null;
+        PropertyParser.registerTag(EntityAnger.class, DurationTag.class, "anger", (attribute, object) -> {
+            return new DurationTag((long) object.getAnger());
+        });
     }
 
     @Override
@@ -100,19 +98,19 @@ public class EntityAnger implements Property {
         // @tags
         // <EntityTag.anger>
         // -->
-        if (mechanism.matches("anger")) {
+        if (mechanism.matches("anger") && mechanism.requireObject(DurationTag.class)) {
             DurationTag duration;
-            if (mechanism.getValue().isInt()) {
+            if (mechanism.getValue().isInt()) { // Soft-deprecated - backwards compatibility, as this used to use a tick count
                 duration = new DurationTag(mechanism.getValue().asLong());
             }
             else {
                 duration = mechanism.valueAsType(DurationTag.class);
             }
-            if (entity.getBukkitEntity() instanceof PigZombie) {
-                ((PigZombie) entity.getBukkitEntity()).setAnger(duration.getTicksAsInt());
+            if (isPigZombie()) {
+                getPigZombie().setAnger(duration.getTicksAsInt());
             }
             else {
-                ((Bee) entity.getBukkitEntity()).setAnger(duration.getTicksAsInt());
+                getBee().setAnger(duration.getTicksAsInt());
             }
         }
     }

@@ -29,13 +29,13 @@ public class MaterialLocked implements Property {
             "is_locked"
     };
 
-    private MaterialLocked(MaterialTag _material) {
+    public MaterialLocked(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.is_locked>
@@ -45,7 +45,7 @@ public class MaterialLocked implements Property {
         // @description
         // Returns whether this redstone repeater material is locked.
         // -->
-        PropertyParser.<MaterialLocked, ElementTag>registerStaticTag(ElementTag.class, "is_locked", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialLocked.class, ElementTag.class, "is_locked", (attribute, material) -> {
             return new ElementTag(material.isLocked());
         });
     }

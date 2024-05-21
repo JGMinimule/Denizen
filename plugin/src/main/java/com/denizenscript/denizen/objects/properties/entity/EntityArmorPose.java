@@ -9,10 +9,9 @@ import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.objects.properties.PropertyParser;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import com.denizenscript.denizencore.utilities.text.StringHolder;
 import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.EntityType;
 import org.bukkit.util.EulerAngle;
 
 import java.util.Iterator;
@@ -22,7 +21,7 @@ public class EntityArmorPose implements Property {
 
     public static boolean describes(ObjectTag entity) {
         return entity instanceof EntityTag
-                && ((EntityTag) entity).getBukkitEntityType() == EntityType.ARMOR_STAND;
+                && ((EntityTag) entity).getBukkitEntity() instanceof ArmorStand;
     }
 
     public static EntityArmorPose getFrom(ObjectTag entity) {
@@ -38,7 +37,7 @@ public class EntityArmorPose implements Property {
             "armor_pose"
     };
 
-    private EntityArmorPose(EntityTag ent) {
+    public EntityArmorPose(EntityTag ent) {
         entity = ent;
     }
 
@@ -54,7 +53,7 @@ public class EntityArmorPose implements Property {
         return "armor_pose";
     }
 
-    private ListTag getPoseList() {
+    public ListTag getPoseList() {
         ArmorStand armorStand = (ArmorStand) entity.getBukkitEntity();
         ListTag list = new ListTag();
         for (PosePart posePart : PosePart.values()) {
@@ -73,7 +72,7 @@ public class EntityArmorPose implements Property {
         return map;
     }
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <EntityTag.armor_pose_map>
@@ -85,7 +84,7 @@ public class EntityArmorPose implements Property {
         // For example, head=4.5,3,4.5;body=5.4,3.2,1
         // Angles are in radians!
         // -->
-        PropertyParser.<EntityArmorPose, MapTag>registerTag(MapTag.class, "armor_pose_map", (attribute, entity) -> {
+        PropertyParser.registerTag(EntityArmorPose.class, MapTag.class, "armor_pose_map", (attribute, entity) -> {
             return entity.getPoseMap();
         });
 
@@ -98,8 +97,8 @@ public class EntityArmorPose implements Property {
         // @description
         // Deprecated in favor of <@link tag EntityTag.armor_pose_map>
         // -->
-        PropertyParser.<EntityArmorPose, ListTag>registerTag(ListTag.class, "armor_pose_list", (attribute, entity) -> {
-            Deprecations.entityArmorPose.warn(attribute.context);
+        PropertyParser.registerTag(EntityArmorPose.class, ListTag.class, "armor_pose_list", (attribute, entity) -> {
+            BukkitImplDeprecations.entityArmorPose.warn(attribute.context);
             return entity.getPoseList();
         });
 
@@ -112,8 +111,8 @@ public class EntityArmorPose implements Property {
         // @description
         // Deprecated in favor of <@link tag EntityTag.armor_pose_map>
         // -->
-        PropertyParser.<EntityArmorPose, LocationTag>registerTag(LocationTag.class, "armor_pose", (attribute, entity) -> {
-            Deprecations.entityArmorPose.warn(attribute.context);
+        PropertyParser.registerTag(EntityArmorPose.class, LocationTag.class, "armor_pose", (attribute, entity) -> {
+            BukkitImplDeprecations.entityArmorPose.warn(attribute.context);
             if (!attribute.hasParam()) {
                 return null;
             }
@@ -138,28 +137,16 @@ public class EntityArmorPose implements Property {
         // @input MapTag
         // @description
         // Sets the angle for various parts of the armor stand.
-        // For example, head=4.5,3,4.5;body=5.4,3.2,1
+        // For example, [head=4.5,3,4.5;body=5.4,3.2,1]
         // Valid parts: HEAD, BODY, LEFT_ARM, RIGHT_ARM, LEFT_LEG, RIGHT_LEG
         // Angles are in radians!
-        // Here's a website to help you figure out the correct values: <@link url https://bgielinor.github.io/Minecraft-ArmorStand/>.
+        // Here's a website to help you figure out the correct values: <@link url https://b-universe.github.io/Minecraft-ArmorStand/>.
         // @tags
         // <EntityTag.armor_pose_map>
         // -->
         if (mechanism.matches("armor_pose")) {
             ArmorStand armorStand = (ArmorStand) entity.getBukkitEntity();
-            if (mechanism.getValue().asString().contains("=")) {
-                MapTag map = mechanism.valueAsType(MapTag.class);
-                for (Map.Entry<StringHolder, ObjectTag> entry : map.map.entrySet()) {
-                    PosePart posePart = PosePart.fromName(entry.getKey().str);
-                    if (posePart == null) {
-                        mechanism.echoError("Invalid pose part specified: " + entry.getKey().str);
-                    }
-                    else {
-                        posePart.setAngle(armorStand, toEulerAngle(entry.getValue().asType(LocationTag.class, mechanism.context)));
-                    }
-                }
-            }
-            else {
+            if (mechanism.getValue().asString().contains("|")) { // legacy format
                 ListTag list = mechanism.valueAsType(ListTag.class);
                 Iterator<String> iterator = list.iterator();
                 while (iterator.hasNext()) {
@@ -174,18 +161,30 @@ public class EntityArmorPose implements Property {
                     }
                 }
             }
+            else {
+                MapTag map = mechanism.valueAsType(MapTag.class);
+                for (Map.Entry<StringHolder, ObjectTag> entry : map.entrySet()) {
+                    PosePart posePart = PosePart.fromName(entry.getKey().str);
+                    if (posePart == null) {
+                        mechanism.echoError("Invalid pose part specified: " + entry.getKey().str);
+                    }
+                    else {
+                        posePart.setAngle(armorStand, toEulerAngle(entry.getValue().asType(LocationTag.class, mechanism.context)));
+                    }
+                }
+            }
         }
     }
 
-    private static LocationTag fromEulerAngle(EulerAngle eulerAngle) {
+    public static LocationTag fromEulerAngle(EulerAngle eulerAngle) {
         return new LocationTag(null, eulerAngle.getX(), eulerAngle.getY(), eulerAngle.getZ());
     }
 
-    private static EulerAngle toEulerAngle(LocationTag location) {
+    public static EulerAngle toEulerAngle(LocationTag location) {
         return new EulerAngle(location.getX(), location.getY(), location.getZ());
     }
 
-    private enum PosePart {
+    public enum PosePart {
         HEAD {
             @Override
             EulerAngle getAngle(ArmorStand armorStand) {

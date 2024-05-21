@@ -1,5 +1,8 @@
 package com.denizenscript.denizen.nms.v1_17.impl.network.handlers;
 
+import com.denizenscript.denizen.events.player.PlayerHearsSoundScriptEvent;
+import com.denizenscript.denizen.events.player.PlayerReceivesActionbarScriptEvent;
+import com.denizenscript.denizen.events.player.PlayerReceivesMessageScriptEvent;
 import com.denizenscript.denizen.nms.abstracts.BlockLight;
 import com.denizenscript.denizen.nms.v1_17.Handler;
 import com.denizenscript.denizen.nms.v1_17.ReflectionMappingsInfo;
@@ -21,6 +24,8 @@ import com.denizenscript.denizen.utilities.entity.EntityAttachmentHelper;
 import com.denizenscript.denizen.utilities.entity.HideEntitiesHelper;
 import com.denizenscript.denizen.utilities.packets.DenizenPacketHandler;
 import com.denizenscript.denizen.utilities.packets.HideParticles;
+import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.mojang.datafixers.util.Pair;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -30,6 +35,7 @@ import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizencore.utilities.ReflectionHelper;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import net.md_5.bungee.api.ChatColor;
+import net.md_5.bungee.chat.ComponentSerializer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.SectionPos;
@@ -51,6 +57,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.craftbukkit.v1_17_R1.CraftParticle;
 import org.bukkit.craftbukkit.v1_17_R1.entity.CraftEntity;
@@ -74,7 +81,7 @@ public class DenizenNetworkManagerImpl extends Connection {
             return copier;
         }
         catch (Throwable ex) {
-            com.denizenscript.denizen.utilities.debugging.Debug.echoError(ex);
+            Debug.echoError(ex);
             return null;
         }
     }
@@ -245,6 +252,8 @@ public class DenizenNetworkManagerImpl extends Connection {
             || processPacketHandlerForPacket(packet)
             || processMirrorForPacket(packet)
             || processParticlesForPacket(packet)
+            || processSoundPacket(packet)
+            || processActionbarPacket(packet, genericfuturelistener)
             || processDisguiseForPacket(packet, genericfuturelistener)
             || processMetadataChangesForPacket(packet, genericfuturelistener)
             || processEquipmentForPacket(packet, genericfuturelistener)
@@ -255,22 +264,72 @@ public class DenizenNetworkManagerImpl extends Connection {
         oldManager.send(packet, genericfuturelistener);
     }
 
+    public boolean processActionbarPacket(Packet<?> packet, GenericFutureListener<? extends Future<? super Void>> genericfuturelistener) {
+        if (!PlayerReceivesActionbarScriptEvent.instance.loaded) {
+            return false;
+        }
+        if (packet instanceof ClientboundSetActionBarTextPacket) {
+            ClientboundSetActionBarTextPacket actionbarPacket = (ClientboundSetActionBarTextPacket) packet;
+            PlayerReceivesActionbarScriptEvent event = PlayerReceivesActionbarScriptEvent.instance;
+            Component baseComponent = actionbarPacket.getText();
+            event.reset();
+            event.message = new ElementTag(FormattedTextHelper.stringify(Handler.componentToSpigot(baseComponent)));
+            event.rawJson = new ElementTag(Component.Serializer.toJson(baseComponent));
+            event.system = new ElementTag(false);
+            event.player = PlayerTag.mirrorBukkitPlayer(player.getBukkitEntity());
+            event = (PlayerReceivesActionbarScriptEvent) event.triggerNow();
+            if (event.cancelled) {
+                return true;
+            }
+            if (event.modified) {
+                Component component = Handler.componentToNMS(event.altMessageDetermination);
+                ClientboundSetActionBarTextPacket newPacket = new ClientboundSetActionBarTextPacket(component);
+                oldManager.send(newPacket, genericfuturelistener);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean processSoundPacket(Packet<?> packet) {
+        if (!PlayerHearsSoundScriptEvent.instance.eventData.isEnabled) {
+            return false;
+        }
+        // (Player player, String name, String category, boolean isCustom, Entity entity, Location location, float volume, float pitch)
+        if (packet instanceof ClientboundSoundPacket) {
+            ClientboundSoundPacket spacket = (ClientboundSoundPacket) packet;
+            return PlayerHearsSoundScriptEvent.instance.run(player.getBukkitEntity(), spacket.getSound().getLocation().getPath(), spacket.getSource().name(),
+                    false, null, new Location(player.getBukkitEntity().getWorld(), spacket.getX(), spacket.getY(), spacket.getZ()), spacket.getVolume(), spacket.getPitch());
+        }
+        else if (packet instanceof ClientboundSoundEntityPacket) {
+            ClientboundSoundEntityPacket spacket = (ClientboundSoundEntityPacket) packet;
+            Entity entity = player.getLevel().getEntity(spacket.getId());
+            if (entity == null) {
+                return false;
+            }
+            return PlayerHearsSoundScriptEvent.instance.run(player.getBukkitEntity(), spacket.getSound().getLocation().getPath(), spacket.getSource().name(),
+                    false, entity.getBukkitEntity(), null, spacket.getVolume(), spacket.getPitch());
+        }
+        else if (packet instanceof ClientboundCustomSoundPacket) {
+            ClientboundCustomSoundPacket spacket = (ClientboundCustomSoundPacket) packet;
+            return PlayerHearsSoundScriptEvent.instance.run(player.getBukkitEntity(), spacket.getName().toString(), spacket.getSource().name(),
+                    true, null, new Location(player.getBukkitEntity().getWorld(), spacket.getX(), spacket.getY(), spacket.getZ()), spacket.getVolume(), spacket.getPitch());
+        }
+        return false;
+    }
+
     public boolean processEquipmentForPacket(Packet<?> packet, GenericFutureListener<? extends Future<? super Void>> genericfuturelistener) {
         if (FakeEquipCommand.overrides.isEmpty()) {
             return false;
         }
         try {
             if (packet instanceof ClientboundSetEquipmentPacket) {
-                HashMap<UUID, FakeEquipCommand.EquipmentOverride> playersMap = FakeEquipCommand.overrides.get(player.getUUID());
-                if (playersMap == null) {
-                    return false;
-                }
                 int eid = ((ClientboundSetEquipmentPacket) packet).getEntity();
                 Entity ent = player.level.getEntity(eid);
                 if (ent == null) {
                     return false;
                 }
-                FakeEquipCommand.EquipmentOverride override = playersMap.get(ent.getUUID());
+                FakeEquipCommand.EquipmentOverride override = FakeEquipCommand.getOverrideFor(ent.getUUID(), player.getBukkitEntity());
                 if (override == null) {
                     return false;
                 }
@@ -305,15 +364,11 @@ public class DenizenNetworkManagerImpl extends Connection {
                 return true;
             }
             else if (packet instanceof ClientboundEntityEventPacket) {
-                HashMap<UUID, FakeEquipCommand.EquipmentOverride> playersMap = FakeEquipCommand.overrides.get(player.getUUID());
-                if (playersMap == null) {
-                    return false;
-                }
                 Entity ent = ((ClientboundEntityEventPacket) packet).getEntity(player.level);
                 if (!(ent instanceof net.minecraft.world.entity.LivingEntity)) {
                     return false;
                 }
-                FakeEquipCommand.EquipmentOverride override = playersMap.get(ent.getUUID());
+                FakeEquipCommand.EquipmentOverride override = FakeEquipCommand.getOverrideFor(ent.getUUID(), player.getBukkitEntity());
                 if (override == null || (override.hand == null && override.offhand == null)) {
                     return false;
                 }
@@ -330,11 +385,7 @@ public class DenizenNetworkManagerImpl extends Connection {
                 return true;
             }
             else if (packet instanceof ClientboundContainerSetContentPacket) {
-                HashMap<UUID, FakeEquipCommand.EquipmentOverride> playersMap = FakeEquipCommand.overrides.get(player.getUUID());
-                if (playersMap == null) {
-                    return false;
-                }
-                FakeEquipCommand.EquipmentOverride override = playersMap.get(player.getUUID());
+                FakeEquipCommand.EquipmentOverride override = FakeEquipCommand.getOverrideFor(player.getUUID(), player.getBukkitEntity());
                 if (override == null) {
                     return false;
                 }
@@ -366,11 +417,7 @@ public class DenizenNetworkManagerImpl extends Connection {
                 return true;
             }
             else if (packet instanceof ClientboundContainerSetSlotPacket) {
-                HashMap<UUID, FakeEquipCommand.EquipmentOverride> playersMap = FakeEquipCommand.overrides.get(player.getUUID());
-                if (playersMap == null) {
-                    return false;
-                }
-                FakeEquipCommand.EquipmentOverride override = playersMap.get(player.getUUID());
+                FakeEquipCommand.EquipmentOverride override = FakeEquipCommand.getOverrideFor(player.getUUID(), player.getBukkitEntity());
                 if (override == null) {
                     return false;
                 }
@@ -614,7 +661,7 @@ public class DenizenNetworkManagerImpl extends Connection {
                         pNew = new ClientboundMoveEntityPacket.PosRot(newId, packet.getXa(), packet.getYa(), packet.getZa(), packet.getyRot(), packet.getxRot(), packet.isOnGround());
                     }
                     else {
-                        if (Debug.verbose) {
+                        if (CoreConfiguration.debugVerbose) {
                             Debug.echoError("Impossible move-entity packet class: " + packet.getClass().getCanonicalName());
                         }
                         return;
@@ -895,10 +942,16 @@ public class DenizenNetworkManagerImpl extends Connection {
 
     public boolean processPacketHandlerForPacket(Packet<?> packet) {
         if (packet instanceof ClientboundChatPacket && DenizenPacketHandler.instance.shouldInterceptChatPacket()) {
-            return DenizenPacketHandler.instance.sendPacket(player.getBukkitEntity(), new PacketOutChatImpl((ClientboundChatPacket) packet));
-        }
-        else if (packet instanceof ClientboundSetEntityDataPacket && DenizenPacketHandler.instance.shouldInterceptMetadata()) {
-            return DenizenPacketHandler.instance.sendPacket(player.getBukkitEntity(), new PacketOutEntityMetadataImpl((ClientboundSetEntityDataPacket) packet));
+            PacketOutChatImpl packetHelper = new PacketOutChatImpl((ClientboundChatPacket) packet);
+            PlayerReceivesMessageScriptEvent result = DenizenPacketHandler.instance.sendPacket(player.getBukkitEntity(), packetHelper);
+            if (result != null) {
+                if (result.cancelled) {
+                    return true;
+                }
+                if (result.modified) {
+                    packetHelper.setRawJson(ComponentSerializer.toString(result.altMessageDetermination));
+                }
+            }
         }
         return false;
     }

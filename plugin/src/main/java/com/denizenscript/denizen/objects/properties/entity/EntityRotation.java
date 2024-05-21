@@ -9,7 +9,6 @@ import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.block.BlockFace;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Hanging;
 
 public class EntityRotation implements Property {
@@ -18,8 +17,7 @@ public class EntityRotation implements Property {
         if (!(entity instanceof EntityTag)) {
             return false;
         }
-        return ((EntityTag) entity).getBukkitEntityType() == EntityType.PAINTING
-                || ((EntityTag) entity).getBukkitEntityType() == EntityType.ITEM_FRAME;
+        return ((EntityTag) entity).getBukkitEntity() instanceof Hanging;
     }
 
     public static EntityRotation getFrom(ObjectTag entity) {
@@ -39,13 +37,13 @@ public class EntityRotation implements Property {
             "rotation"
     };
 
-    private EntityRotation(EntityTag entity) {
+    public EntityRotation(EntityTag entity) {
         this.entity = entity;
     }
 
     EntityTag entity;
 
-    private BlockFace getRotation() {
+    public BlockFace getRotation() {
         return ((Hanging) entity.getBukkitEntity()).getAttachedFace().getOppositeFace();
     }
 
@@ -95,7 +93,7 @@ public class EntityRotation implements Property {
         // Value is from <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/block/BlockFace.html>.
         // -->
         if (attribute.startsWith("rotation")) {
-            return new ElementTag(CoreUtilities.toLowerCase(getRotation().name()))
+            return new ElementTag(getRotation())
                     .getObjectAttribute(attribute.fulfill(1));
         }
 
@@ -117,7 +115,7 @@ public class EntityRotation implements Property {
         // <EntityTag.rotation>
         // <EntityTag.rotation_vector>
         // -->
-        if (mechanism.matches("rotation") && mechanism.requireEnum(false, BlockFace.values())) {
+        if (mechanism.matches("rotation") && mechanism.requireEnum(BlockFace.class)) {
             BlockFace face = BlockFace.valueOf(mechanism.getValue().asString().toUpperCase());
             if (getRotation() != face) {
                 setRotation(face);

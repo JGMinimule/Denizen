@@ -21,10 +21,7 @@ public class ItemEnchantedScriptEvent extends BukkitScriptEvent implements Liste
 
     // <--[event]
     // @Events
-    // item enchanted
     // <item> enchanted
-    //
-    // @Regex ^on [^\s]+ enchanted$
     //
     // @Group Item
     //
@@ -47,18 +44,18 @@ public class ItemEnchantedScriptEvent extends BukkitScriptEvent implements Liste
     //
     // @Determine
     // ElementTag(Number) to set the experience level cost of the enchantment.
-    // "RESULT:" + ItemTag to change the item result (only affects metadata (like enchantments), not material/quantity/etc!).
-    // "ENCHANTS:" + MapTag to change the resultant enchantments.
+    // "RESULT:<ItemTag>" to change the item result (only affects metadata (like enchantments), not material/quantity/etc!).
+    // "ENCHANTS:<MapTag>" to change the resultant enchantments.
     //
     // @Player when the enchanter is a player.
     //
     // -->
 
     public ItemEnchantedScriptEvent() {
-        instance = this;
+        registerCouldMatcher("<item> enchanted");
+        registerSwitches("enchant");
     }
 
-    public static ItemEnchantedScriptEvent instance;
     public EntityTag entity;
     public LocationTag location;
     public InventoryTag inventory;
@@ -68,20 +65,8 @@ public class ItemEnchantedScriptEvent extends BukkitScriptEvent implements Liste
     public EnchantItemEvent event;
 
     @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventArgLowerAt(1).equals("enchanted")) {
-            return false;
-        }
-        if (!couldMatchItem(path.eventArgLowerAt(0))) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
     public boolean matches(ScriptPath path) {
-        String itemTest = path.eventArgLowerAt(0);
-        if (!itemTest.equals("item") && !tryItem(item, itemTest)) {
+        if (!path.tryArgObject(0, item)) {
             return false;
         }
         if (!runInCheck(path, location)) {
@@ -103,15 +88,10 @@ public class ItemEnchantedScriptEvent extends BukkitScriptEvent implements Liste
     }
 
     @Override
-    public String getName() {
-        return "ItemEnchanted";
-    }
-
-    @Override
     public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag) {
-            if (((ElementTag) determinationObj).isInt()) {
-                cost = ((ElementTag) determinationObj).asInt();
+        if (determinationObj instanceof ElementTag element) {
+            if (element.isInt()) {
+                cost = element.asInt();
                 event.setExpLevelCost(cost);
                 return true;
             }
@@ -129,8 +109,8 @@ public class ItemEnchantedScriptEvent extends BukkitScriptEvent implements Liste
                 if (itemText.startsWith("map@")) {
                     TagContext context = getTagContext(path);
                     MapTag map = MapTag.valueOf(itemText, context);
-                    for (Map.Entry<StringHolder, ObjectTag> enchantments : map.map.entrySet()) {
-                        event.getEnchantsToAdd().put(EnchantmentTag.valueOf(enchantments.getKey().low, context).enchantment, enchantments.getValue().asType(ElementTag.class, context).asInt());
+                    for (Map.Entry<StringHolder, ObjectTag> enchantments : map.entrySet()) {
+                        event.getEnchantsToAdd().put(EnchantmentTag.valueOf(enchantments.getKey().low, context).enchantment, enchantments.getValue().asElement().asInt());
                     }
                 }
                 else {

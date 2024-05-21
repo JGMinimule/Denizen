@@ -5,7 +5,6 @@ import com.denizenscript.denizencore.utilities.ReflectionHelper;
 import com.denizenscript.denizen.nms.v1_17.Handler;
 import com.denizenscript.denizen.utilities.FormattedTextHelper;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
-import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.chat.ComponentSerializer;
 import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
@@ -13,7 +12,7 @@ import net.minecraft.network.protocol.game.ClientboundChatPacket;
 
 import java.lang.reflect.Field;
 
-public class PacketOutChatImpl implements PacketOutChat {
+public class PacketOutChatImpl extends PacketOutChat {
 
     private ClientboundChatPacket internal;
     private String message;
@@ -26,12 +25,12 @@ public class PacketOutChatImpl implements PacketOutChat {
         try {
             Component baseComponent = (Component) MESSAGE.get(internal);
             if (baseComponent != null) {
-                message = FormattedTextHelper.stringify(Handler.componentToSpigot(baseComponent), ChatColor.WHITE);
+                message = FormattedTextHelper.stringify(Handler.componentToSpigot(baseComponent));
                 rawJson = Component.Serializer.toJson(baseComponent);
             }
             else {
                 if (internal.components != null) {
-                    message = FormattedTextHelper.stringify(internal.components, ChatColor.WHITE);
+                    message = FormattedTextHelper.stringify(internal.components);
                     rawJson = ComponentSerializer.toString(internal.components);
                 }
                 bungee = true;
@@ -44,8 +43,13 @@ public class PacketOutChatImpl implements PacketOutChat {
     }
 
     @Override
-    public int getPosition() {
-        return position.ordinal();
+    public boolean isSystem() {
+        return position == ChatType.SYSTEM;
+    }
+
+    @Override
+    public boolean isActionbar() {
+        return position == ChatType.GAME_INFO;
     }
 
     @Override
@@ -58,32 +62,6 @@ public class PacketOutChatImpl implements PacketOutChat {
         return rawJson;
     }
 
-    @Override
-    public void setPosition(int position) {
-        try {
-            POSITION.set(internal, position);
-        }
-        catch (Exception e) {
-            Debug.echoError(e);
-        }
-    }
-
-    @Override
-    public void setMessage(String message) {
-        try {
-            if (!bungee) {
-                MESSAGE.set(internal, Handler.componentToNMS(FormattedTextHelper.parse(message, ChatColor.WHITE)));
-            }
-            else {
-                internal.components = FormattedTextHelper.parse(message, ChatColor.WHITE);
-            }
-        }
-        catch (Exception e) {
-            Debug.echoError(e);
-        }
-    }
-
-    @Override
     public void setRawJson(String rawJson) {
         try {
             if (!bungee) {

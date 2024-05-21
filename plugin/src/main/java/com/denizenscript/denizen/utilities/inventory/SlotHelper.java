@@ -1,5 +1,6 @@
 package com.denizenscript.denizen.utilities.inventory;
 
+import com.denizenscript.denizencore.events.ScriptEvent;
 import com.denizenscript.denizencore.objects.ArgumentHelper;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -8,15 +9,17 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 /**
  * Helper for player inventory slots.
- *
+ * <p>
  * These values are based on indices within the inventory contents array of a player.
- *
+ * <p>
  * These values are *NOT* equivalent to arbitrary Minecraft "slot ID" values, which are commonly mentioned online but have no connection to anything.
- *
+ * <p>
  * All values are Minecraft indices (0-based).
  */
 public class SlotHelper {
@@ -54,6 +57,9 @@ public class SlotHelper {
         if (item.equals(inventory.getItemInMainHand())) {
             return inventory.getHeldItemSlot();
         }
+        if (item.equals(inventory.getItemInOffHand())) {
+            return OFFHAND;
+        }
         ItemStack[] contents = inventory.getContents();
         for (int i = 0; i < contents.length; i++) {
             if (item.equals(contents[i])) {
@@ -78,6 +84,7 @@ public class SlotHelper {
     // OFFHAND: equivalent to 41
     //
     // Note that some common alternate spellings may be automatically accepted as well.
+    //
     // -->
     public static EquipmentSlot indexToEquipSlot(int index) {
         switch (index) {
@@ -114,19 +121,32 @@ public class SlotHelper {
     }
 
     public static final HashMap<String, Integer> nameIndexMap = new HashMap<>();
+    public static final List<String>[] indexNameMap = new List[50];
+
+    public static void registerSlotName(String name, int index) {
+        nameIndexMap.put(name, index);
+        nameIndexMap.put(name + "s", index);
+        List<String> list = indexNameMap[index];
+        if (list == null) {
+            list = new ArrayList<>();
+            indexNameMap[index] = list;
+        }
+        list.add(name);
+        list.add(name + "s");
+    }
 
     static {
-        nameIndexMap.put("boot", BOOTS);
-        nameIndexMap.put("feet", BOOTS);
-        nameIndexMap.put("foot", BOOTS);
-        nameIndexMap.put("shoe", BOOTS);
-        nameIndexMap.put("leg", LEGGINGS);
-        nameIndexMap.put("legging", LEGGINGS);
-        nameIndexMap.put("chest", CHESTPLATE);
-        nameIndexMap.put("chestplate", CHESTPLATE);
-        nameIndexMap.put("helmet", HELMET);
-        nameIndexMap.put("head", HELMET);
-        nameIndexMap.put("offhand", OFFHAND);
+        registerSlotName("boot", BOOTS);
+        registerSlotName("feet", BOOTS);
+        registerSlotName("foot", BOOTS);
+        registerSlotName("shoe", BOOTS);
+        registerSlotName("leg", LEGGINGS);
+        registerSlotName("legging", LEGGINGS);
+        registerSlotName("chest", CHESTPLATE);
+        registerSlotName("chestplate", CHESTPLATE);
+        registerSlotName("helmet", HELMET);
+        registerSlotName("head", HELMET);
+        registerSlotName("offhand", OFFHAND);
     }
 
     public static int nameToIndexFor(String name, InventoryHolder holder) {
@@ -139,9 +159,6 @@ public class SlotHelper {
      */
     public static int nameToIndex(String name, Entity entity) {
         name = name.toLowerCase().replace("_", "");
-        if (name.endsWith("s")) {
-            name = name.substring(0, name.length() - 1);
-        }
         if (name.equals("hand")) {
             return entity instanceof Player ? ((Player) entity).getInventory().getHeldItemSlot() : 0;
         }
@@ -153,5 +170,28 @@ public class SlotHelper {
             return Integer.parseInt(name) - 1;
         }
         return -1;
+    }
+
+    public static boolean doesMatch(String text, Entity entity, int slot) {
+        ScriptEvent.MatchHelper matcher = ScriptEvent.createMatcher(text);
+        if (slot >= 0 && slot < indexNameMap.length) {
+            List<String> names = indexNameMap[slot];
+            if (names != null) {
+                for (String name : names) {
+                    if (matcher.doesMatch(name)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        if (entity instanceof Player && slot == ((Player) entity).getInventory().getHeldItemSlot()) {
+            if (matcher.doesMatch("hand")) {
+                return true;
+            }
+        }
+        if (matcher.doesMatch(String.valueOf(slot + 1))) {
+            return true;
+        }
+        return false;
     }
 }

@@ -1,21 +1,22 @@
 package com.denizenscript.denizen.scripts.commands.entity;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
+import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import net.citizensnpcs.api.trait.trait.Equipment;
 import org.bukkit.Material;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Horse;
+import org.bukkit.entity.AbstractHorse;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Pig;
+import org.bukkit.entity.Steerable;
+import org.bukkit.inventory.HorseInventory;
 
 import java.util.*;
 
@@ -125,12 +126,15 @@ public class EquipCommand extends AbstractCommand {
     public void execute(ScriptEntry scriptEntry) {
         Map<String, ItemTag> equipment = (Map<String, ItemTag>) scriptEntry.getObject("equipment");
         List<EntityTag> entities = (List<EntityTag>) scriptEntry.getObject("entities");
+        if (entities == null) {
+            throw new InvalidArgumentsRuntimeException("Missing entity target input");
+        }
         if (scriptEntry.dbCallShouldDebug()) {
             Debug.report(scriptEntry, getName(), db("entities", entities), db("equipment", equipment));
         }
         for (EntityTag entity : entities) {
             if (entity.isGeneric()) {
-                Debug.echoError(scriptEntry.getResidingQueue(), "Cannot equip generic entity " + entity.identify() + "!");
+                Debug.echoError(scriptEntry, "Cannot equip generic entity " + entity.identify() + "!");
             }
             else if (entity.isCitizensNPC()) {
                 NPCTag npc = entity.getDenizenNPC();
@@ -157,22 +161,24 @@ public class EquipCommand extends AbstractCommand {
                     if (npc.isSpawned()) {
                         LivingEntity livingEntity = npc.getLivingEntity();
                         // TODO: Citizens API for this blob?
-                        if (livingEntity.getType() == EntityType.HORSE) {
+                        if (livingEntity instanceof AbstractHorse) {
                             if (equipment.get("saddle") != null) {
-                                ((Horse) livingEntity).getInventory().setSaddle(equipment.get("saddle").getItemStack());
+                                ((AbstractHorse) livingEntity).getInventory().setSaddle(equipment.get("saddle").getItemStack());
                             }
                             if (equipment.get("horse_armor") != null) {
-                                ((Horse) livingEntity).getInventory().setArmor(equipment.get("horse_armor").getItemStack());
+                                if(((AbstractHorse) livingEntity).getInventory() instanceof HorseInventory) {
+                                    ((HorseInventory) ((AbstractHorse) livingEntity).getInventory()).setArmor(equipment.get("horse_armor").getItemStack());
+                                }
                             }
                         }
-                        else if (livingEntity.getType() == EntityType.PIG) {
+                        else if (livingEntity instanceof Steerable) {
                             if (equipment.get("saddle") != null) {
                                 ItemTag saddle = equipment.get("saddle");
                                 if (saddle.getBukkitMaterial() == Material.SADDLE) {
-                                    ((Pig) livingEntity).setSaddle(true);
+                                    ((Steerable) livingEntity).setSaddle(true);
                                 }
                                 else {
-                                    ((Pig) livingEntity).setSaddle(false);
+                                    ((Steerable) livingEntity).setSaddle(false);
                                 }
                             }
                         }
@@ -182,22 +188,24 @@ public class EquipCommand extends AbstractCommand {
             else {
                 LivingEntity livingEntity = entity.getLivingEntity();
                 if (livingEntity != null) {
-                    if (livingEntity.getType() == EntityType.HORSE) {
+                    if (livingEntity instanceof AbstractHorse) {
                         if (equipment.get("saddle") != null) {
-                            ((Horse) livingEntity).getInventory().setSaddle(equipment.get("saddle").getItemStack());
+                            ((AbstractHorse) livingEntity).getInventory().setSaddle(equipment.get("saddle").getItemStack());
                         }
                         if (equipment.get("horse_armor") != null) {
-                            ((Horse) livingEntity).getInventory().setArmor(equipment.get("horse_armor").getItemStack());
+                            if(((AbstractHorse) livingEntity).getInventory() instanceof HorseInventory) {
+                                ((HorseInventory) ((AbstractHorse) livingEntity).getInventory()).setArmor(equipment.get("horse_armor").getItemStack());
+                            }
                         }
                     }
-                    else if (livingEntity.getType() == EntityType.PIG) {
+                    else if (livingEntity instanceof Steerable) {
                         if (equipment.get("saddle") != null) {
                             ItemTag saddle = equipment.get("saddle");
                             if (saddle.getBukkitMaterial() == Material.SADDLE) {
-                                ((Pig) livingEntity).setSaddle(true);
+                                ((Steerable) livingEntity).setSaddle(true);
                             }
                             else {
-                                ((Pig) livingEntity).setSaddle(false);
+                                ((Steerable) livingEntity).setSaddle(false);
                             }
                         }
                     }

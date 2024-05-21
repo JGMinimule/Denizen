@@ -1,18 +1,19 @@
 package com.denizenscript.denizen.utilities;
 
-import com.denizenscript.denizen.nms.NMSVersion;
-import com.denizenscript.denizen.objects.*;
-import com.denizenscript.denizen.objects.properties.material.MaterialDirectional;
-import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.nms.interfaces.BlockHelper;
 import com.denizenscript.denizen.npc.traits.TriggerTrait;
+import com.denizenscript.denizen.objects.*;
+import com.denizenscript.denizen.objects.properties.material.MaterialDirectional;
+import com.denizenscript.denizen.scripts.commands.world.SignCommand;
 import com.denizenscript.denizen.tags.BukkitTagContext;
-import com.denizenscript.denizen.utilities.blocks.MaterialCompat;
+import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
+import com.denizenscript.denizencore.events.ScriptEvent;
 import com.denizenscript.denizencore.objects.core.ScriptTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.tags.TagManager;
 import com.denizenscript.denizencore.utilities.AsciiMatcher;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import net.citizensnpcs.api.CitizensAPI;
@@ -26,6 +27,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.*;
+import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
 import java.io.File;
@@ -46,6 +48,28 @@ public class Utilities {
         else {
             return NamespacedKey.minecraft(cleanseNamespaceID(input));
         }
+    }
+
+    public static String namespacedKeyToString(NamespacedKey key) {
+        return key.getNamespace().equals(NamespacedKey.MINECRAFT) ? key.getKey() : key.toString();
+    }
+
+    public static boolean matchesNamespacedKeyButCaseInsensitive(String input) {
+        int colonIndex = input.indexOf(':');
+        if (colonIndex == -1) {
+            return namespaceMatcherButCaseInsensitive.isOnlyMatches(input);
+        }
+        return namespaceMatcherButCaseInsensitive.isOnlyMatches(input.substring(0, colonIndex)) && namespaceMatcherButCaseInsensitive.isOnlyMatches(input.substring(colonIndex + 1));
+    }
+
+    public static AsciiMatcher namespaceMatcherButCaseInsensitive = new AsciiMatcher(AsciiMatcher.LETTERS_LOWER + AsciiMatcher.LETTERS_UPPER + ".-_/" + AsciiMatcher.DIGITS);
+
+    public static boolean matchesNamespacedKey(String input) {
+        int colonIndex = input.indexOf(':');
+        if (colonIndex == -1) {
+            return namespaceMatcher.isOnlyMatches(input);
+        }
+        return namespaceMatcher.isOnlyMatches(input.substring(0, colonIndex)) && namespaceMatcher.isOnlyMatches(input.substring(colonIndex + 1));
     }
 
     public static AsciiMatcher namespaceMatcher = new AsciiMatcher(AsciiMatcher.LETTERS_LOWER + ".-_/" + AsciiMatcher.DIGITS);
@@ -81,6 +105,9 @@ public class Utilities {
         else if (recipe instanceof StonecuttingRecipe) {
             return "stonecutting";
         }
+        else if (recipe instanceof SmithingRecipe) {
+            return "smithing";
+        }
         Debug.echoError("Failed to determine recipe type for " + recipe.getClass().getName() + ": " + recipe);
         return null;
     }
@@ -95,7 +122,8 @@ public class Utilities {
                         (type.equals("shaped") && recipe instanceof ShapedRecipe) ||
                         (type.equals("shapeless") && recipe instanceof ShapelessRecipe) ||
                         (type.equals("smoking") && recipe instanceof SmokingRecipe) ||
-                        (type.equals("stonecutting") && recipe instanceof StonecuttingRecipe));
+                        (type.equals("stonecutting") && recipe instanceof StonecuttingRecipe) ||
+                        (type.equals("smithing") && recipe instanceof SmithingRecipe));
     }
 
     public static boolean canReadFile(File f) {
@@ -103,7 +131,21 @@ public class Utilities {
             return true;
         }
         try {
-            if (!Settings.allowStrangeYAMLSaves() &&
+            String lown = CoreUtilities.toLowerCase(f.getCanonicalPath()).replace('\\', '/');
+            if (lown.endsWith("/")) {
+                lown = lown.substring(0, lown.length() - 1);
+            }
+            if (CoreConfiguration.debugVerbose) {
+                Debug.log("Checking file canRead: " + lown);
+            }
+            if (lown.contains("denizen/secrets.secret")) {
+                return false;
+            }
+            int dot = lown.lastIndexOf('.');
+            if (dot != -1 && lown.substring(dot + 1).equals("secret")) {
+                return false;
+            }
+            if (!CoreConfiguration.allowStrangeFileSaves &&
                     !f.getCanonicalPath().startsWith(new File(".").getCanonicalPath())) {
                 return false;
             }
@@ -125,11 +167,15 @@ public class Utilities {
             "sh", "bash", // Linux scripts
             "bat", "ps1", "vb", "vbs", "vbscript", "batch", "cmd", "com", "msc", "sct", "ws", "wsf", // Windows scripts
             "exe", "scr", "msi", "dll", "bin", // Windows executables
-            "lnk", "reg", "rgs" // other weird Windows files
+            "lnk", "reg", "rgs", // other weird Windows files
+            "secret" // Protected by Denizen
     ));
 
     public static boolean isFileCanonicalStringSafeToWrite(String lown) {
         if (lown.contains("denizen/config.yml")) {
+            return false;
+        }
+        if (lown.contains("denizen/secrets.secret")) {
             return false;
         }
         if (lown.contains("denizen/scripts/")) {
@@ -154,10 +200,10 @@ public class Utilities {
             if (lown.endsWith("/")) {
                 lown = lown.substring(0, lown.length() - 1);
             }
-            if (Debug.verbose) {
-                Debug.log("Checking file : " + lown);
+            if (CoreConfiguration.debugVerbose) {
+                Debug.log("Checking file canWrite: " + lown);
             }
-            if (!Settings.allowStrangeYAMLSaves() &&
+            if (!CoreConfiguration.allowStrangeFileSaves &&
                     !f.getCanonicalPath().startsWith(new File(".").getCanonicalPath())) {
                 return false;
             }
@@ -219,7 +265,7 @@ public class Utilities {
         if (location.getBlockY() < 1 || location.getBlockY() > 254) {
             return false;
         }
-        BlockHelper blockHelper = NMSHandler.getBlockHelper();
+        BlockHelper blockHelper = NMSHandler.blockHelper;
         return location.clone().subtract(0, 1, 0).getBlock().getType().isSolid()
                 && !location.getBlock().getType().isSolid()
                 && !location.clone().add(0, 1, 0).getBlock().getType().isSolid();
@@ -289,8 +335,14 @@ public class Utilities {
         if (!checkLocation(baseLocation, entity.getLocation(), theLeeway + 16)) {
             return false;
         }
-        double distanceSq = NMSHandler.getEntityHelper().getBoundingBox(entity).distanceSquared(baseLocation.toVector());
-        return distanceSq < theLeeway * theLeeway;
+        BoundingBox box = entity.getBoundingBox();
+        double x = Math.max(box.getMinX(), Math.min(baseLocation.getX(), box.getMaxX()));
+        double y = Math.max(box.getMinY(), Math.min(baseLocation.getY(), box.getMaxY()));
+        double z = Math.max(box.getMinZ(), Math.min(baseLocation.getZ(), box.getMaxZ()));
+        double xOff = x - baseLocation.getX();
+        double yOff = y - baseLocation.getY();
+        double zOff = z - baseLocation.getZ();
+        return xOff * xOff + yOff * yOff + zOff * zOff < theLeeway * theLeeway;
     }
 
     public static boolean checkLocation(LivingEntity entity, Location theLocation, double theLeeway) {
@@ -306,7 +358,7 @@ public class Utilities {
 
     public static void setSignLines(Sign sign, String[] lines) {
         for (int n = 0; n < 4; n++) {
-            AdvancedTextImpl.instance.setSignLine(sign, n, lines[n]);
+            PaperAPITools.instance.setSignLine(sign, n, lines[n]);
         }
         sign.update();
     }
@@ -316,7 +368,7 @@ public class Utilities {
         for (BlockFace blockFace : blockFaces) {
             Block block = signBlock.getRelative(blockFace);
             Material material = block.getType();
-            if (material != Material.AIR && !MaterialCompat.isAnySign(material)) {
+            if (material != Material.AIR && !SignCommand.isAnySign(material)) {
                 return blockFace.getOppositeFace();
             }
         }
@@ -324,40 +376,23 @@ public class Utilities {
     }
 
     public static BlockFace chooseSignRotation(String direction) {
-        BlockFace[] blockFaces = {BlockFace.EAST, BlockFace.NORTH, BlockFace.WEST, BlockFace.SOUTH};
         String dirUpper = direction.toUpperCase();
-        String firstChar = dirUpper.substring(0, 1);
-        for (BlockFace blockFace : blockFaces) {
-            if (blockFace.name().startsWith(firstChar)) {
-                return blockFace;
-            }
-        }
-        for (BlockFace blockFace : BlockFace.values()) { // Avoid valueOf which throws exceptions on failure
+        for (BlockFace blockFace : MaterialDirectional.rotatableValidFaces) {
             if (blockFace.name().equals(dirUpper)) {
                 return blockFace;
             }
+        }
+        switch (dirUpper.charAt(0)) {
+            case 'N': return BlockFace.NORTH;
+            case 'S': return BlockFace.SOUTH;
+            case 'E': return BlockFace.EAST;
+            case 'W': return BlockFace.WEST;
         }
         return BlockFace.SOUTH;
     }
 
     public static void setSignRotation(BlockState signState, String direction) {
-        direction = CoreUtilities.toLowerCase(direction);
-        BlockFace bf;
-        if (direction.startsWith("n")) {
-            bf = BlockFace.NORTH;
-        }
-        else if (direction.startsWith("e")) {
-            bf = BlockFace.EAST;
-        }
-        else if (direction.startsWith("s")) {
-            bf = BlockFace.SOUTH;
-        }
-        else if (direction.startsWith("w")) {
-            bf = BlockFace.WEST;
-        }
-        else {
-            return;
-        }
+        BlockFace bf = chooseSignRotation(direction);
         MaterialTag signMaterial = new MaterialTag(signState.getBlock());
         MaterialDirectional.getFrom(signMaterial).setFacing(bf);
         signState.getBlock().setBlockData(signMaterial.getModernData());
@@ -483,12 +518,20 @@ public class Utilities {
     }
 
     public static boolean isLocationYSafe(double y, World world) {
-        if (NMSHandler.getVersion().isAtMost(NMSVersion.v1_16)) {
-            return y >= 0 && y <= 255;
-        }
         if (world == null) {
             return true;
         }
         return y >= world.getMinHeight() && y <= world.getMaxHeight();
+    }
+
+    public static ArrayList<Material> allMaterialsThatMatch(String matcherText) {
+        ScriptEvent.MatchHelper matcher = ScriptEvent.createMatcher(matcherText);
+        ArrayList<Material> mats = new ArrayList<>();
+        for (Material material : Material.values()) {
+            if (matcher.doesMatch(material.name()) && !material.name().startsWith("LEGACY_")) {
+                mats.add(material);
+            }
+        }
+        return mats;
     }
 }

@@ -1,25 +1,22 @@
 package com.denizenscript.denizen.scripts.commands.world;
 
-import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.interfaces.PacketHelper;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.PlayerTag;
+import com.denizenscript.denizen.utilities.Utilities;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
-import com.denizenscript.denizencore.objects.notable.Notable;
-import com.denizenscript.denizencore.objects.notable.NoteManager;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
 import org.bukkit.entity.Player;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class AnimateChestCommand extends AbstractCommand {
 
@@ -75,17 +72,15 @@ public class AnimateChestCommand extends AbstractCommand {
     enum ChestAction {OPEN, CLOSE}
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Notable note : NoteManager.notesByType.get(LocationTag.class)) {
-            addOne.accept(NoteManager.getSavedId(note));
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addNotesOfType(LocationTag.class);
     }
 
     @Override
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("action")
-                    && arg.matchesEnum(ChestAction.values())) {
+                    && arg.matchesEnum(ChestAction.class)) {
                 scriptEntry.addObject("action", arg.asElement());
             }
             else if (!scriptEntry.hasObject("location")
@@ -134,24 +129,23 @@ public class AnimateChestCommand extends AbstractCommand {
         if (scriptEntry.dbCallShouldDebug()) {
             Debug.report(scriptEntry, getName(), location,  db("block type", location.getBlock().getType().name()), action, sound, db("players", players));
         }
-        PacketHelper packetHelper = NMSHandler.getPacketHelper();
         switch (ChestAction.valueOf(action.asString().toUpperCase())) {
             case OPEN:
                 for (PlayerTag player : players) {
                     Player ent = player.getPlayerEntity();
                     if (sound.asBoolean()) {
-                        NMSHandler.getSoundHelper().playSound(ent, location, Sound.BLOCK_CHEST_OPEN, 1, 1, "BLOCKS");
+                        player.getPlayerEntity().playSound(location, Sound.BLOCK_CHEST_OPEN, SoundCategory.BLOCKS, 1, 1);
                     }
-                    packetHelper.showBlockAction(ent, location, 1, 1);
+                    NMSHandler.packetHelper.showBlockAction(ent, location, 1, 1);
                 }
                 break;
             case CLOSE:
                 for (PlayerTag player : players) {
                     Player ent = player.getPlayerEntity();
                     if (sound.asBoolean()) {
-                        NMSHandler.getSoundHelper().playSound(ent, location, Sound.BLOCK_CHEST_CLOSE, 1, 1, "BLOCKS");
+                        player.getPlayerEntity().playSound(location, Sound.BLOCK_CHEST_CLOSE, SoundCategory.BLOCKS, 1, 1);
                     }
-                    packetHelper.showBlockAction(ent, location, 1, 0);
+                    NMSHandler.packetHelper.showBlockAction(ent, location, 1, 0);
                 }
                 break;
         }

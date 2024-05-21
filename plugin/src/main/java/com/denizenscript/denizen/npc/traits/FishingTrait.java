@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.npc.traits;
 
 import com.denizenscript.denizen.objects.NPCTag;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.nms.interfaces.FishingHelper;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
@@ -22,26 +22,37 @@ import org.bukkit.util.Vector;
 public class FishingTrait extends Trait {
 
     @Persist("fishing")
-    private boolean fishing = false;
+    public boolean fishing = false;
     @Persist("catch type")
-    private FishingHelper.CatchType catchType = FishingHelper.CatchType.NONE;
+    public FishingHelper.CatchType catchType = FishingHelper.CatchType.NONE;
 
     @Persist("fishing spot")
-    private Location fishingLocation = null;
+    public Location fishingLocation = null;
 
-    FishHook fishHook = null;
-    Item fish = null;
+    public FishHook fishHook = null;
+    public Item fish = null;
 
     @Persist("catch chance")
-    int catchPercent = 65;
+    public int catchPercent = 65;
+
+    @Persist("reel tick rate")
+    public int reelTickRate = 400;
+
+    @Persist("cast tick rate")
+    public int castTickRate = 75;
 
     int reelCount = 100;
     int castCount = 0;
 
+    public boolean isCast = false;
+
+    @Override
+    public void onSpawn() {
+        isCast = false;
+    }
+
     @Override
     public void run() {
-        reelCount++;
-        castCount++;
         if (fish != null) {
             if (fish.getLocation().distance(npc.getStoredLocation()) < 3) {
                 try {
@@ -52,16 +63,23 @@ public class FishingTrait extends Trait {
             }
         }
         if (!fishing) {
+            isCast = false;
             return;
         }
-        if (reelCount >= 400) {
-            reel();
-            reelCount = 0;
-            castCount = 325;
+        if (isCast) {
+            reelCount++;
+            if (reelCount >= reelTickRate) {
+                reel();
+                reelCount = 0;
+                castCount = 0;
+            }
         }
-        if (castCount >= 400) {
-            cast();
-            castCount = 0;
+        else {
+            castCount++;
+            if (castCount >= castTickRate) {
+                cast();
+                castCount = 0;
+            }
         }
     }
 
@@ -163,10 +181,11 @@ public class FishingTrait extends Trait {
     // -->
     private void cast() {
         new NPCTag(npc).action("cast fishing rod", null);
-        if (fishingLocation == null) {
+        if (fishingLocation == null || fishingLocation.getWorld() == null || !fishingLocation.getWorld().equals(npc.getEntity().getWorld())) {
             Debug.echoError("Fishing location not found!");
             return;
         }
+        isCast = true;
         double v = 34;
         double g = 20;
         Location from = npc.getStoredLocation();
@@ -196,7 +215,7 @@ public class FishingTrait extends Trait {
         victor = victor.multiply(v / 20.0);
 
         if (npc.getEntity() instanceof Player) {
-            fishHook = NMSHandler.getFishingHelper().spawnHook(from, (Player) npc.getEntity());
+            fishHook = NMSHandler.fishingHelper.spawnHook(from, (Player) npc.getEntity());
             fishHook.setShooter((ProjectileSource) npc.getEntity());
             fishHook.setVelocity(victor);
             PlayerAnimation.ARM_SWING.play((Player) npc.getEntity());
@@ -225,6 +244,7 @@ public class FishingTrait extends Trait {
     //
     // -->
     private void reel() {
+        isCast = false;
         new NPCTag(npc).action("reel in fishing rod", null);
         int chance = (int) (Math.random() * 100);
         if (catchPercent > chance && fishHook != null && catchType != FishingHelper.CatchType.NONE) {
@@ -234,7 +254,7 @@ public class FishingTrait extends Trait {
             catch (Exception e) {
             }
             Location location = fishHook.getLocation();
-            ItemStack result = NMSHandler.getFishingHelper().getResult(fishHook, catchType);
+            ItemStack result = NMSHandler.fishingHelper.getResult(fishHook, catchType);
             if (result != null) {
                 fish = location.getWorld().dropItem(location, result);
                 Location npcLocation = npc.getStoredLocation();

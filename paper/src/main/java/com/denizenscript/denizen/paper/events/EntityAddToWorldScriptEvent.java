@@ -31,29 +31,22 @@ public class EntityAddToWorldScriptEvent extends BukkitScriptEvent implements Li
     // -->
 
     public EntityAddToWorldScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> added to world");
     }
 
-    public static EntityAddToWorldScriptEvent instance;
     public EntityTag entity;
     public LocationTag location;
     public EntityAddToWorldEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
         if (!runInCheck(path, location)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityAddToWorld";
     }
 
     @Override

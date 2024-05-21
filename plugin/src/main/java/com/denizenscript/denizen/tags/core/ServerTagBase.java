@@ -1,41 +1,44 @@
 package com.denizenscript.denizen.tags.core;
 
+import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
+import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.NMSVersion;
+import com.denizenscript.denizen.nms.interfaces.ItemHelper;
+import com.denizenscript.denizen.npc.traits.AssignmentTrait;
 import com.denizenscript.denizen.objects.*;
 import com.denizenscript.denizen.scripts.commands.server.BossBarCommand;
 import com.denizenscript.denizen.scripts.containers.core.AssignmentScriptContainer;
 import com.denizenscript.denizen.scripts.containers.core.CommandScriptHelper;
-import com.denizenscript.denizen.utilities.ScoreboardHelper;
-import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.VanillaTagHelper;
-import com.denizenscript.denizencore.objects.notable.NoteManager;
-import com.denizenscript.denizencore.utilities.debugging.Debug;
+import com.denizenscript.denizen.scripts.containers.core.ItemScriptHelper;
+import com.denizenscript.denizen.utilities.*;
 import com.denizenscript.denizen.utilities.depends.Depends;
 import com.denizenscript.denizen.utilities.inventory.SlotHelper;
-import com.denizenscript.denizencore.events.core.TickScriptEvent;
-import com.denizenscript.denizencore.objects.*;
-import com.denizenscript.denizen.Denizen;
-import com.denizenscript.denizen.utilities.Settings;
-import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.npc.traits.AssignmentTrait;
-import com.denizenscript.denizencore.objects.core.*;
-import com.denizenscript.denizencore.scripts.commands.core.SQLCommand;
-import com.denizenscript.denizen.tags.BukkitTagContext;
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.events.ScriptEvent;
+import com.denizenscript.denizencore.objects.Mechanism;
+import com.denizenscript.denizencore.objects.ObjectFetcher;
+import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.objects.core.*;
 import com.denizenscript.denizencore.objects.notable.Notable;
+import com.denizenscript.denizencore.objects.notable.NoteManager;
 import com.denizenscript.denizencore.scripts.ScriptRegistry;
+import com.denizenscript.denizencore.scripts.commands.core.AdjustCommand;
+import com.denizenscript.denizencore.scripts.commands.core.SQLCommand;
 import com.denizenscript.denizencore.scripts.containers.ScriptContainer;
 import com.denizenscript.denizencore.tags.Attribute;
-import com.denizenscript.denizencore.tags.ReplaceableTagEvent;
+import com.denizenscript.denizencore.tags.PseudoObjectTagBase;
 import com.denizenscript.denizencore.tags.TagManager;
 import com.denizenscript.denizencore.tags.TagRunnable;
+import com.denizenscript.denizencore.tags.core.UtilTagBase;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.denizencore.utilities.Deprecations;
-import com.denizenscript.denizencore.utilities.debugging.FutureWarning;
-import net.citizensnpcs.Citizens;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.text.StringHolder;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.citizensnpcs.api.CitizensAPI;
-import net.citizensnpcs.api.command.CommandContext;
 import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.api.trait.TraitInfo;
@@ -43,6 +46,7 @@ import org.bukkit.*;
 import org.bukkit.block.Biome;
 import org.bukkit.block.banner.PatternType;
 import org.bukkit.boss.BossBar;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.EntityType;
@@ -52,52 +56,59 @@ import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.loot.LootContext;
 import org.bukkit.loot.LootTable;
 import org.bukkit.map.MapCursor;
+import org.bukkit.permissions.Permission;
+import org.bukkit.permissions.PermissionDefault;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredListener;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.potion.PotionType;
-import org.bukkit.scoreboard.Objective;
-import org.bukkit.scoreboard.Scoreboard;
-import org.bukkit.scoreboard.Team;
+import org.bukkit.scoreboard.*;
+import org.bukkit.util.permissions.DefaultPermissions;
 
-import java.io.File;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.function.Consumer;
 
-public class ServerTagBase {
+public class ServerTagBase extends PseudoObjectTagBase<ServerTagBase> {
+
+    public static ServerTagBase instance;
+
+    // <--[ObjectType]
+    // @name server
+    // @prefix None
+    // @base None
+    // @ExampleAdjustObject server
+    // @format
+    // N/A
+    //
+    // @description
+    // "server" is an internal pseudo-ObjectType that is used as a mechanism adjust target for some global mechanisms.
+    //
+    // -->
 
     public ServerTagBase() {
-        TagManager.registerTagHandler(new TagRunnable.RootForm() {
-            @Override
-            public void run(ReplaceableTagEvent event) {
-                serverTag(event);
-            }
-        }, "server", "global");
+        instance = this;
+        TagManager.registerStaticTagBaseHandler(ServerTagBase.class, "server", (t) -> instance);
+        TagManager.registerStaticTagBaseHandler(ElementTag.class, "global", (attribute) -> {
+            BukkitImplDeprecations.globalTagName.warn(attribute.context);
+            return null;
+        });
+        AdjustCommand.specialAdjustables.put("server", mechanism -> tagProcessor.processMechanism(instance, mechanism));
     }
 
-    public static final long serverStartTimeMillis = System.currentTimeMillis();
-
-    public void serverTag(ReplaceableTagEvent event) {
-        if (!event.matches("server", "global") || event.replaced()) {
-            return;
-        }
-        if (event.matches("global")) {
-            Deprecations.globalTagName.warn(event.getScriptEntry());
-        }
-        Attribute attribute = event.getAttributes().fulfill(1);
-
-        if (attribute.startsWith("economy")) {
+    @Override
+    public void register() {
+        tagProcessor.registerTag(ElementTag.class, "economy", (attribute, object) -> {
             if (Depends.economy == null) {
                 attribute.echoError("No economy loaded! Have you installed Vault and a compatible economy plugin?");
-                return;
+                return null;
             }
-            attribute = attribute.fulfill(1);
 
             // <--[tag]
             // @attribute <server.economy.format[<#.#>]>
@@ -106,11 +117,9 @@ public class ServerTagBase {
             // @description
             // Returns the amount of money, formatted according to the server's economy.
             // -->
-            if (attribute.startsWith("format") && attribute.hasParam()) {
-                double amount = attribute.getDoubleParam();
-                event.setReplacedObject(new ElementTag(Depends.economy.format(amount))
-                        .getObjectAttribute(attribute.fulfill(1)));
-                return;
+            if (attribute.startsWith("format", 2) && attribute.hasContext(2)) {
+                attribute.fulfill(1);
+                return new ElementTag(Depends.economy.format(attribute.getDoubleParam()));
             }
 
             // <--[tag]
@@ -120,11 +129,9 @@ public class ServerTagBase {
             // @description
             // Returns the server's economy currency name (automatically singular or plural based on input value).
             // -->
-            if (attribute.startsWith("currency_name") && attribute.hasParam()) {
-                double amount = attribute.getDoubleParam();
-                event.setReplacedObject(new ElementTag(amount == 1 ? Depends.economy.currencyNameSingular() : Depends.economy.currencyNamePlural())
-                        .getObjectAttribute(attribute.fulfill(1)));
-                return;
+            if (attribute.startsWith("currency_name", 2) && attribute.hasContext(2)) {
+                attribute.fulfill(1);
+                return new ElementTag(attribute.getDoubleParam() == 1 ? Depends.economy.currencyNameSingular() : Depends.economy.currencyNamePlural());
             }
 
             // <--[tag]
@@ -134,10 +141,9 @@ public class ServerTagBase {
             // @description
             // Returns the server's economy currency name (in the plural form, like "Dollars").
             // -->
-            if (attribute.startsWith("currency_plural")) {
-                event.setReplacedObject(new ElementTag(Depends.economy.currencyNamePlural())
-                        .getObjectAttribute(attribute.fulfill(1)));
-                return;
+            if (attribute.startsWith("currency_plural", 2)) {
+                attribute.fulfill(1);
+                return new ElementTag(Depends.economy.currencyNamePlural());
             }
 
             // <--[tag]
@@ -147,13 +153,13 @@ public class ServerTagBase {
             // @description
             // Returns the server's economy currency name (in the singular form, like "Dollar").
             // -->
-            if (attribute.startsWith("currency_singular")) {
-                event.setReplacedObject(new ElementTag(Depends.economy.currencyNameSingular())
-                        .getObjectAttribute(attribute.fulfill(1)));
-                return;
+            if (attribute.startsWith("currency_singular", 2)) {
+                attribute.fulfill(1);
+                return new ElementTag(Depends.economy.currencyNameSingular());
             }
-            return;
-        }
+
+            return null;
+        });
 
         // <--[tag]
         // @attribute <server.slot_id[<slot>]>
@@ -161,13 +167,10 @@ public class ServerTagBase {
         // @description
         // Returns the slot ID number for an input slot (see <@link language Slot Inputs>).
         // -->
-        if (attribute.startsWith("slot_id") && attribute.hasParam()) {
-            int slotId = SlotHelper.nameToIndex(attribute.getParam(), null);
-            if (slotId != -1) {
-                event.setReplacedObject(new ElementTag(slotId).getObjectAttribute(attribute.fulfill(1)));
-            }
-            return;
-        }
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "slot_id", (attribute, object, input) -> {
+            int slotId = SlotHelper.nameToIndex(input.asString(), null);
+            return slotId != -1 ? new ElementTag(slotId) : null;
+        });
 
         // <--[tag]
         // @attribute <server.parse_bukkit_item[<serial>]>
@@ -175,20 +178,20 @@ public class ServerTagBase {
         // @description
         // Returns the ItemTag resultant from parsing Bukkit item serialization data (under subkey "item").
         // -->
-        if (attribute.startsWith("parse_bukkit_item") && attribute.hasParam()) {
+        tagProcessor.registerTag(ItemTag.class, ElementTag.class, "parse_bukkit_item", (attribute, object, input) -> {
             YamlConfiguration config = new YamlConfiguration();
             try {
-                config.loadFromString(attribute.getParam());
+                config.loadFromString(input.asString());
                 ItemStack item = config.getItemStack("item");
                 if (item != null) {
-                    event.setReplacedObject(new ItemTag(item).getObjectAttribute(attribute.fulfill(1)));
+                    return new ItemTag(item);
                 }
             }
             catch (Exception ex) {
                 Debug.echoError(ex);
             }
-            return;
-        }
+            return null;
+        });
 
         // <--[tag]
         // @attribute <server.recipe_ids[(<type>)]>
@@ -196,24 +199,29 @@ public class ServerTagBase {
         // @description
         // Returns a list of all recipe IDs on the server.
         // Returns a list in the Namespace:Key format, for example "minecraft:gold_nugget".
-        // Optionally, specify a recipe type (CRAFTING, FURNACE, COOKING, BLASTING, SHAPED, SHAPELESS, SMOKING, CAMPFIRE, STONECUTTING)
+        // Optionally, specify a recipe type (CRAFTING, FURNACE, COOKING, BLASTING, SHAPED, SHAPELESS, SMOKING, CAMPFIRE, STONECUTTING, SMITHING, BREWING)
         // to limit to just recipes of that type.
+        // Brewing recipes are only supported on Paper, and only custom ones are available.
         // Note: this will produce an error if all recipes of any one type have been removed from the server, due to an error in Spigot.
         // -->
-        if (attribute.startsWith("recipe_ids") || attribute.startsWith("list_recipe_ids")) {
+        tagProcessor.registerTag(ListTag.class, "recipe_ids", (attribute, object) -> {
             listDeprecateWarn(attribute);
             String type = attribute.hasParam() ? CoreUtilities.toLowerCase(attribute.getParam()) : null;
-            ListTag list = new ListTag();
-            Iterator<Recipe> recipeIterator = Bukkit.recipeIterator();
-            while (recipeIterator.hasNext()) {
-                Recipe recipe = recipeIterator.next();
-                if (Utilities.isRecipeOfType(recipe, type) && recipe instanceof Keyed) {
-                    list.add(((Keyed) recipe).getKey().toString());
+            ListTag recipeIds = new ListTag();
+            if (type == null || !type.equals("brewing")) {
+                Bukkit.recipeIterator().forEachRemaining(recipe -> {
+                    if (recipe instanceof Keyed keyedRecipe && Utilities.isRecipeOfType(recipe, type)) {
+                        recipeIds.add(keyedRecipe.getKey().toString());
+                    }
+                });
+            }
+            if (Denizen.supportsPaper && NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18) && (type == null || type.equals("brewing"))) {
+                for (NamespacedKey brewingRecipe : NMSHandler.itemHelper.getCustomBrewingRecipes().keySet()) {
+                    recipeIds.add(brewingRecipe.toString());
                 }
             }
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return recipeIds;
+        }, "list_recipe_ids");
 
         // <--[tag]
         // @attribute <server.recipe_items[<id>]>
@@ -222,47 +230,72 @@ public class ServerTagBase {
         // Returns a list of the items used as input to the recipe within the input ID.
         // This is formatted equivalently to the item script recipe input, with "material:" for non-exact matches, and a full ItemTag for exact matches.
         // Note that this won't represent all recipes perfectly (primarily those with multiple input choices per slot).
-        // For furnace-style recipes, this will return a list with only 1 item.
+        // Brewing recipes are only supported on Paper, and only custom ones are available.
+        // For brewing recipes, currently "matcher:<item matcher>" input options are only supported in recipes added by Denizen.
+        // For furnace-style and stonecutting recipes, this will return a list with only 1 item.
         // For shaped recipes, this will include 'air' for slots that are part of the shape but don't require an item.
+        // For smithing recipes, this will return a list with the 'base' item and the 'addition'.
         // -->
-        if (attribute.startsWith("recipe_items") && attribute.hasParam()) {
-            NamespacedKey key = Utilities.parseNamespacedKey(attribute.getParam());
-            Recipe recipe = NMSHandler.getItemHelper().getRecipeById(key);
-            if (recipe == null) {
-                return;
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "recipe_items", (attribute, object, input) -> {
+            NamespacedKey recipeKey = Utilities.parseNamespacedKey(input.asString());
+            Recipe recipe = Bukkit.getRecipe(recipeKey);
+            ItemHelper.BrewingRecipe brewingRecipe = Denizen.supportsPaper && NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18) ? NMSHandler.itemHelper.getCustomBrewingRecipes().get(recipeKey) : null;
+            if (recipe == null && brewingRecipe == null) {
+                return null;
             }
-            ListTag result = new ListTag();
+            ListTag recipeItems = new ListTag();
             Consumer<RecipeChoice> addChoice = (choice) -> {
                 if (choice == null) {
-                    result.addObject(new ItemTag(Material.AIR));
+                    recipeItems.addObject(new ItemTag(Material.AIR));
                 }
                 else {
                     if (choice instanceof RecipeChoice.ExactChoice) {
-                        result.addObject(new ItemTag(choice.getItemStack()));
+                        recipeItems.addObject(new ItemTag(choice.getItemStack()));
                     }
                     else {
-                        result.add("material:" + choice.getItemStack().getType().name());
+                        recipeItems.add("material:" + choice.getItemStack().getType().name());
                     }
                 }
             };
-            if (recipe instanceof ShapedRecipe) {
-                for (String row : ((ShapedRecipe) recipe).getShape()) {
+            if (recipe instanceof ShapedRecipe shapedRecipe) {
+                Map<Character, RecipeChoice> choiceMap = shapedRecipe.getChoiceMap();
+                for (String row : shapedRecipe.getShape()) {
                     for (char column : row.toCharArray()) {
-                        addChoice.accept(((ShapedRecipe) recipe).getChoiceMap().get(column));
+                        addChoice.accept(choiceMap.get(column));
                     }
                 }
             }
-            else if (recipe instanceof ShapelessRecipe) {
-                for (RecipeChoice choice : ((ShapelessRecipe) recipe).getChoiceList()) {
+            else if (recipe instanceof ShapelessRecipe shapelessRecipe) {
+                for (RecipeChoice choice : shapelessRecipe.getChoiceList()) {
                     addChoice.accept(choice);
                 }
             }
-            else if (recipe instanceof CookingRecipe<?>) {
-                addChoice.accept(((CookingRecipe) recipe).getInputChoice());
+            else if (recipe instanceof CookingRecipe<?> cookingRecipe) {
+                addChoice.accept(cookingRecipe.getInputChoice());
             }
-            event.setReplacedObject(result.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            else if (recipe instanceof StonecuttingRecipe stonecuttingRecipe) {
+                addChoice.accept(stonecuttingRecipe.getInputChoice());
+            }
+            else if (recipe instanceof SmithingRecipe smithingRecipe) {
+                addChoice.accept(smithingRecipe.getBase());
+                addChoice.accept(smithingRecipe.getAddition());
+            }
+            else if (brewingRecipe != null) {
+                if (brewingRecipe.ingredient() instanceof RecipeChoice.ExactChoice || brewingRecipe.ingredient() instanceof RecipeChoice.MaterialChoice) {
+                    addChoice.accept(brewingRecipe.ingredient());
+                }
+                else {
+                    recipeItems.addObject(new ElementTag(PaperAPITools.instance.getBrewingRecipeIngredientMatcher(recipeKey), true));
+                }
+                if (brewingRecipe.input() instanceof RecipeChoice.ExactChoice || brewingRecipe.input() instanceof RecipeChoice.MaterialChoice) {
+                    addChoice.accept(brewingRecipe.input());
+                }
+                else {
+                    recipeItems.addObject(new ElementTag(PaperAPITools.instance.getBrewingRecipeInputMatcher(recipeKey), true));
+                }
+            }
+            return recipeItems;
+        });
 
         // <--[tag]
         // @attribute <server.recipe_shape[<id>]>
@@ -270,49 +303,55 @@ public class ServerTagBase {
         // @description
         // Returns the shape of a shaped recipe, like '2x2' or '3x3'.
         // -->
-        if (attribute.startsWith("recipe_shape") && attribute.hasParam()) {
-            NamespacedKey key = Utilities.parseNamespacedKey(attribute.getParam());
-            Recipe recipe = NMSHandler.getItemHelper().getRecipeById(key);
-            if (!(recipe instanceof ShapedRecipe)) {
-                return;
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "recipe_shape", (attribute, object, input) -> {
+            if (Bukkit.getRecipe(Utilities.parseNamespacedKey(input.asString())) instanceof ShapedRecipe shapedRecipe) {
+                String[] shape = shapedRecipe.getShape();
+                return new ElementTag(shape[0].length() + "x" + shape.length);
             }
-            String[] shape = ((ShapedRecipe) recipe).getShape();
-            event.setReplacedObject(new ElementTag(shape[0].length() + "x" + shape.length).getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return null;
+        });
 
         // <--[tag]
         // @attribute <server.recipe_type[<id>]>
         // @returns ElementTag
         // @description
         // Returns the type of recipe that the given recipe ID is.
-        // Will be one of FURNACE, BLASTING, SHAPED, SHAPELESS, SMOKING, CAMPFIRE, STONECUTTING.
+        // Will be one of FURNACE, BLASTING, SHAPED, SHAPELESS, SMOKING, CAMPFIRE, STONECUTTING, SMITHING, BREWING.
+        // Brewing recipes are only supported on Paper, and only custom ones are available.
         // -->
-        if (attribute.startsWith("recipe_type") && attribute.hasParam()) {
-            NamespacedKey key = Utilities.parseNamespacedKey(attribute.getParam());
-            Recipe recipe = NMSHandler.getItemHelper().getRecipeById(key);
-            if (recipe == null) {
-                return;
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "recipe_type", (attribute, object, input) -> {
+            NamespacedKey recipeKey = Utilities.parseNamespacedKey(input.asString());
+            Recipe recipe = Bukkit.getRecipe(recipeKey);
+            if (recipe != null) {
+                return new ElementTag(Utilities.getRecipeType(recipe));
             }
-            event.setReplacedObject(new ElementTag(Utilities.getRecipeType(recipe)).getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            if (Denizen.supportsPaper && NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18) && NMSHandler.itemHelper.getCustomBrewingRecipes().containsKey(recipeKey)) {
+                return new ElementTag("brewing");
+            }
+            return null;
+        });
 
         // <--[tag]
         // @attribute <server.recipe_result[<id>]>
         // @returns ItemTag
         // @description
         // Returns the item that a recipe will create when crafted.
+        // Brewing recipes are only supported on Paper, and only custom ones are available.
         // -->
-        if (attribute.startsWith("recipe_result") && attribute.hasParam()) {
-            NamespacedKey key = Utilities.parseNamespacedKey(attribute.getParam());
-            Recipe recipe = NMSHandler.getItemHelper().getRecipeById(key);
-            if (recipe == null) {
-                return;
+        tagProcessor.registerTag(ItemTag.class, ElementTag.class, "recipe_result", (attribute, object, input) -> {
+            NamespacedKey recipeKey = Utilities.parseNamespacedKey(input.asString());
+            Recipe recipe = Bukkit.getRecipe(recipeKey);
+            if (recipe != null) {
+                return new ItemTag(recipe.getResult());
             }
-            event.setReplacedObject(new ItemTag(recipe.getResult()).getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            if (Denizen.supportsPaper && NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18)) {
+                ItemHelper.BrewingRecipe brewingRecipe = NMSHandler.itemHelper.getCustomBrewingRecipes().get(recipeKey);
+                if (brewingRecipe != null) {
+                    return new ItemTag(brewingRecipe.result());
+                }
+            }
+            return null;
+        });
 
         // <--[tag]
         // @attribute <server.scoreboards>
@@ -320,18 +359,17 @@ public class ServerTagBase {
         // @description
         // Returns a list of scoreboard IDs currently registered on the server.
         // -->
-        if (attribute.startsWith("scoreboards")) {
-            ListTag result = new ListTag();
+        tagProcessor.registerTag(ListTag.class, "scoreboards", (attribute, object) -> {
+            ListTag scoreboards = new ListTag(ScoreboardHelper.scoreboardMap.size());
             for (String board : ScoreboardHelper.scoreboardMap.keySet()) {
-                result.addObject(new ElementTag(board));
+                scoreboards.addObject(new ElementTag(board, true));
             }
-            event.setReplacedObject(result.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return scoreboards;
+        });
 
-        if (attribute.startsWith("scoreboard")) {
-            Scoreboard board;
+        tagProcessor.registerTag(ObjectTag.class, "scoreboard", (attribute, object) -> {
             String name = "main";
+            Scoreboard board;
             if (attribute.hasParam()) {
                 name = attribute.getParam();
                 board = ScoreboardHelper.getScoreboard(name);
@@ -339,7 +377,6 @@ public class ServerTagBase {
             else {
                 board = ScoreboardHelper.getMain();
             }
-            attribute = attribute.fulfill(1);
 
             // <--[tag]
             // @attribute <server.scoreboard[<board>].exists>
@@ -347,13 +384,13 @@ public class ServerTagBase {
             // @description
             // Returns whether a given scoreboard exists on the server.
             // -->
-            if (attribute.startsWith("exists")) {
-                event.setReplacedObject(new ElementTag(board != null).getObjectAttribute(attribute.fulfill(1)));
-                return;
+            if (attribute.startsWith("exists", 2)) {
+                attribute.fulfill(1);
+                return new ElementTag(board != null);
             }
             if (board == null) {
                 attribute.echoError("Scoreboard '" + name + "' does not exist.");
-                return;
+                return null;
             }
 
             // <--[tag]
@@ -363,21 +400,22 @@ public class ServerTagBase {
             // Returns a list of all objective names in the scoreboard.
             // Optionally, specify which scoreboard to use.
             // -->
-            if (attribute.startsWith("objectives")) {
-                ListTag list = new ListTag();
+            if (attribute.startsWith("objectives", 2)) {
+                attribute.fulfill(1);
+                ListTag objectives = new ListTag();
                 for (Objective objective : board.getObjectives()) {
-                    list.add(objective.getName());
+                    objectives.add(objective.getName());
                 }
-                event.setReplacedObject((list).getObjectAttribute(attribute.fulfill(1)));
+                return objectives;
             }
 
-            if (attribute.startsWith("objective") && attribute.hasParam()) {
+            if (attribute.startsWith("objective", 2) && attribute.hasContext(2)) {
+                attribute.fulfill(1);
                 Objective objective = board.getObjective(attribute.getParam());
                 if (objective == null) {
                     attribute.echoError("Scoreboard objective '" + attribute.getParam() + "' does not exist.");
-                    return;
+                    return null;
                 }
-                attribute = attribute.fulfill(1);
 
                 // <--[tag]
                 // @attribute <server.scoreboard[(<board>)].objective[<name>].criteria>
@@ -386,8 +424,9 @@ public class ServerTagBase {
                 // Returns the criteria specified for the given objective.
                 // Optionally, specify which scoreboard to use.
                 // -->
-                if (attribute.startsWith("criteria")) {
-                    event.setReplacedObject(new ElementTag(objective.getCriteria()).getObjectAttribute(attribute.fulfill(1)));
+                if (attribute.startsWith("criteria", 2)) {
+                    attribute.fulfill(1);
+                    return new ElementTag(objective.getCriteria()); // TODO: once minimum supported version is 1.19 or above, use getTrackedCriteria().getName()
                 }
 
                 // <--[tag]
@@ -397,23 +436,48 @@ public class ServerTagBase {
                 // Returns the display name specified for the given objective.
                 // Optionally, specify which scoreboard to use.
                 // -->
-                if (attribute.startsWith("display_name")) {
-                    event.setReplacedObject(new ElementTag(objective.getDisplayName()).getObjectAttribute(attribute.fulfill(1)));
+                if (attribute.startsWith("display_name", 2)) {
+                    attribute.fulfill(1);
+                    return new ElementTag(objective.getDisplayName());
                 }
 
                 // <--[tag]
                 // @attribute <server.scoreboard[(<board>)].objective[<name>].display_slot>
                 // @returns ElementTag
                 // @description
-                // Returns the display slot specified for the given objective. Can be: BELOW_NAME, PLAYER_LIST, or SIDEBAR.
+                // Returns the display slot specified for the given objective. Can be any of <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/scoreboard/DisplaySlot.html>.
                 // Note that not all objectives have a display slot.
                 // Optionally, specify which scoreboard to use.
                 // -->
-                if (attribute.startsWith("display_slot")) {
-                    if (objective.getDisplaySlot() == null) {
-                        return;
+                if (attribute.startsWith("display_slot", 2)) {
+                    attribute.fulfill(1);
+                    DisplaySlot displaySlot = objective.getDisplaySlot();
+                    return displaySlot != null ? new ElementTag(displaySlot) : null;
+                }
+
+                // <--[tag]
+                // @attribute <server.scoreboard[(<board>)].objective[<name>].score[<input>]>
+                // @returns ElementTag(Number)
+                // @description
+                // Returns the current score in the objective for the given input.
+                // Input can be a PlayerTag (translates to name internally), EntityTag (translates to UUID internally) or any plaintext score holder label.
+                // Optionally, specify which scoreboard to use.
+                // -->
+                if (attribute.startsWith("score", 2) && attribute.hasContext(2)) {
+                    attribute.fulfill(1);
+                    String value;
+                    ObjectTag param = attribute.getParamObject();
+                    if (param.shouldBeType(PlayerTag.class)) {
+                        value = param.asType(PlayerTag.class, attribute.context).getName();
                     }
-                    event.setReplacedObject(new ElementTag(objective.getDisplaySlot().name()).getObjectAttribute(attribute.fulfill(1)));
+                    else if (param.shouldBeType(EntityTag.class)) {
+                        value = param.asType(EntityTag.class, attribute.context).getUUID().toString();
+                    }
+                    else {
+                        value = param.toString();
+                    }
+                    Score score = objective.getScore(value);
+                    return score.isScoreSet() ? new ElementTag(score.getScore()) : null;
                 }
             }
 
@@ -424,21 +488,22 @@ public class ServerTagBase {
             // Returns a list of the names of all teams within the scoreboard.
             // Optionally, specify which scoreboard to use.
             // -->
-            if (attribute.startsWith("team_names")) {
-                ListTag result = new ListTag();
+            if (attribute.startsWith("team_names", 2)) {
+                attribute.fulfill(1);
+                ListTag teams = new ListTag();
                 for (Team team : board.getTeams()) {
-                    result.add(team.getName());
+                    teams.add(team.getName());
                 }
-                event.setReplacedObject(result.getObjectAttribute(attribute.fulfill(1)));
+                return teams;
             }
 
-            if (attribute.startsWith("team") && attribute.hasParam()) {
+            if (attribute.startsWith("team", 2) && attribute.hasContext(2)) {
+                attribute.fulfill(1);
                 Team team = board.getTeam(attribute.getParam());
                 if (team == null) {
                     attribute.echoError("Scoreboard team '" + attribute.getParam() + "' does not exist.");
-                    return;
+                    return null;
                 }
-                attribute = attribute.fulfill(1);
 
                 // <--[tag]
                 // @attribute <server.scoreboard[(<board>)].team[<team>].members>
@@ -448,35 +513,75 @@ public class ServerTagBase {
                 // Members are not necessarily written in any given format and are not guaranteed to validly fit any requirements.
                 // Optionally, specify which scoreboard to use.
                 // -->
-                if (attribute.startsWith("members")) {
-                    event.setReplacedObject(new ListTag(team.getEntries()).getObjectAttribute(attribute.fulfill(1)));
+                if (attribute.startsWith("members", 2)) {
+                    attribute.fulfill(1);
+                    return new ListTag(team.getEntries());
                 }
-                return;
+
+                // <--[tag]
+                // @attribute <server.scoreboard[(<board>)].team[<team>].prefix>
+                // @returns ElementTag
+                // @description
+                // Returns the team's prefix.
+                // Optionally, specify which scoreboard to use.
+                // -->
+                if (attribute.startsWith("prefix", 2)) {
+                    attribute.fulfill(1);
+                    return new ElementTag(PaperAPITools.instance.getTeamPrefix(team));
+                }
+
+                // <--[tag]
+                // @attribute <server.scoreboard[(<board>)].team[<team>].suffix>
+                // @returns ElementTag
+                // @description
+                // Returns the team's suffix.
+                // Optionally, specify which scoreboard to use.
+                // -->
+                if (attribute.startsWith("suffix", 2)) {
+                    attribute.fulfill(1);
+                    return new ElementTag(PaperAPITools.instance.getTeamSuffix(team));
+                }
             }
-        }
+            return null;
+        });
 
         // <--[tag]
         // @attribute <server.object_is_valid[<object>]>
         // @returns ElementTag(Boolean)
+        // @deprecated Use 'exists' or 'is_truthy'
         // @description
-        // Returns whether the object is a valid object (non-null), as well as not an ElementTag.
+        // Deprecated in favor of <@link tag ObjectTag.exists> or <@link tag ObjectTag.is_truthy>
         // -->
-        if (attribute.startsWith("object_is_valid")) {
-            ObjectTag o = ObjectFetcher.pickObjectFor(attribute.getParam(), new BukkitTagContext(null, null, null, false, null));
-            event.setReplacedObject(new ElementTag(!(o == null || o instanceof ElementTag)).getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+        tagProcessor.registerTag(ElementTag.class, ObjectTag.class, "object_is_valid", (attribute, object, input) -> {
+            BukkitImplDeprecations.serverObjectExistsTags.warn(attribute.context);
+            ObjectTag o = ObjectFetcher.pickObjectFor(input.toString(), CoreUtilities.noDebugContext);
+            return new ElementTag(!(o == null || o instanceof ElementTag));
+        });
 
         // <--[tag]
         // @attribute <server.has_whitelist>
         // @returns ElementTag(Boolean)
+        // @mechanism server.has_whitelist
         // @description
-        // Returns true if the server's whitelist is active, otherwise returns false.
+        // Returns whether the server's whitelist is active.
         // -->
-        if (attribute.startsWith("has_whitelist")) {
-            event.setReplacedObject(new ElementTag(Bukkit.hasWhitelist()).getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+        tagProcessor.registerTag(ElementTag.class, "has_whitelist", (attribute, object) -> {
+            return new ElementTag(Bukkit.hasWhitelist());
+        });
+
+        // <--[tag]
+        // @attribute <server.whitelisted_players>
+        // @returns ListTag(PlayerTag)
+        // @description
+        // Returns a list of all players whitelisted on this server.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "whitelisted_players", (attribute, object) -> {
+            ListTag whitelisted = new ListTag();
+            for (OfflinePlayer player : Bukkit.getWhitelistedPlayers()) {
+                whitelisted.addObject(new PlayerTag(player));
+            }
+            return whitelisted;
+        });
 
         // <--[tag]
         // @attribute <server.has_flag[<flag_name>]>
@@ -484,92 +589,62 @@ public class ServerTagBase {
         // @description
         // See <@link tag FlaggableObject.has_flag>
         // -->
-        if (attribute.startsWith("has_flag")) {
-            event.setReplacedObject(DenizenCore.serverFlagMap.doHasFlagTag(attribute)
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "has_flag", (attribute, object, input) -> {
+            return DenizenCore.serverFlagMap.doHasFlagTag(attribute);
+        });
+
         // <--[tag]
         // @attribute <server.flag_expiration[<flag_name>]>
         // @returns TimeTag
         // @description
         // See <@link tag FlaggableObject.flag_expiration>
         // -->
-        if (attribute.startsWith("flag_expiration")) {
-            TimeTag exp = DenizenCore.serverFlagMap.doFlagExpirationTag(attribute);
-            if (exp != null) {
-                event.setReplacedObject(exp
-                        .getObjectAttribute(attribute.fulfill(1)));
-            }
-            return;
-        }
+        tagProcessor.registerTag(TimeTag.class, ElementTag.class, "flag_expiration", (attribute, object, input) -> {
+            return DenizenCore.serverFlagMap.doFlagExpirationTag(attribute);
+        });
         // <--[tag]
         // @attribute <server.flag[<flag_name>]>
         // @returns ObjectTag
         // @description
         // See <@link tag FlaggableObject.flag>
         // -->
-        if (attribute.startsWith("flag")) {
-            ObjectTag flag = DenizenCore.serverFlagMap.doFlagTag(attribute);
-            if (flag != null) {
-                event.setReplacedObject(flag
-                        .getObjectAttribute(attribute.fulfill(1)));
-            }
-            return;
-        }
+        tagProcessor.registerTag(ObjectTag.class, ElementTag.class, "flag", (attribute, object, input) -> {
+            return DenizenCore.serverFlagMap.doFlagTag(attribute);
+        });
+
         // <--[tag]
         // @attribute <server.list_flags>
         // @returns ListTag
         // @description
         // See <@link tag FlaggableObject.list_flags>
         // -->
-        if (attribute.startsWith("list_flags")) {
-            event.setReplacedObject(DenizenCore.serverFlagMap.doListFlagsTag(attribute)
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+        tagProcessor.registerTag(ListTag.class, "list_flags", (attribute, object) -> {
+            return DenizenCore.serverFlagMap.doListFlagsTag(attribute);
+        });
+
         // <--[tag]
-        // @attribute <server.flag_map>
+        // @attribute <server.flag_map[<name>|...]>
         // @returns MapTag
         // @description
         // See <@link tag FlaggableObject.flag_map>
         // -->
-        if (attribute.startsWith("flag_map")) {
-            event.setReplacedObject(DenizenCore.serverFlagMap.doFlagMapTag(attribute)
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+        tagProcessor.registerTag(MapTag.class, "flag_map", (attribute, object) -> {
+            return DenizenCore.serverFlagMap.doFlagMapTag(attribute);
+        });
 
         // <--[tag]
         // @attribute <server.gamerules>
-        // @Plugin Citizens
         // @returns ListTag
         // @description
         // Returns a list of all available gamerules on the server.
         // -->
-        if (attribute.startsWith("gamerules")) {
-            ListTag allGameRules = new ListTag();
-            for (GameRule rule : GameRule.values()) {
-                allGameRules.add(rule.getName());
+        tagProcessor.registerStaticTag(ListTag.class, "gamerules", (attribute, object) -> {
+            ListTag gamerules = new ListTag();
+            for (GameRule<?> rule : GameRule.values()) {
+                gamerules.add(rule.getName());
             }
-            event.setReplacedObject(allGameRules.getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.traits>
-        // @Plugin Citizens
-        // @returns ListTag
-        // @description
-        // Returns a list of all available NPC traits on the server.
-        // -->
-        if ((attribute.startsWith("traits") || attribute.startsWith("list_traits")) && Depends.citizens != null) {
-            listDeprecateWarn(attribute);
-            ListTag allTraits = new ListTag();
-            for (TraitInfo trait : CitizensAPI.getTraitFactory().getRegisteredTraits()) {
-                allTraits.add(trait.getTraitName());
-            }
-            event.setReplacedObject(allTraits.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return gamerules;
+        });
 
         // <--[tag]
         // @attribute <server.commands>
@@ -577,13 +652,25 @@ public class ServerTagBase {
         // @description
         // Returns a list of all registered command names in Bukkit.
         // -->
-        if (attribute.startsWith("commands") || attribute.startsWith("list_commands")) {
+        tagProcessor.registerTag(ListTag.class, "commands", (attribute, object) -> {
             listDeprecateWarn(attribute);
             CommandScriptHelper.init();
-            ListTag list = new ListTag(CommandScriptHelper.knownCommands.keySet());
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return new ListTag(CommandScriptHelper.knownCommands.keySet());
+        }, "list_commands");
+
+        // <--[tag]
+        // @attribute <server.command_plugin[<name>]>
+        // @returns PluginTag
+        // @description
+        // Returns the plugin that created a command (if known).
+        // @example
+        // # Should show "Denizen".
+        // - narrate <server.command_plugin[ex].name>
+        // -->
+        tagProcessor.registerTag(PluginTag.class, ElementTag.class, "command_plugin", (attribute, object, input) -> {
+            PluginCommand command = Bukkit.getPluginCommand(input.asString());
+            return command != null ? new PluginTag(command.getPlugin()) : null;
+        });
 
         // <--[tag]
         // @attribute <server.art_types>
@@ -593,15 +680,7 @@ public class ServerTagBase {
         // Generally used with <@link tag EntityTag.painting> and <@link mechanism EntityTag.painting>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Art.html>.
         // -->
-        if (attribute.startsWith("art_types")) {
-            listDeprecateWarn(attribute);
-            ListTag list = new ListTag();
-            for (Art art : Art.values()) {
-                list.add(art.name());
-            }
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+        registerEnumListTag("art_types", Art.class);
 
         // <--[tag]
         // @attribute <server.advancement_types>
@@ -609,20 +688,14 @@ public class ServerTagBase {
         // @description
         // Returns a list of all registered advancement names.
         // Generally used with <@link tag PlayerTag.has_advancement>.
-        // See also <@link url https://minecraft.fandom.com/wiki/Advancement>.
+        // See also <@link url https://minecraft.wiki/w/Advancement>.
         // -->
-        if (attribute.startsWith("advancement_types") || attribute.startsWith("list_advancements")) {
-            if (attribute.matches("list_advancements")) {
-                Debug.echoError("list_advancements is deprecated: use advancement_types");
-            }
+        tagProcessor.registerTag(ListTag.class, "advancement_types", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag list = new ListTag();
-            Bukkit.advancementIterator().forEachRemaining((adv) -> {
-                list.add(adv.getKey().toString());
-            });
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            ListTag advancements = new ListTag();
+            Bukkit.advancementIterator().forEachRemaining(adv -> advancements.add(adv.getKey().toString()));
+            return advancements;
+        }, "list_advancements");
 
         // <--[tag]
         // @attribute <server.nbt_attribute_types>
@@ -632,15 +705,7 @@ public class ServerTagBase {
         // Generally used with <@link tag EntityTag.has_attribute>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/attribute/Attribute.html>.
         // -->
-        if (attribute.startsWith("nbt_attribute_types") || attribute.startsWith("list_nbt_attribute_types")) {
-            listDeprecateWarn(attribute);
-            ListTag list = new ListTag();
-            for (org.bukkit.attribute.Attribute attribType : org.bukkit.attribute.Attribute.values()) {
-                list.add(attribType.name());
-            }
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+        registerEnumListTag("nbt_attribute_types", org.bukkit.attribute.Attribute.class, "list_nbt_attribute_types");
 
         // <--[tag]
         // @attribute <server.damage_causes>
@@ -650,15 +715,17 @@ public class ServerTagBase {
         // Generally used with <@link event entity damaged>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/event/entity/EntityDamageEvent.DamageCause.html>.
         // -->
-        if (attribute.startsWith("damage_causes") || attribute.startsWith("list_damage_causes")) {
-            listDeprecateWarn(attribute);
-            ListTag list = new ListTag();
-            for (EntityDamageEvent.DamageCause damageCause : EntityDamageEvent.DamageCause.values()) {
-                list.add(damageCause.name());
-            }
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+        registerEnumListTag("damage_causes", EntityDamageEvent.DamageCause.class, "list_damage_causes");
+
+        // <--[tag]
+        // @attribute <server.teleport_causes>
+        // @returns ListTag
+        // @description
+        // Returns a list of all registered player teleport causes.
+        // Generally used with <@link event entity teleports>.
+        // See <@link language teleport cause> for the current list of causes.
+        // -->
+        registerEnumListTag("teleport_causes", PlayerTeleportEvent.TeleportCause.class);
 
         // <--[tag]
         // @attribute <server.biome_types>
@@ -668,23 +735,17 @@ public class ServerTagBase {
         // Generally used with <@link objecttype BiomeTag>.
         // This is based on Bukkit Biome enum, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/block/Biome.html>.
         // -->
-        if (attribute.startsWith("biome_types") || attribute.startsWith("list_biome_types")) {
+        tagProcessor.registerStaticTag(ListTag.class, "biome_types", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag allBiomes = new ListTag();
+            ListTag biomes = new ListTag();
             for (Biome biome : Biome.values()) {
-                allBiomes.addObject(new BiomeTag(biome));
+                BiomeTag biomeTag = new BiomeTag(biome);
+                if (biomeTag.getBiome() != null) {
+                    biomes.addObject(biomeTag);
+                }
             }
-            event.setReplacedObject(allBiomes.getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        if (attribute.startsWith("list_biomes")) {
-            Deprecations.serverListBiomeNames.warn(attribute.context);
-            ListTag allBiomes = new ListTag();
-            for (Biome biome : Biome.values()) {
-                allBiomes.add(biome.name());
-            }
-            event.setReplacedObject(allBiomes.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return biomes;
+        }, "list_biome_types");
 
         // <--[tag]
         // @attribute <server.enchantments>
@@ -692,36 +753,33 @@ public class ServerTagBase {
         // @description
         // Returns a list of all enchantments known to the server.
         // -->
-        if (attribute.startsWith("enchantments")) {
-            ListTag enchants = new ListTag();
-            for (Enchantment ench : Enchantment.values()) {
-                enchants.addObject(new EnchantmentTag(ench));
+        tagProcessor.registerTag(ListTag.class, "enchantments", (attribute, object) -> {
+            ListTag enchantments = new ListTag();
+            for (Enchantment enchantment : Enchantment.values()) {
+                enchantments.addObject(new EnchantmentTag(enchantment));
             }
-            event.setReplacedObject(enchants.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return enchantments;
+        });
 
-        if (attribute.startsWith("enchantment_types") || attribute.startsWith("list_enchantments")) {
-            Deprecations.echantmentTagUpdate.warn(attribute.context);
-            if (attribute.matches("list_enchantments")) {
-                Debug.echoError("list_enchantments is deprecated: use enchantment_types");
-            }
+        tagProcessor.registerTag(ListTag.class, "enchantment_types", (attribute, object) -> {
+            BukkitImplDeprecations.echantmentTagUpdate.warn(attribute.context);
             listDeprecateWarn(attribute);
             ListTag enchants = new ListTag();
             for (Enchantment e : Enchantment.values()) {
                 enchants.add(e.getName());
             }
-            event.setReplacedObject(enchants.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return enchants;
+        }, "list_enchantments");
 
-        if (attribute.startsWith("enchantment_keys") || attribute.startsWith("list_enchantment_keys")) {
-            Deprecations.echantmentTagUpdate.warn(attribute.context);
+        tagProcessor.registerTag(ListTag.class, "enchantment_keys", (attribute, object) -> {
+            BukkitImplDeprecations.echantmentTagUpdate.warn(attribute.context);
             listDeprecateWarn(attribute);
             ListTag enchants = new ListTag();
             for (Enchantment e : Enchantment.values()) {
                 enchants.add(e.getKey().getKey());
             }
-            event.setReplacedObject(enchants.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return enchants;
+        }, "list_enchantment_keys");
 
         // <--[tag]
         // @attribute <server.entity_types>
@@ -731,14 +789,16 @@ public class ServerTagBase {
         // Generally used with <@link objecttype EntityTag>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/EntityType.html>.
         // -->
-        if (attribute.startsWith("entity_types") || attribute.startsWith("list_entity_types")) {
+        tagProcessor.registerStaticTag(ListTag.class, "entity_types", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag allEnt = new ListTag();
-            for (EntityType entity : EntityType.values()) {
-                allEnt.add(entity.name());
+            ListTag entityTypes = new ListTag();
+            for (EntityType entityType : EntityType.values()) {
+                if (entityType != EntityType.UNKNOWN) {
+                    entityTypes.add(entityType.name());
+                }
             }
-            event.setReplacedObject(allEnt.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return entityTypes;
+        }, "list_entity_types");
 
         // <--[tag]
         // @attribute <server.material_types>
@@ -748,23 +808,14 @@ public class ServerTagBase {
         // Generally used with <@link objecttype MaterialTag>.
         // This is only types listed in the Bukkit Material enum, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html>.
         // -->
-        if (attribute.startsWith("material_types") || attribute.startsWith("list_material_types")) {
+        tagProcessor.registerStaticTag(ListTag.class, "material_types", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag allMats = new ListTag();
-            for (Material mat : Material.values()) {
-                allMats.addObject(new MaterialTag(mat));
+            ListTag materials = new ListTag();
+            for (Material material : Material.values()) {
+                materials.addObject(new MaterialTag(material));
             }
-            event.setReplacedObject(allMats.getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        if (attribute.startsWith("list_materials")) {
-            Deprecations.serverListMaterialNames.warn(attribute.context);
-            ListTag allMats = new ListTag();
-            for (Material mat : Material.values()) {
-                allMats.add(mat.name());
-            }
-            event.setReplacedObject(allMats.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return materials;
+        }, "list_material_types");
 
         // <--[tag]
         // @attribute <server.sound_types>
@@ -774,17 +825,7 @@ public class ServerTagBase {
         // Generally used with <@link command playsound>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Sound.html>.
         // -->
-        if (attribute.startsWith("sound_types") || attribute.startsWith("list_sounds")) {
-            if (attribute.matches("list_sounds")) {
-                Debug.echoError("list_sounds is deprecated: use sound_types");
-            }
-            listDeprecateWarn(attribute);
-            ListTag sounds = new ListTag();
-            for (Sound s : Sound.values()) {
-                sounds.add(s.toString());
-            }
-            event.setReplacedObject(sounds.getObjectAttribute(attribute.fulfill(1)));
-        }
+        registerEnumListTag("sound_types", Sound.class, "list_sounds");
 
         // <--[tag]
         // @attribute <server.particle_types>
@@ -795,17 +836,7 @@ public class ServerTagBase {
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Particle.html>.
         // Refer also to <@link tag server.effect_types>.
         // -->
-        if (attribute.startsWith("particle_types") || attribute.startsWith("list_particles")) {
-            if (attribute.matches("list_particles")) {
-                Debug.echoError("list_particles is deprecated: use particle_types");
-            }
-            listDeprecateWarn(attribute);
-            ListTag particleTypes = new ListTag();
-            for (Particle particle : Particle.values()) {
-                particleTypes.add(particle.toString());
-            }
-            event.setReplacedObject(particleTypes.getObjectAttribute(attribute.fulfill(1)));
-        }
+        registerEnumListTag("particle_types", Particle.class, "list_particles");
 
         // <--[tag]
         // @attribute <server.effect_types>
@@ -816,17 +847,7 @@ public class ServerTagBase {
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Effect.html>.
         // Refer also to <@link tag server.particle_types>.
         // -->
-        if (attribute.startsWith("effect_types") || attribute.startsWith("list_effects")) {
-            if (attribute.matches("list_effects")) {
-                Debug.echoError("list_effects is deprecated: use effect_types");
-            }
-            listDeprecateWarn(attribute);
-            ListTag effectTypes = new ListTag();
-            for (Effect effect : Effect.values()) {
-                effectTypes.add(effect.toString());
-            }
-            event.setReplacedObject(effectTypes.getObjectAttribute(attribute.fulfill(1)));
-        }
+        registerEnumListTag("effect_types", Effect.class, "list_effects");
 
         // <--[tag]
         // @attribute <server.pattern_types>
@@ -836,17 +857,7 @@ public class ServerTagBase {
         // Generally used with <@link tag ItemTag.patterns>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/block/banner/PatternType.html>.
         // -->
-        if (attribute.startsWith("pattern_types") || attribute.startsWith("list_patterns")) {
-            if (attribute.matches("list_patterns")) {
-                Debug.echoError("list_patterns is deprecated: use pattern_types");
-            }
-            listDeprecateWarn(attribute);
-            ListTag allPatterns = new ListTag();
-            for (PatternType pat : PatternType.values()) {
-                allPatterns.add(pat.toString());
-            }
-            event.setReplacedObject(allPatterns.getObjectAttribute(attribute.fulfill(1)));
-        }
+        registerEnumListTag("pattern_types", PatternType.class, "list_patterns");
 
         // <--[tag]
         // @attribute <server.potion_effect_types>
@@ -857,19 +868,16 @@ public class ServerTagBase {
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/potion/PotionEffectType.html>.
         // Refer also to <@link tag server.potion_types>.
         // -->
-        if (attribute.startsWith("potion_effect_types") || attribute.startsWith("list_potion_effects")) {
-            if (attribute.matches("list_potion_effects")) {
-                Debug.echoError("list_potion_effects is deprecated: use potion_effect_types");
-            }
+        tagProcessor.registerTag(ListTag.class, "potion_effect_types", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag statuses = new ListTag();
-            for (PotionEffectType effect : PotionEffectType.values()) {
-                if (effect != null) {
-                    statuses.add(effect.getName());
+            ListTag potionEffects = new ListTag();
+            for (PotionEffectType potionEffect : PotionEffectType.values()) {
+                if (potionEffect != null) {
+                    potionEffects.add(potionEffect.getName());
                 }
             }
-            event.setReplacedObject(statuses.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return potionEffects;
+        }, "list_potion_effects");
 
         // <--[tag]
         // @attribute <server.potion_types>
@@ -879,14 +887,7 @@ public class ServerTagBase {
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/potion/PotionType.html>.
         // Refer also to <@link tag server.potion_effect_types>.
         // -->
-        if (attribute.startsWith("potion_types") || attribute.startsWith("list_potion_types")) {
-            listDeprecateWarn(attribute);
-            ListTag potionTypes = new ListTag();
-            for (PotionType type : PotionType.values()) {
-                potionTypes.add(type.toString());
-            }
-            event.setReplacedObject(potionTypes.getObjectAttribute(attribute.fulfill(1)));
-        }
+        registerEnumListTag("potion_types", PotionType.class, "list_potion_types");
 
         // <--[tag]
         // @attribute <server.tree_types>
@@ -896,14 +897,7 @@ public class ServerTagBase {
         // Generally used with <@link mechanism LocationTag.generate_tree>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/TreeType.html>.
         // -->
-        if (attribute.startsWith("tree_types") || attribute.startsWith("list_tree_types")) {
-            listDeprecateWarn(attribute);
-            ListTag allTrees = new ListTag();
-            for (TreeType tree : TreeType.values()) {
-                allTrees.add(tree.name());
-            }
-            event.setReplacedObject(allTrees.getObjectAttribute(attribute.fulfill(1)));
-        }
+        registerEnumListTag("tree_types", TreeType.class, "list_tree_types");
 
         // <--[tag]
         // @attribute <server.map_cursor_types>
@@ -913,14 +907,7 @@ public class ServerTagBase {
         // Generally used with <@link command map> and <@link language Map Script Containers>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/map/MapCursor.Type.html>.
         // -->
-        if (attribute.startsWith("map_cursor_types") || attribute.startsWith("list_map_cursor_types")) {
-            listDeprecateWarn(attribute);
-            ListTag mapCursors = new ListTag();
-            for (MapCursor.Type cursor : MapCursor.Type.values()) {
-                mapCursors.add(cursor.toString());
-            }
-            event.setReplacedObject(mapCursors.getObjectAttribute(attribute.fulfill(1)));
-        }
+        registerEnumListTag("map_cursor_types", MapCursor.Type.class, "list_map_cursor_types");
 
         // <--[tag]
         // @attribute <server.world_types>
@@ -930,14 +917,7 @@ public class ServerTagBase {
         // Generally used with <@link command createworld>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/WorldType.html>.
         // -->
-        if (attribute.startsWith("world_types") || attribute.startsWith("list_world_types")) {
-            listDeprecateWarn(attribute);
-            ListTag worldTypes = new ListTag();
-            for (WorldType world : WorldType.values()) {
-                worldTypes.add(world.toString());
-            }
-            event.setReplacedObject(worldTypes.getObjectAttribute(attribute.fulfill(1)));
-        }
+        registerEnumListTag("world_types", WorldType.class, "list_world_types");
 
         // <--[tag]
         // @attribute <server.statistic_types[(<type>)]>
@@ -946,53 +926,81 @@ public class ServerTagBase {
         // Returns a list of all statistic types known to the server.
         // Generally used with <@link tag PlayerTag.statistic>.
         // This is only their Bukkit enum names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Statistic.html>.
-        // Optionally, specify a type to limit to statistics of a given type. Valid types: UNTYPED, ITEM, ENTITY, or BLOCK.
+        // Optionally, specify a type to limit to statistics of a given type. Can be any of <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Statistic.Type.html>.
         // Refer also to <@link tag server.statistic_type>.
         // -->
-        if (attribute.startsWith("statistic_types") || attribute.startsWith("list_statistics")) {
+        tagProcessor.registerStaticTag(ListTag.class, "statistic_types", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            if (attribute.matches("list_statistics")) {
-                Debug.echoError("list_statistics is deprecated: use statistic_types");
-            }
-            Statistic.Type type = null;
-            if (attribute.hasParam()) {
-                type = Statistic.Type.valueOf(attribute.getParam().toUpperCase());
-            }
-            ListTag statisticTypes = new ListTag();
-            for (Statistic stat : Statistic.values()) {
-                if (type == null || type == stat.getType()) {
-                    statisticTypes.add(stat.toString());
+            Statistic.Type type = attribute.hasParam() ? attribute.getParamElement().asEnum(Statistic.Type.class) : null;
+            ListTag statistics = new ListTag();
+            for (Statistic statistic : Statistic.values()) {
+                if (type == null || type == statistic.getType()) {
+                    statistics.add(statistic.name());
                 }
             }
-            event.setReplacedObject(statisticTypes.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return statistics;
+        }, "list_statistics");
 
         // <--[tag]
         // @attribute <server.structure_types>
         // @returns ListTag
+        // @deprecated use 'server.structures' on 1.19+.
         // @description
-        // Returns a list of all structure types known to the server.
-        // Generally used with <@link tag LocationTag.find.structure.within>.
-        // This is NOT their Bukkit names, as seen at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/StructureType.html>.
-        // Instead these are the internal names tracked by Spigot and presumably matching Minecraft internals.
-        // These are all lowercase, as the internal names are lowercase and supposedly are case-sensitive.
-        // It is unclear why the "StructureType" class in Bukkit is not simply an enum as most similar listings are.
+        // Deprecated in favor of <@link tag server.structures> on 1.19+.
         // -->
-        if (attribute.startsWith("structure_types") || attribute.startsWith("list_structure_types")) {
+        tagProcessor.registerTag(ListTag.class, "structure_types", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            event.setReplacedObject(new ListTag(StructureType.getStructureTypes().keySet()).getObjectAttribute(attribute.fulfill(1)));
+            if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19)) {
+                BukkitImplDeprecations.oldStructureTypes.warn(attribute.context);
+            }
+            return new ListTag(StructureType.getStructureTypes().keySet());
+        }, "list_structure_types");
+
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19)) {
+
+            // <--[tag]
+            // @attribute <server.structures>
+            // @returns ListTag
+            // @description
+            // Returns a list of all structures known to the server, including custom ones added by datapacks.
+            // For more information and a list of default structures, see <@link url https://minecraft.wiki/w/Structure>.
+            // For locating specific structures, see <@link language Structure lookups>.
+            // -->
+            tagProcessor.registerTag(ListTag.class, "structures", (attribute, object) -> {
+                return new ListTag(Registry.STRUCTURE.stream().toList(), structure -> new ElementTag(Utilities.namespacedKeyToString(structure.getKey()), true));
+            });
         }
 
         // <--[tag]
-        // @attribute <server.notes[<type>]>
-        // @returns ListTag
+        // @attribute <server.statistic_type[<statistic>]>
+        // @returns ElementTag
         // @description
-        // Lists all saved notable objects of a specific type currently on the server.
-        // Valid types: locations, cuboids, ellipsoids, inventories, polygons
-        // This is primarily intended for debugging purposes, and it's best to avoid using this in a live script if possible.
+        // Returns the qualifier type of the given statistic, will be one of <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Statistic.Type.html>.
+        // Generally relevant to usage with <@link tag PlayerTag.statistic.qualifier>.
+        // Refer also to <@link tag server.statistic_types>.
         // -->
-        if (attribute.startsWith("notes") || attribute.startsWith("list_notables") || attribute.startsWith("notables")) {
+        tagProcessor.registerStaticTag(ElementTag.class, ElementTag.class, "statistic_type", (attribute, object, input) -> {
+            Statistic statistic = input.asEnum(Statistic.class);
+            if (statistic == null) {
+                attribute.echoError("Statistic '" + input + "' does not exist.");
+                return null;
+            }
+            return new ElementTag(statistic.getType());
+        });
+
+        tagProcessor.registerTag(ElementTag.class, EnchantmentTag.class, "enchantment_max_level", (attribute, object, input) -> {
+            BukkitImplDeprecations.echantmentTagUpdate.warn(attribute.context);
+            return new ElementTag(input.enchantment.getMaxLevel());
+        });
+        tagProcessor.registerTag(ElementTag.class, EnchantmentTag.class, "enchantment_start_level", (attribute, object, input) -> {
+            BukkitImplDeprecations.echantmentTagUpdate.warn(attribute.context);
+            return new ElementTag(input.enchantment.getStartLevel());
+        });
+
+        // Historical variants of "notes" tag
+        tagProcessor.registerTag(ListTag.class, "notables", (attribute, object) -> {
             listDeprecateWarn(attribute);
+            BukkitImplDeprecations.serverUtilTags.warn(attribute.context);
             ListTag allNotables = new ListTag();
             if (attribute.hasParam()) {
                 String type = CoreUtilities.toLowerCase(attribute.getParam());
@@ -1010,406 +1018,12 @@ public class ServerTagBase {
                     allNotables.addObject((ObjectTag) notable);
                 }
             }
-            event.setReplacedObject(allNotables.getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.statistic_type[<statistic>]>
-        // @returns ElementTag
-        // @description
-        // Returns the qualifier type of the given statistic.
-        // Generally relevant to usage with <@link tag PlayerTag.statistic.qualifier>.
-        // Returns UNTYPED, ITEM, ENTITY, or BLOCK.
-        // Refer also to <@link tag server.statistic_types>.
-        // -->
-        if (attribute.startsWith("statistic_type") && attribute.hasParam()) {
-            Statistic statistic;
-            try {
-                statistic = Statistic.valueOf(attribute.getParam().toUpperCase());
-            }
-            catch (IllegalArgumentException ex) {
-                attribute.echoError("Statistic '" + attribute.getParam() + "' does not exist: " + ex.getMessage());
-                return;
-            }
-            event.setReplacedObject(new ElementTag(statistic.getType().name()).getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        if (attribute.startsWith("enchantment_max_level") && attribute.hasParam()) {
-            Deprecations.echantmentTagUpdate.warn(attribute.context);
-            EnchantmentTag ench = EnchantmentTag.valueOf(attribute.getParam(), attribute.context);
-            if (ench == null) {
-                attribute.echoError("Enchantment '" + attribute.getParam() + "' does not exist.");
-                return;
-            }
-            event.setReplacedObject(new ElementTag(ench.enchantment.getMaxLevel()).getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        if (attribute.startsWith("enchantment_start_level") && attribute.hasParam()) {
-            Deprecations.echantmentTagUpdate.warn(attribute.context);
-            EnchantmentTag ench = EnchantmentTag.valueOf(attribute.getParam(), attribute.context);
-            if (ench == null) {
-                attribute.echoError("Enchantment '" + attribute.getParam() + "' does not exist.");
-                return;
-            }
-            event.setReplacedObject(new ElementTag(ench.enchantment.getStartLevel()).getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.started_time>
-        // @returns TimeTag
-        // @description
-        // Returns the time the server started.
-        // -->
-        if (attribute.startsWith("started_time")) {
-            event.setReplacedObject(new TimeTag(DenizenCore.startTime)
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-        if (attribute.startsWith("start_time")) {
-            Deprecations.timeTagRewrite.warn(attribute.context);
-            event.setReplacedObject(new DurationTag(DenizenCore.startTime / 50)
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.disk_free>
-        // @returns ElementTag(Number)
-        // @description
-        // How much remaining disk space is available to this server, in bytes.
-        // This counts only the drive the server folder is on, not any other drives.
-        // This may be limited below the actual drive capacity by operating system settings.
-        // -->
-        if (attribute.startsWith("disk_free")) {
-            File folder = Denizen.getInstance().getDataFolder();
-            event.setReplacedObject(new ElementTag(folder.getUsableSpace())
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.disk_total>
-        // @returns ElementTag(Number)
-        // @description
-        // How much total disk space is on the drive containing this server, in bytes.
-        // This counts only the drive the server folder is on, not any other drives.
-        // -->
-        if (attribute.startsWith("disk_total")) {
-            File folder = Denizen.getInstance().getDataFolder();
-            event.setReplacedObject(new ElementTag(folder.getTotalSpace())
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.disk_usage>
-        // @returns ElementTag(Number)
-        // @description
-        // How much space on the drive is already in use, in bytes.
-        // This counts only the drive the server folder is on, not any other drives.
-        // This is approximately equivalent to "disk_total" minus "disk_free", but is not always exactly the same,
-        // as this tag will not include space "used" by operating system settings that simply deny the server write access.
-        // -->
-        if (attribute.startsWith("disk_usage")) {
-            File folder = Denizen.getInstance().getDataFolder();
-            event.setReplacedObject(new ElementTag(folder.getTotalSpace() - folder.getFreeSpace())
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.ram_allocated>
-        // @returns ElementTag(Number)
-        // @description
-        // How much RAM is allocated to the server, in bytes (total memory).
-        // This is how much of the system memory is reserved by the Java process, NOT how much is actually in use
-        // by the minecraft server.
-        // -->
-        if (attribute.startsWith("ram_allocated")) {
-            event.setReplacedObject(new ElementTag(Runtime.getRuntime().totalMemory())
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.ram_max>
-        // @returns ElementTag(Number)
-        // @description
-        // How much RAM is available to the server (total), in bytes (max memory).
-        // -->
-        if (attribute.startsWith("ram_max")) {
-            event.setReplacedObject(new ElementTag(Runtime.getRuntime().maxMemory())
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.ram_free>
-        // @returns ElementTag(Number)
-        // @description
-        // How much RAM is unused but available on the server, in bytes (free memory).
-        // -->
-        if (attribute.startsWith("ram_free")) {
-            event.setReplacedObject(new ElementTag(Runtime.getRuntime().freeMemory())
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.ram_usage>
-        // @returns ElementTag(Number)
-        // @description
-        // How much RAM is used by the server, in bytes (free memory).
-        // Equivalent to ram_max minus ram_free
-        // -->
-        if (attribute.startsWith("ram_usage")) {
-            event.setReplacedObject(new ElementTag(Runtime.getRuntime().maxMemory() - Runtime.getRuntime().freeMemory())
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.available_processors>
-        // @returns ElementTag(Number)
-        // @description
-        // How many virtual processors are available to the server.
-        // (In general, Minecraft only uses one, unfortunately.)
-        // -->
-        if (attribute.startsWith("available_processors")) {
-            event.setReplacedObject(new ElementTag(Runtime.getRuntime().availableProcessors())
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.current_tick>
-        // @returns ElementTag(Number)
-        // @description
-        // Returns the number of ticks since the server was started.
-        // Note that this is NOT an accurate indicator for real server uptime, as ticks fluctuate based on server lag.
-        // -->
-        if (attribute.startsWith("current_tick")) {
-            event.setReplacedObject(new ElementTag(TickScriptEvent.instance.ticks)
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.delta_time_since_start>
-        // @returns DurationTag
-        // @description
-        // Returns the duration of delta time since the server started.
-        // Note that this is delta time, not real time, meaning it is calculated based on the server tick,
-        // which may change longer or shorter than expected due to lag or other influences.
-        // If you want real time instead of delta time, use <@link tag server.real_time_since_start>.
-        // -->
-        if (attribute.startsWith("delta_time_since_start")) {
-            event.setReplacedObject(new DurationTag(TickScriptEvent.instance.ticks)
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.real_time_since_start>
-        // @returns DurationTag
-        // @description
-        // Returns the duration of real time since the server started.
-        // Note that this is real time, not delta time, meaning that the it is accurate to the system clock, not the server's tick.
-        // System clock changes may cause this value to become inaccurate.
-        // In many cases <@link tag server.delta_time_since_start> is preferable.
-        // -->
-        if (attribute.startsWith("real_time_since_start")) {
-            event.setReplacedObject(new DurationTag((System.currentTimeMillis() - serverStartTimeMillis) / 1000.0)
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.current_time_millis>
-        // @returns ElementTag(Number)
-        // @description
-        // Returns the number of milliseconds since Jan 1, 1970.
-        // Note that this can change every time the tag is read!
-        // -->
-        if (attribute.startsWith("current_time_millis")) {
-            event.setReplacedObject(new ElementTag(System.currentTimeMillis())
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.selected_npc>
-        // @returns NPCTag
-        // @description
-        // Returns the server's currently selected NPC.
-        // -->
-        if (attribute.startsWith("selected_npc")) {
-            NPC npc = ((Citizens) Bukkit.getPluginManager().getPlugin("Citizens"))
-                    .getNPCSelector().getSelected(Bukkit.getConsoleSender());
-            if (npc == null) {
-                return;
-            }
-            else {
-                event.setReplacedObject(new NPCTag(npc).getObjectAttribute(attribute.fulfill(1)));
-            }
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.npcs_named[<name>]>
-        // @returns ListTag(NPCTag)
-        // @description
-        // Returns a list of NPCs with a certain name.
-        // -->
-        if ((attribute.startsWith("npcs_named") || attribute.startsWith("list_npcs_named")) && Depends.citizens != null && attribute.hasParam()) {
-            listDeprecateWarn(attribute);
-            ListTag npcs = new ListTag();
-            String name = attribute.getParam();
-            for (NPC npc : CitizensAPI.getNPCRegistry()) {
-                if (CoreUtilities.equalsIgnoreCase(npc.getName(), name)) {
-                    npcs.addObject(new NPCTag(npc));
-                }
-            }
-            event.setReplacedObject(npcs.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.has_file[<name>]>
-        // @returns ElementTag(Boolean)
-        // @description
-        // Returns true if the specified file exists. The starting path is /plugins/Denizen.
-        // -->
-        if (attribute.startsWith("has_file") && attribute.hasParam()) {
-            File f = new File(Denizen.getInstance().getDataFolder(), attribute.getParam());
-            try {
-                if (!Utilities.canReadFile(f)) {
-                    Debug.echoError("Cannot read from that file path due to security settings in Denizen/config.yml.");
-                    return;
-                }
-            }
-            catch (Exception e) {
-                Debug.echoError(e);
-                return;
-            }
-            event.setReplacedObject(new ElementTag(f.exists()).getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.list_files[<path>]>
-        // @returns ListTag
-        // @description
-        // Returns a list of all files (and directories) in the specified directory. The starting path is /plugins/Denizen.
-        // -->
-        if (attribute.startsWith("list_files") && attribute.hasParam()) {
-            File folder = new File(Denizen.getInstance().getDataFolder(), attribute.getParam());
-            try {
-                if (!Utilities.canReadFile(folder)) {
-                    Debug.echoError("Cannot read from that file path due to security settings in Denizen/config.yml.");
-                    return;
-                }
-                if (!folder.exists() || !folder.isDirectory()) {
-                    attribute.echoError("Invalid path specified. No directory exists at that path.");
-                    return;
-                }
-            }
-            catch (Exception e) {
-                Debug.echoError(e);
-                return;
-            }
-            File[] files = folder.listFiles();
-            if (files == null) {
-                return;
-            }
-            ListTag list = new ListTag();
-            for (File file : files) {
-                list.add(file.getName());
-            }
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.has_permissions>
-        // @returns ElementTag(Boolean)
-        // @description
-        // Returns whether the server has a known permission plugin loaded.
-        // Note: should not be considered incredibly reliable.
-        // -->
-        if (attribute.startsWith("has_permissions")) {
-            event.setReplacedObject(new ElementTag(Depends.permissions != null && Depends.permissions.isEnabled())
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.has_economy>
-        // @returns ElementTag(Boolean)
-        // @plugin Vault
-        // @description
-        // Returns whether the server has a known economy plugin loaded.
-        // -->
-        if (attribute.startsWith("has_economy")) {
-            event.setReplacedObject(new ElementTag(Depends.economy != null && Depends.economy.isEnabled())
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.denizen_version>
-        // @returns ElementTag
-        // @description
-        // Returns the version of Denizen currently being used.
-        // -->
-        if (attribute.startsWith("denizen_version")) {
-            event.setReplacedObject(new ElementTag(Denizen.getInstance().getDescription().getVersion())
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.bukkit_version>
-        // @returns ElementTag
-        // @description
-        // Returns the version of Bukkit currently being used.
-        // -->
-        if (attribute.startsWith("bukkit_version")) {
-            event.setReplacedObject(new ElementTag(Bukkit.getBukkitVersion())
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.version>
-        // @returns ElementTag
-        // @description
-        // Returns the version of the server.
-        // -->
-        if (attribute.startsWith("version")) {
-            event.setReplacedObject(new ElementTag(Bukkit.getServer().getVersion())
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.java_version>
-        // @returns ElementTag
-        // @description
-        // Returns the current Java version of the server.
-        // -->
-        if (attribute.startsWith("java_version")) {
-            event.setReplacedObject(new ElementTag(System.getProperty("java.version"))
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.max_players>
-        // @returns ElementTag(Number)
-        // @description
-        // Returns the maximum number of players allowed on the server.
-        // -->
-        if (attribute.startsWith("max_players")) {
-            event.setReplacedObject(new ElementTag(Bukkit.getServer().getMaxPlayers())
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.sql_connections>
-        // @returns ListTag
-        // @description
-        // Returns a list of all SQL connections opened by <@link command sql>.
-        // -->
-        if (attribute.startsWith("sql_connections") || attribute.startsWith("list_sql_connections")) {
-            listDeprecateWarn(attribute);
+            return allNotables;
+        }, "list_notables");
+        // Historical variant of "sql_connections" tag
+        tagProcessor.registerTag(ListTag.class, "list_sql_connections", (attribute, object) -> {
+            BukkitImplDeprecations.listStyleTags.warn(attribute.context);
+            BukkitImplDeprecations.serverUtilTags.warn(attribute.context);
             ListTag list = new ListTag();
             for (Map.Entry<String, Connection> entry : SQLCommand.connections.entrySet()) {
                 try {
@@ -1421,12 +1035,88 @@ public class ServerTagBase {
                     }
                 }
                 catch (SQLException e) {
-                    Debug.echoError(attribute.getScriptEntry().getResidingQueue(), e);
+                    Debug.echoError(attribute.getScriptEntry(), e);
                 }
             }
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return list;
+        });
+        // Historical variant of "scripts" tag
+        tagProcessor.registerTag(ListTag.class, "list_scripts", (attribute, object) -> {
+            BukkitImplDeprecations.listStyleTags.warn(attribute.context);
+            BukkitImplDeprecations.serverUtilTags.warn(attribute.context);
+            ListTag scripts = new ListTag();
+            for (ScriptContainer script : ScriptRegistry.scriptContainers.values()) {
+                scripts.addObject(new ScriptTag(script));
+            }
+            return scripts;
+        });
+        // Pre-timetag-rewrite historical tag
+        tagProcessor.registerTag(DurationTag.class, "start_time", (attribute, object) -> {
+            Deprecations.timeTagRewrite.warn(attribute.context);
+            return new DurationTag(CoreUtilities.monotonicMillisToReal(DenizenCore.startTime) / 50);
+        });
+
+        // <--[tag]
+        // @attribute <server.has_permissions>
+        // @returns ElementTag(Boolean)
+        // @description
+        // Returns whether the server has a known permission plugin loaded.
+        // Note: should not be considered incredibly reliable.
+        // -->
+        tagProcessor.registerStaticTag(ElementTag.class, "has_permissions", (attribute, object) -> {
+            return new ElementTag(Depends.permissions != null && Depends.permissions.isEnabled());
+        });
+
+        // <--[tag]
+        // @attribute <server.has_economy>
+        // @returns ElementTag(Boolean)
+        // @plugin Vault
+        // @description
+        // Returns whether the server has a known economy plugin loaded.
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "has_economy", (attribute, object) -> {
+            return new ElementTag(Depends.economy != null && Depends.economy.isEnabled());
+        });
+
+        // <--[tag]
+        // @attribute <server.denizen_version>
+        // @returns ElementTag
+        // @description
+        // Returns the version of Denizen currently being used.
+        // -->
+        tagProcessor.registerStaticTag(ElementTag.class, "denizen_version", (attribute, object) -> {
+            return new ElementTag(Denizen.versionTag);
+        });
+
+        // <--[tag]
+        // @attribute <server.bukkit_version>
+        // @returns ElementTag
+        // @description
+        // Returns the version of Bukkit currently being used.
+        // -->
+        tagProcessor.registerStaticTag(ElementTag.class, "bukkit_version", (attribute, object) -> {
+            return new ElementTag(Bukkit.getBukkitVersion());
+        });
+
+        // <--[tag]
+        // @attribute <server.version>
+        // @returns ElementTag
+        // @description
+        // Returns the version of the server.
+        // -->
+        tagProcessor.registerStaticTag(ElementTag.class, "version", (attribute, object) -> {
+            return new ElementTag(Bukkit.getVersion());
+        });
+
+        // <--[tag]
+        // @attribute <server.max_players>
+        // @returns ElementTag(Number)
+        // @description
+        // Returns the maximum number of players allowed on the server.
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "max_players", (attribute, object) -> {
+            return new ElementTag(Bukkit.getMaxPlayers());
+        });
 
         // <--[tag]
         // @attribute <server.group_prefix[<group>]>
@@ -1434,18 +1124,16 @@ public class ServerTagBase {
         // @description
         // Returns an ElementTag of a group's chat prefix.
         // -->
-        if (attribute.startsWith("group_prefix")) {
-
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "group_prefix", (attribute, object, input) -> {
             if (Depends.permissions == null) {
                 attribute.echoError("No permission system loaded! Have you installed Vault and a compatible permissions plugin?");
-                return;
+                return null;
             }
 
-            String group = attribute.getParam();
-
+            String group = input.asString();
             if (!Arrays.asList(Depends.permissions.getGroups()).contains(group)) {
-                attribute.echoError("Invalid group! '" + (group != null ? group : "") + "' could not be found.");
-                return;
+                attribute.echoError("Invalid group! '" + group + "' could not be found.");
+                return null;
             }
 
             // <--[tag]
@@ -1455,19 +1143,14 @@ public class ServerTagBase {
             // Returns an ElementTag of a group's chat prefix for the specified WorldTag.
             // -->
             if (attribute.startsWith("world", 2)) {
-                WorldTag world = attribute.contextAsType(2, WorldTag.class);
-                if (world != null) {
-                    event.setReplacedObject(new ElementTag(Depends.chat.getGroupPrefix(world.getWorld(), group))
-                            .getObjectAttribute(attribute.fulfill(2)));
-                }
-                return;
+                attribute.fulfill(1);
+                WorldTag world = attribute.paramAsType(WorldTag.class);
+                return world != null ? new ElementTag(Depends.chat.getGroupPrefix(world.getWorld(), group)) : null;
             }
 
             // Prefix in default world
-            event.setReplacedObject(new ElementTag(Depends.chat.getGroupPrefix(Bukkit.getWorlds().get(0), group))
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return new ElementTag(Depends.chat.getGroupPrefix(Bukkit.getWorlds().get(0), group));
+        });
 
         // <--[tag]
         // @attribute <server.group_suffix[<group>]>
@@ -1475,18 +1158,16 @@ public class ServerTagBase {
         // @description
         // Returns an ElementTag of a group's chat suffix.
         // -->
-        if (attribute.startsWith("group_suffix")) {
-
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "group_suffix", (attribute, object, input) -> {
             if (Depends.permissions == null) {
                 attribute.echoError("No permission system loaded! Have you installed Vault and a compatible permissions plugin?");
-                return;
+                return null;
             }
 
-            String group = attribute.getParam();
-
+            String group = input.asString();
             if (!Arrays.asList(Depends.permissions.getGroups()).contains(group)) {
-                attribute.echoError("Invalid group! '" + (group != null ? group : "") + "' could not be found.");
-                return;
+                attribute.echoError("Invalid group! '" + group + "' could not be found.");
+                return null;
             }
 
             // <--[tag]
@@ -1496,19 +1177,14 @@ public class ServerTagBase {
             // Returns an ElementTag of a group's chat suffix for the specified WorldTag.
             // -->
             if (attribute.startsWith("world", 2)) {
-                WorldTag world = attribute.contextAsType(2, WorldTag.class);
-                if (world != null) {
-                    event.setReplacedObject(new ElementTag(Depends.chat.getGroupSuffix(world.getWorld(), group))
-                            .getObjectAttribute(attribute.fulfill(2)));
-                }
-                return;
+                attribute.fulfill(1);
+                WorldTag world = attribute.paramAsType(WorldTag.class);
+                return world != null ? new ElementTag(Depends.chat.getGroupSuffix(world.getWorld(), group)) : null;
             }
 
             // Suffix in default world
-            event.setReplacedObject(new ElementTag(Depends.chat.getGroupSuffix(Bukkit.getWorlds().get(0), group))
-                    .getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return new ElementTag(Depends.chat.getGroupSuffix(Bukkit.getWorlds().get(0), group));
+        });
 
         // <--[tag]
         // @attribute <server.permission_groups>
@@ -1516,41 +1192,14 @@ public class ServerTagBase {
         // @description
         // Returns a list of all permission groups on the server.
         // -->
-        if (attribute.startsWith("permission_groups") || attribute.startsWith("list_permission_groups")) {
+        tagProcessor.registerTag(ListTag.class, "permission_groups", (attribute, object) -> {
+            listDeprecateWarn(attribute);
             if (Depends.permissions == null) {
                 attribute.echoError("No permission system loaded! Have you installed Vault and a compatible permissions plugin?");
-                return;
+                return null;
             }
-            listDeprecateWarn(attribute);
-            event.setReplacedObject(new ListTag(Arrays.asList(Depends.permissions.getGroups())).getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        if (attribute.startsWith("list_plugin_names")) {
-            Deprecations.serverPluginNamesTag.warn(attribute.context);
-            ListTag plugins = new ListTag();
-            for (Plugin plugin : Bukkit.getServer().getPluginManager().getPlugins()) {
-                plugins.add(plugin.getName());
-            }
-            event.setReplacedObject(plugins.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.scripts>
-        // @returns ListTag(ScriptTag)
-        // @description
-        // Gets a list of all scripts currently loaded into Denizen.
-        // -->
-        if (attribute.startsWith("scripts") || attribute.startsWith("list_scripts")) {
-            listDeprecateWarn(attribute);
-            ListTag scripts = new ListTag();
-            for (ScriptContainer script : ScriptRegistry.scriptContainers.values()) {
-                scripts.addObject(new ScriptTag(script));
-            }
-            event.setReplacedObject(scripts.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return new ListTag(Arrays.asList(Depends.permissions.getGroups()));
+        }, "list_permission_groups");
 
         // <--[tag]
         // @attribute <server.match_player[<name>]>
@@ -1560,11 +1209,11 @@ public class ServerTagBase {
         // EG, in a group of 'bo', 'bob', and 'bobby'... input 'bob' returns player object for 'bob',
         // input 'bobb' returns player object for 'bobby', and input 'b' returns player object for 'bo'.
         // -->
-        if (attribute.startsWith("match_player") && attribute.hasParam()) {
+        tagProcessor.registerTag(PlayerTag.class, ElementTag.class, "match_player", (attribute, object, input) -> {
             Player matchPlayer = null;
-            String matchInput = CoreUtilities.toLowerCase(attribute.getParam());
+            String matchInput = input.asLowerString();
             if (matchInput.isEmpty()) {
-                return;
+                return null;
             }
             for (Player player : Bukkit.getOnlinePlayers()) {
                 String nameLow = CoreUtilities.toLowerCase(player.getName());
@@ -1578,13 +1227,8 @@ public class ServerTagBase {
                     }
                 }
             }
-
-            if (matchPlayer != null) {
-                event.setReplacedObject(new PlayerTag(matchPlayer).getObjectAttribute(attribute.fulfill(1)));
-            }
-
-            return;
-        }
+            return matchPlayer != null ? new PlayerTag(matchPlayer) : null;
+        });
 
         // <--[tag]
         // @attribute <server.match_offline_player[<name>]>
@@ -1595,11 +1239,11 @@ public class ServerTagBase {
         // input 'bobb' returns player object for 'bobby', and input 'b' returns player object for 'bo'.
         // When both an online player and an offline player match the name search, the online player will be returned.
         // -->
-        if (attribute.startsWith("match_offline_player") && attribute.hasParam()) {
+        tagProcessor.registerTag(PlayerTag.class, ElementTag.class, "match_offline_player", (attribute, object, input) -> {
             PlayerTag matchPlayer = null;
-            String matchInput = CoreUtilities.toLowerCase(attribute.getParam());
+            String matchInput = input.asLowerString();
             if (matchInput.isEmpty()) {
-                return;
+                return null;
             }
             for (Map.Entry<String, UUID> entry : PlayerTag.getAllPlayers().entrySet()) {
                 String nameLow = CoreUtilities.toLowerCase(entry.getKey());
@@ -1620,59 +1264,33 @@ public class ServerTagBase {
                     }
                 }
             }
-            if (matchPlayer != null) {
-                event.setReplacedObject(matchPlayer.getObjectAttribute(attribute.fulfill(1)));
-            }
-
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.npcs_assigned[<assignment_script>]>
-        // @returns ListTag(NPCTag)
-        // @description
-        // Returns a list of all NPCs assigned to a specified script.
-        // -->
-        if ((attribute.startsWith("npcs_assigned") || attribute.startsWith("list_npcs_assigned")) && Depends.citizens != null
-                && attribute.hasParam()) {
-            listDeprecateWarn(attribute);
-            ScriptTag script = attribute.paramAsType(ScriptTag.class);
-            if (script == null || !(script.getContainer() instanceof AssignmentScriptContainer)) {
-                attribute.echoError("Invalid script specified.");
-            }
-            else {
-                AssignmentScriptContainer container = (AssignmentScriptContainer) script.getContainer();
-                ListTag npcs = new ListTag();
-                for (NPC npc : CitizensAPI.getNPCRegistry()) {
-                    if (npc.hasTrait(AssignmentTrait.class) && npc.getOrAddTrait(AssignmentTrait.class).isAssigned(container)) {
-                        npcs.addObject(new NPCTag(npc));
-                    }
-                }
-                event.setReplacedObject(npcs.getObjectAttribute(attribute.fulfill(1)));
-                return;
-            }
-        }
+            return matchPlayer;
+        });
 
         // <--[tag]
         // @attribute <server.online_players_flagged[<flag_name>]>
         // @returns ListTag(PlayerTag)
         // @description
         // Returns a list of all online players with a specified flag set.
+        // Can use "!<flag_name>" style to only return players *without* the flag.
         // -->
-        if ((attribute.startsWith("online_players_flagged") || attribute.startsWith("list_online_players_flagged"))
-                && attribute.hasParam()) {
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "online_players_flagged", (attribute, object, input) -> {
             listDeprecateWarn(attribute);
-            String flag = attribute.getParam();
-            ListTag players = new ListTag();
+            String flag = input.asString();
+            ListTag flaggedPlayers = new ListTag();
+            boolean want = true;
+            if (flag.startsWith("!")) {
+                want = false;
+                flag = flag.substring(1);
+            }
             for (Player player : Bukkit.getOnlinePlayers()) {
-                PlayerTag plTag = new PlayerTag(player);
-                if (plTag.getFlagTracker().hasFlag(flag)) {
-                    players.addObject(plTag);
+                PlayerTag playerTag = new PlayerTag(player);
+                if (playerTag.getFlagTracker().hasFlag(flag) == want) {
+                    flaggedPlayers.addObject(playerTag);
                 }
             }
-            event.setReplacedObject(players.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return flaggedPlayers;
+        }, "list_online_players_flagged");
 
         // <--[tag]
         // @attribute <server.players_flagged[<flag_name>]>
@@ -1680,102 +1298,25 @@ public class ServerTagBase {
         // @description
         // Returns a list of all players (online or offline) with a specified flag set.
         // Warning: this will cause the player flag cache to temporarily fill with ALL historical playerdata.
+        // Can use "!<flag_name>" style to only return players *without* the flag.
         // -->
-        if ((attribute.startsWith("players_flagged") || attribute.startsWith("list_players_flagged"))
-                && attribute.hasParam()) {
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "players_flagged", (attribute, object, input) -> {
             listDeprecateWarn(attribute);
-            String flag = attribute.getParam();
-            ListTag players = new ListTag();
-            for (Map.Entry<String, UUID> entry : PlayerTag.getAllPlayers().entrySet()) {
-                PlayerTag plTag = new PlayerTag(entry.getValue());
-                if (plTag.getFlagTracker().hasFlag(flag)) {
-                    players.addObject(plTag);
+            String flag = input.asString();
+            ListTag flaggedPlayers = new ListTag();
+            boolean want = true;
+            if (flag.startsWith("!")) {
+                want = false;
+                flag = flag.substring(1);
+            }
+            for (UUID playerId : PlayerTag.getAllPlayers().values()) {
+                PlayerTag player = new PlayerTag(playerId);
+                if (player.getFlagTracker().hasFlag(flag) == want) {
+                    flaggedPlayers.addObject(player);
                 }
             }
-            event.setReplacedObject(players.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.spawned_npcs_flagged[<flag_name>]>
-        // @returns ListTag(NPCTag)
-        // @description
-        // Returns a list of all spawned NPCs with a specified flag set.
-        // -->
-        if ((attribute.startsWith("spawned_npcs_flagged") || attribute.startsWith("list_spawned_npcs_flagged")) && Depends.citizens != null
-                && attribute.hasParam()) {
-            listDeprecateWarn(attribute);
-            String flag = attribute.getParam();
-            ListTag npcs = new ListTag();
-            for (NPC npc : CitizensAPI.getNPCRegistry()) {
-                NPCTag dNpc = new NPCTag(npc);
-                if (dNpc.isSpawned() && dNpc.hasFlag(flag)) {
-                    npcs.addObject(dNpc);
-                }
-            }
-            event.setReplacedObject(npcs.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.npcs_flagged[<flag_name>]>
-        // @returns ListTag(NPCTag)
-        // @description
-        // Returns a list of all NPCs with a specified flag set.
-        // -->
-        if ((attribute.startsWith("npcs_flagged") || attribute.startsWith("list_npcs_flagged")) && Depends.citizens != null
-                && attribute.hasParam()) {
-            listDeprecateWarn(attribute);
-            String flag = attribute.getParam();
-            ListTag npcs = new ListTag();
-            for (NPC npc : CitizensAPI.getNPCRegistry()) {
-                NPCTag dNpc = new NPCTag(npc);
-                if (dNpc.hasFlag(flag)) {
-                    npcs.addObject(dNpc);
-                }
-            }
-            event.setReplacedObject(npcs.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.npc_registries>
-        // @returns ListTag
-        // @description
-        // Returns a list of all NPC registries.
-        // -->
-        if (attribute.startsWith("npc_registries") && Depends.citizens != null) {
-            ListTag result = new ListTag();
-            for (NPCRegistry registry : CitizensAPI.getNPCRegistries()) {
-                result.add(registry.getName());
-            }
-            event.setReplacedObject(result.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-
-        // <--[tag]
-        // @attribute <server.npcs[(<registry>)]>
-        // @returns ListTag(NPCTag)
-        // @description
-        // Returns a list of all NPCs.
-        // -->
-        if ((attribute.startsWith("npcs") || attribute.startsWith("list_npcs")) && Depends.citizens != null) {
-            listDeprecateWarn(attribute);
-            ListTag npcs = new ListTag();
-            NPCRegistry registry = CitizensAPI.getNPCRegistry();
-            if (attribute.hasParam()) {
-                registry = NPCTag.getRegistryByName(attribute.getParam());
-                if (registry == null) {
-                    attribute.echoError("NPC Registry '" + attribute.getParam() + "' does not exist.");
-                    return;
-                }
-            }
-            for (NPC npc : registry) {
-                npcs.addObject(new NPCTag(npc));
-            }
-            event.setReplacedObject(npcs.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return flaggedPlayers;
+        }, "list_players_flagged");
 
         // <--[tag]
         // @attribute <server.worlds>
@@ -1783,15 +1324,14 @@ public class ServerTagBase {
         // @description
         // Returns a list of all worlds.
         // -->
-        if (attribute.startsWith("worlds") || attribute.startsWith("list_worlds")) {
+        tagProcessor.registerTag(ListTag.class, "worlds", (attribute, object) -> {
             listDeprecateWarn(attribute);
             ListTag worlds = new ListTag();
             for (World world : Bukkit.getWorlds()) {
-                worlds.addObject(WorldTag.mirrorBukkitWorld(world));
+                worlds.addObject(new WorldTag(world));
             }
-            event.setReplacedObject(worlds.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return worlds;
+        }, "list_worlds");
 
         // <--[tag]
         // @attribute <server.plugins>
@@ -1799,15 +1339,14 @@ public class ServerTagBase {
         // @description
         // Gets a list of currently enabled PluginTags from the server.
         // -->
-        if (attribute.startsWith("plugins") || attribute.startsWith("list_plugins")) {
+        tagProcessor.registerTag(ListTag.class, "plugins", (attribute, object) -> {
             listDeprecateWarn(attribute);
             ListTag plugins = new ListTag();
-            for (Plugin plugin : Bukkit.getServer().getPluginManager().getPlugins()) {
+            for (Plugin plugin : Bukkit.getPluginManager().getPlugins()) {
                 plugins.addObject(new PluginTag(plugin));
             }
-            event.setReplacedObject(plugins.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return plugins;
+        }, "list_plugins");
 
         // <--[tag]
         // @attribute <server.players>
@@ -1815,15 +1354,15 @@ public class ServerTagBase {
         // @description
         // Returns a list of all players that have ever played on the server, online or not.
         // -->
-        if (attribute.startsWith("players") || attribute.startsWith("list_players")) {
+        tagProcessor.registerTag(ListTag.class, "players", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag players = new ListTag();
-            for (OfflinePlayer player : Bukkit.getOfflinePlayers()) {
+            OfflinePlayer[] allPlayers = Bukkit.getOfflinePlayers();
+            ListTag players = new ListTag(allPlayers.length);
+            for (OfflinePlayer player : allPlayers) {
                 players.addObject(PlayerTag.mirrorBukkitPlayer(player));
             }
-            event.setReplacedObject(players.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return players;
+        }, "list_players");
 
         // <--[tag]
         // @attribute <server.online_players>
@@ -1831,15 +1370,14 @@ public class ServerTagBase {
         // @description
         // Returns a list of all online players.
         // -->
-        if (attribute.startsWith("online_players") || attribute.startsWith("list_online_players")) {
+        tagProcessor.registerTag(ListTag.class, "online_players", (attribute, object) -> {
             listDeprecateWarn(attribute);
             ListTag players = new ListTag();
             for (Player player : Bukkit.getOnlinePlayers()) {
                 players.addObject(PlayerTag.mirrorBukkitPlayer(player));
             }
-            event.setReplacedObject(players.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return players;
+        }, "list_online_players");
 
         // <--[tag]
         // @attribute <server.offline_players>
@@ -1848,7 +1386,7 @@ public class ServerTagBase {
         // Returns a list of all offline players.
         // This specifically excludes currently online players.
         // -->
-        if (attribute.startsWith("offline_players") || attribute.startsWith("list_offline_players")) {
+        tagProcessor.registerTag(ListTag.class, "offline_players", (attribute, object) -> {
             listDeprecateWarn(attribute);
             ListTag players = new ListTag();
             for (OfflinePlayer player : Bukkit.getOfflinePlayers()) {
@@ -1856,9 +1394,8 @@ public class ServerTagBase {
                     players.addObject(PlayerTag.mirrorBukkitPlayer(player));
                 }
             }
-            event.setReplacedObject(players.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return players;
+        }, "list_offline_players");
 
         // <--[tag]
         // @attribute <server.banned_players>
@@ -1866,15 +1403,14 @@ public class ServerTagBase {
         // @description
         // Returns a list of all banned players.
         // -->
-        if (attribute.startsWith("banned_players") || attribute.startsWith("list_banned_players")) {
+        tagProcessor.registerTag(ListTag.class, "banned_players", (attribute, object) -> {
             listDeprecateWarn(attribute);
             ListTag banned = new ListTag();
             for (OfflinePlayer player : Bukkit.getBannedPlayers()) {
                 banned.addObject(PlayerTag.mirrorBukkitPlayer(player));
             }
-            event.setReplacedObject(banned.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return banned;
+        }, "list_banned_players");
 
         // <--[tag]
         // @attribute <server.banned_addresses>
@@ -1882,13 +1418,12 @@ public class ServerTagBase {
         // @description
         // Returns a list of all banned ip addresses.
         // -->
-        if (attribute.startsWith("banned_addresses") || attribute.startsWith("list_banned_addresses")) {
+        tagProcessor.registerTag(ListTag.class, "banned_addresses", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag list = new ListTag();
-            list.addAll(Bukkit.getIPBans());
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            ListTag bannedIPs = new ListTag();
+            bannedIPs.addAll(Bukkit.getIPBans());
+            return bannedIPs;
+        }, "list_banned_addresses");
 
         // <--[tag]
         // @attribute <server.is_banned[<address>]>
@@ -1896,28 +1431,20 @@ public class ServerTagBase {
         // @description
         // Returns whether the given ip address is banned.
         // -->
-        if (attribute.startsWith("is_banned") && attribute.hasParam()) {
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "is_banned", (attribute, object, input) -> {
             // BanList contains an isBanned method that doesn't check expiration time
-            BanEntry ban = Bukkit.getBanList(BanList.Type.IP).getBanEntry(attribute.getParam());
-
+            BanEntry ban = Bukkit.getBanList(BanList.Type.IP).getBanEntry(input.asString());
             if (ban == null) {
-                event.setReplacedObject(new ElementTag(false).getObjectAttribute(attribute.fulfill(1)));
+                return new ElementTag(false);
             }
-            else if (ban.getExpiration() == null) {
-                event.setReplacedObject(new ElementTag(true).getObjectAttribute(attribute.fulfill(1)));
-            }
-            else {
-                event.setReplacedObject(new ElementTag(ban.getExpiration().after(new Date())).getObjectAttribute(attribute.fulfill(1)));
-            }
+            return new ElementTag(ban.getExpiration() == null || ban.getExpiration().after(new Date()));
+        });
 
-            return;
-        }
-
-        if (attribute.startsWith("ban_info") && attribute.hasParam()) {
-            BanEntry ban = Bukkit.getBanList(BanList.Type.IP).getBanEntry(attribute.getParam());
-            attribute.fulfill(1);
-            if (ban == null || (ban.getExpiration() != null && ban.getExpiration().before(new Date()))) {
-                return;
+        tagProcessor.registerTag(ObjectTag.class, ElementTag.class, "ban_info", (attribute, object, input) -> {
+            BanEntry ban = Bukkit.getBanList(BanList.Type.IP).getBanEntry(input.asString());
+            Date expiration;
+            if (ban == null || ((expiration = ban.getExpiration()) != null && expiration.before(new Date()))) {
+                return null;
             }
 
             // <--[tag]
@@ -1927,14 +1454,14 @@ public class ServerTagBase {
             // Returns the expiration of the ip address's ban, if it is banned.
             // Potentially can be null.
             // -->
-            if (attribute.startsWith("expiration_time") && ban.getExpiration() != null) {
-                event.setReplacedObject(new TimeTag(ban.getExpiration().getTime())
-                        .getObjectAttribute(attribute.fulfill(1)));
+            if (attribute.startsWith("expiration_time", 2)) {
+                attribute.fulfill(1);
+                return expiration != null ? new TimeTag(expiration.getTime()) : null;
             }
-            else if (attribute.startsWith("expiration") && ban.getExpiration() != null) {
+            if (attribute.startsWith("expiration", 2)) {
+                attribute.fulfill(1);
                 Deprecations.timeTagRewrite.warn(attribute.context);
-                event.setReplacedObject(new DurationTag(ban.getExpiration().getTime() / 50)
-                        .getObjectAttribute(attribute.fulfill(1)));
+                return expiration != null ? new DurationTag(expiration.getTime() / 50) : null;
             }
 
             // <--[tag]
@@ -1943,9 +1470,9 @@ public class ServerTagBase {
             // @description
             // Returns the reason for the ip address's ban, if it is banned.
             // -->
-            else if (attribute.startsWith("reason")) {
-                event.setReplacedObject(new ElementTag(ban.getReason())
-                        .getObjectAttribute(attribute.fulfill(1)));
+            if (attribute.startsWith("reason", 2)) {
+                attribute.fulfill(1);
+                return new ElementTag(ban.getReason());
             }
 
             // <--[tag]
@@ -1954,14 +1481,14 @@ public class ServerTagBase {
             // @description
             // Returns when the ip address's ban was created, if it is banned.
             // -->
-            else if (attribute.startsWith("created_time")) {
-                event.setReplacedObject(new TimeTag(ban.getCreated().getTime())
-                        .getObjectAttribute(attribute.fulfill(1)));
+            if (attribute.startsWith("created_time", 2)) {
+                attribute.fulfill(1);
+                return new TimeTag(ban.getCreated().getTime());
             }
-            else if (attribute.startsWith("created")) {
+            if (attribute.startsWith("created", 2)) {
+                attribute.fulfill(1);
                 Deprecations.timeTagRewrite.warn(attribute.context);
-                event.setReplacedObject(new DurationTag(ban.getCreated().getTime() / 50)
-                        .getObjectAttribute(attribute.fulfill(1)));
+                return new DurationTag(ban.getCreated().getTime() / 50);
             }
 
             // <--[tag]
@@ -1970,13 +1497,13 @@ public class ServerTagBase {
             // @description
             // Returns the source of the ip address's ban, if it is banned.
             // -->
-            else if (attribute.startsWith("source")) {
-                event.setReplacedObject(new ElementTag(ban.getSource())
-                        .getObjectAttribute(attribute.fulfill(1)));
+            if (attribute.startsWith("source", 2)) {
+                attribute.fulfill(1);
+                return new ElementTag(ban.getSource());
             }
 
-            return;
-        }
+            return null;
+        });
 
         // <--[tag]
         // @attribute <server.ops>
@@ -1984,15 +1511,14 @@ public class ServerTagBase {
         // @description
         // Returns a list of all ops, online or not.
         // -->
-        if (attribute.startsWith("ops") || attribute.startsWith("list_ops")) {
+        tagProcessor.registerTag(ListTag.class, "ops", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag players = new ListTag();
+            ListTag ops = new ListTag();
             for (OfflinePlayer player : Bukkit.getOperators()) {
-                players.addObject(PlayerTag.mirrorBukkitPlayer(player));
+                ops.addObject(PlayerTag.mirrorBukkitPlayer(player));
             }
-            event.setReplacedObject(players.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return ops;
+        }, "list_ops");
 
         // <--[tag]
         // @attribute <server.online_ops>
@@ -2000,17 +1526,16 @@ public class ServerTagBase {
         // @description
         // Returns a list of all online ops.
         // -->
-        if (attribute.startsWith("online_ops") || attribute.startsWith("list_online_ops")) {
+        tagProcessor.registerTag(ListTag.class, "online_ops", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag players = new ListTag();
+            ListTag onlineOps = new ListTag();
             for (OfflinePlayer player : Bukkit.getOperators()) {
                 if (player.isOnline()) {
-                    players.addObject(PlayerTag.mirrorBukkitPlayer(player));
+                    onlineOps.addObject(PlayerTag.mirrorBukkitPlayer(player));
                 }
             }
-            event.setReplacedObject(players.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return onlineOps;
+        }, "list_online_ops");
 
         // <--[tag]
         // @attribute <server.offline_ops>
@@ -2018,17 +1543,16 @@ public class ServerTagBase {
         // @description
         // Returns a list of all offline ops.
         // -->
-        if (attribute.startsWith("offline_ops") || attribute.startsWith("list_offline_ops")) {
+        tagProcessor.registerTag(ListTag.class, "offline_ops", (attribute, object) -> {
             listDeprecateWarn(attribute);
-            ListTag players = new ListTag();
-            for (OfflinePlayer player : Bukkit.getOfflinePlayers()) {
-                if (player.isOp() && !player.isOnline()) {
-                    players.addObject(PlayerTag.mirrorBukkitPlayer(player));
+            ListTag offlineOps = new ListTag();
+            for (OfflinePlayer player : Bukkit.getOperators()) {
+                if (!player.isOnline()) {
+                    offlineOps.addObject(PlayerTag.mirrorBukkitPlayer(player));
                 }
             }
-            event.setReplacedObject(players.getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+            return offlineOps;
+        }, "list_offline_ops");
 
         // <--[tag]
         // @attribute <server.motd>
@@ -2036,10 +1560,9 @@ public class ServerTagBase {
         // @description
         // Returns the server's current MOTD.
         // -->
-        if (attribute.startsWith("motd")) {
-            event.setReplacedObject(new ElementTag(Bukkit.getServer().getMotd()).getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
+        tagProcessor.registerTag(ElementTag.class, "motd", (attribute, object) -> {
+            return new ElementTag(Bukkit.getMotd());
+        });
 
         // <--[tag]
         // @attribute <server.view_distance>
@@ -2047,30 +1570,24 @@ public class ServerTagBase {
         // @description
         // Returns the server's current view distance.
         // -->
-        if (attribute.startsWith("view_distance")) {
-            event.setReplacedObject(new ElementTag(Bukkit.getServer().getViewDistance()).getObjectAttribute(attribute.fulfill(1)));
-            return;
-        }
-        else if (attribute.startsWith("entity_is_spawned")
-                && attribute.hasParam()) {
-            Deprecations.isValidTag.warn(attribute.context);
-            EntityTag ent = EntityTag.valueOf(attribute.getParam(), new BukkitTagContext(null, null, null, false, null));
-            event.setReplacedObject(new ElementTag((ent != null && ent.isUnique() && ent.isSpawnedOrValidForTag()) ? "true" : "false")
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-        else if (attribute.startsWith("player_is_valid")
-                && attribute.hasParam()) {
-            Deprecations.isValidTag.warn(attribute.context);
-            event.setReplacedObject(new ElementTag(PlayerTag.playerNameIsValid(attribute.getParam()))
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
-        else if (attribute.startsWith("npc_is_valid")
-                && attribute.hasParam()) {
-            Deprecations.isValidTag.warn(attribute.context);
-            NPCTag npc = NPCTag.valueOf(attribute.getParam(), new BukkitTagContext(null, null, null, false, null));
-            event.setReplacedObject(new ElementTag((npc != null && npc.isValid()))
-                    .getObjectAttribute(attribute.fulfill(1)));
-        }
+        tagProcessor.registerTag(ElementTag.class, "view_distance", (attribute, object) -> {
+            return new ElementTag(Bukkit.getViewDistance());
+        });
+
+        tagProcessor.registerTag(ElementTag.class, ObjectTag.class, "entity_is_spawned", (attribute, object, input) -> {
+            BukkitImplDeprecations.isValidTag.warn(attribute.context);
+            EntityTag entity = input.canBeType(EntityTag.class) ? input.asType(EntityTag.class, attribute.context) : null;
+            return new ElementTag(entity != null && entity.isUnique() && entity.isSpawnedOrValidForTag());
+        });
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "player_is_valid", (attribute, object, input) -> {
+            BukkitImplDeprecations.isValidTag.warn(attribute.context);
+            return new ElementTag(PlayerTag.playerNameIsValid(input.asString()));
+        });
+        tagProcessor.registerTag(ElementTag.class, ObjectTag.class, "npc_is_valid", (attribute, object, input) -> {
+            BukkitImplDeprecations.isValidTag.warn(attribute.context);
+            NPCTag npc = input.canBeType(NPCTag.class) ? input.asType(NPCTag.class, attribute.context) : null;
+            return new ElementTag(npc != null && npc.isValid());
+        });
 
         // <--[tag]
         // @attribute <server.current_bossbars>
@@ -2078,10 +1595,9 @@ public class ServerTagBase {
         // @description
         // Returns a list of all currently active boss bar IDs from <@link command bossbar>.
         // -->
-        else if (attribute.startsWith("current_bossbars")) {
-            ListTag dl = new ListTag(BossBarCommand.bossBarMap.keySet());
-            event.setReplacedObject(dl.getObjectAttribute(attribute.fulfill(1)));
-        }
+        tagProcessor.registerTag(ListTag.class, "current_bossbars", (attribute, context) -> {
+            return new ListTag(BossBarCommand.bossBarMap.keySet());
+        });
 
         // <--[tag]
         // @attribute <server.bossbar_viewers[<bossbar_id>]>
@@ -2089,16 +1605,17 @@ public class ServerTagBase {
         // @description
         // Returns a list of players that should be able to see the given bossbar ID from <@link command bossbar>.
         // -->
-        else if (attribute.startsWith("bossbar_viewers") && attribute.hasParam()) {
-            BossBar bar = BossBarCommand.bossBarMap.get(CoreUtilities.toLowerCase(attribute.getParam()));
-            if (bar != null) {
-                ListTag list = new ListTag();
-                for (Player player : bar.getPlayers()) {
-                    list.addObject(new PlayerTag(player));
-                }
-                event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "bossbar_viewers", (attribute, object, input) -> {
+            BossBar bar = BossBarCommand.bossBarMap.get(input.asLowerString());
+            if (bar == null) {
+                return null;
             }
-        }
+            ListTag viewers = new ListTag();
+            for (Player player : bar.getPlayers()) {
+                viewers.addObject(new PlayerTag(player));
+            }
+            return viewers;
+        });
 
         // <--[tag]
         // @attribute <server.recent_tps>
@@ -2106,13 +1623,13 @@ public class ServerTagBase {
         // @description
         // Returns the 3 most recent ticks per second measurements.
         // -->
-        else if (attribute.startsWith("recent_tps")) {
-            ListTag list = new ListTag();
-            for (double tps : NMSHandler.getInstance().getRecentTps()) {
-                list.addObject(new ElementTag(tps));
+        tagProcessor.registerTag(ListTag.class, "recent_tps", (attribute, object) -> {
+            ListTag recentTPS = new ListTag(3);
+            for (double tps : NMSHandler.instance.getRecentTps()) {
+                recentTPS.addObject(new ElementTag(tps));
             }
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return recentTPS;
+        });
 
         // <--[tag]
         // @attribute <server.port>
@@ -2120,29 +1637,9 @@ public class ServerTagBase {
         // @description
         // Returns the port that the server is running on.
         // -->
-        else if (attribute.startsWith("port")) {
-            event.setReplacedObject(new ElementTag(NMSHandler.getInstance().getPort()).getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.debug_enabled>
-        // @returns ElementTag(Boolean)
-        // @description
-        // Returns whether script debug is currently globally enabled on the server.
-        // -->
-        else if (attribute.startsWith("debug_enabled")) {
-            event.setReplacedObject(new ElementTag(com.denizenscript.denizen.utilities.debugging.Debug.showDebug).getObjectAttribute(attribute.fulfill(1)));
-        }
-
-        // <--[tag]
-        // @attribute <server.last_reload>
-        // @returns TimeTag
-        // @description
-        // Returns the time that Denizen scripts were last reloaded.
-        // -->
-        else if (attribute.startsWith("last_reload")) {
-            event.setReplacedObject(new TimeTag(DenizenCore.lastReloadTime).getObjectAttribute(attribute.fulfill(1)));
-        }
+        tagProcessor.registerTag(ElementTag.class, "port", (attribute, object) -> {
+            return new ElementTag(Bukkit.getPort());
+        });
 
         // <--[tag]
         // @attribute <server.idle_timeout>
@@ -2152,40 +1649,65 @@ public class ServerTagBase {
         // Returns the server's current idle timeout limit (how long a player can sit still before getting kicked).
         // Internally used with <@link tag PlayerTag.last_action_time>.
         // -->
-        else if (attribute.startsWith("idle_timeout")) {
-            event.setReplacedObject(new DurationTag(Bukkit.getIdleTimeout() * 60).getObjectAttribute(attribute.fulfill(1)));
-        }
+        tagProcessor.registerTag(DurationTag.class, "idle_timeout", (attribute, object) -> {
+            return new DurationTag(Bukkit.getIdleTimeout() * 60);
+        });
 
         // <--[tag]
-        // @attribute <server.vanilla_tags>
+        // @attribute <server.vanilla_entity_tags>
         // @returns ListTag
         // @description
-        // Returns a list of vanilla tags (applicable to blocks, fluids, or items). See also <@link url https://minecraft.fandom.com/wiki/Tag>.
+        // Returns a list of vanilla tags applicable to entity types. See also <@link url https://minecraft.wiki/w/Tag>.
         // -->
-        else if (attribute.startsWith("vanilla_tags")) {
-            event.setReplacedObject(new ListTag(VanillaTagHelper.tagsByKey.keySet()).getObjectAttribute(attribute.fulfill(1)));
-        }
+        tagProcessor.registerTag(ListTag.class, "vanilla_entity_tags", (attribute, object) -> {
+            return new ListTag(VanillaTagHelper.entityTagsByKey.keySet());
+        });
+
+        // <--[tag]
+        // @attribute <server.vanilla_tagged_entities[<tag>]>
+        // @returns ListTag(EntityTag)
+        // @description
+        // Returns a list of entity types referred to by the specified vanilla tag. See also <@link url https://minecraft.wiki/w/Tag>.
+        // -->
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "vanilla_tagged_entities", (attribute, object, tag) -> {
+            Set<EntityType> entityTypes = VanillaTagHelper.entityTagsByKey.get(tag.asLowerString());
+            if (entityTypes == null) {
+                return null;
+            }
+            ListTag taggedEntities = new ListTag(entityTypes.size());
+            for (EntityType entityType : entityTypes) {
+                taggedEntities.addObject(new EntityTag(entityType));
+            }
+            return taggedEntities;
+        });
+
+        // <--[tag]
+        // @attribute <server.vanilla_material_tags>
+        // @returns ListTag
+        // @description
+        // Returns a list of vanilla tags applicable to blocks, fluids, or items. See also <@link url https://minecraft.wiki/w/Tag>.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "vanilla_material_tags", (attribute, object) -> {
+            return new ListTag(VanillaTagHelper.materialTagsByKey.keySet());
+        }, "vanilla_tags");
 
         // <--[tag]
         // @attribute <server.vanilla_tagged_materials[<tag>]>
         // @returns ListTag(MaterialTag)
         // @description
-        // Returns a list of materials referred to by the specified vanilla tag. See also <@link url https://minecraft.fandom.com/wiki/Tag>.
+        // Returns a list of materials referred to by the specified vanilla tag. See also <@link url https://minecraft.wiki/w/Tag>.
         // -->
-        else if (attribute.startsWith("vanilla_tagged_materials")) {
-            if (!attribute.hasParam()) {
-                return;
-            }
-            HashSet<Material> materials = VanillaTagHelper.tagsByKey.get(CoreUtilities.toLowerCase(attribute.getParam()));
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "vanilla_tagged_materials", (attribute, object, tag) -> {
+            Set<Material> materials = VanillaTagHelper.materialTagsByKey.get(tag.asLowerString());
             if (materials == null) {
-                return;
+                return null;
             }
-            ListTag list = new ListTag();
+            ListTag taggedMaterials = new ListTag(materials.size());
             for (Material material : materials) {
-                list.addObject(new MaterialTag(material));
+                taggedMaterials.addObject(new MaterialTag(material));
             }
-            event.setReplacedObject(list.getObjectAttribute(attribute.fulfill(1)));
-        }
+            return taggedMaterials;
+        });
 
         // <--[tag]
         // @attribute <server.plugins_handling_event[<bukkit_event>]>
@@ -2195,15 +1717,15 @@ public class ServerTagBase {
         // Can specify by ScriptEvent name ("PlayerBreaksBlock"), or by full Bukkit class name ("org.bukkit.event.block.BlockBreakEvent").
         // This is a primarily a dev tool and is not necessarily useful to most players or scripts.
         // -->
-        else if ((attribute.matches("plugins_handling_event") || attribute.matches("list_plugins_handling_event")) && attribute.hasParam()) {
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "plugins_handling_event", (attribute, object, input) -> {
             listDeprecateWarn(attribute);
-            String eventName = attribute.getParam();
+            String eventName = input.asString();
             if (CoreUtilities.contains(eventName, '.')) {
                 try {
-                    Class clazz = Class.forName(eventName, false, ServerTagBase.class.getClassLoader());
+                    Class<?> clazz = Class.forName(eventName, false, ServerTagBase.class.getClassLoader());
                     ListTag result = getHandlerPluginList(clazz);
                     if (result != null) {
-                        event.setReplacedObject(result.getObjectAttribute(attribute.fulfill(1)));
+                        return result;
                     }
                 }
                 catch (ClassNotFoundException ex) {
@@ -2213,25 +1735,24 @@ public class ServerTagBase {
                 }
             }
             else {
-                ScriptEvent scriptEvent = ScriptEvent.eventLookup.get(CoreUtilities.toLowerCase(eventName));
-                if (scriptEvent instanceof Listener) {
+                ScriptEvent scriptEvent = ScriptEvent.eventLookup.get(input.asLowerString());
+                if (scriptEvent instanceof Listener listener) {
                     Plugin plugin = Denizen.getInstance();
-                    for (Class eventClass : plugin.getPluginLoader()
-                            .createRegisteredListeners((Listener) scriptEvent, plugin).keySet()) {
+                    for (Class<? extends Event> eventClass : plugin.getPluginLoader().createRegisteredListeners(listener, plugin).keySet()) {
                         ListTag result = getHandlerPluginList(eventClass);
                         // Return results for the first valid match.
                         if (result != null && result.size() > 0) {
-                            event.setReplacedObject(result.getObjectAttribute(attribute.fulfill(1)));
-                            return;
+                            return result;
                         }
                     }
-                    event.setReplacedObject(new ListTag().getObjectAttribute(attribute.fulfill(1)));
+                    return new ListTag();
                 }
             }
-        }
+            return null;
+        }, "list_plugins_handling_event");
 
         // <--[tag]
-        // @attribute <server.generate_loot_table[<map>]>
+        // @attribute <server.generate_loot_table[id=<id>;location=<location>;(killer=<entity>);(entity=<entity>);(loot_bonus=<#>/{-1});(luck=<#.#>/{0})]>
         // @returns ListTag(ItemTag)
         // @description
         // Returns a list of items from a loot table, given a map of input data.
@@ -2241,36 +1762,45 @@ public class ServerTagBase {
         //
         // Some inputs will be strictly required for some loot tables, and ignored for others.
         //
-        // A list of valid loot tables can be found here: <@link url https://minecraft.fandom.com/wiki/Loot_table#List_of_loot_tables>
+        // A list of valid loot tables can be found here: <@link url https://minecraft.wiki/w/Loot_table#List_of_loot_tables>
         // Note that the tree view represented on the wiki should be split by slashes for the input - for example, "cow" is under "entities" in the tree so "entities/cow" is how you input that.
         // CAUTION: Invalid loot table IDs will generate an empty list rather than an error.
         //
-        // For example: <server.generate_loot_table[id=chests/spawn_bonus_chest;killer=<player>;location=<player.location>]>
+        // @example
+        // - give <server.generate_loot_table[id=chests/spawn_bonus_chest;killer=<player>;location=<player.location>]>
         // -->
-        else if (attribute.startsWith("generate_loot_table") && attribute.hasParam()) {
-            MapTag map = attribute.paramAsType(MapTag.class);
-            ObjectTag idObj = map.getObject("id");
-            ObjectTag locationObj = map.getObject("location");
+        tagProcessor.registerTag(ListTag.class, MapTag.class, "generate_loot_table", (attribute, object, map) -> {
+            ElementTag idObj = map.getRequiredObjectAs("id", ElementTag.class, attribute);
+            LocationTag locationObj = map.getRequiredObjectAs("location", LocationTag.class, attribute);
             if (idObj == null || locationObj == null) {
-                return;
+                return null;
             }
-            NamespacedKey key = NamespacedKey.fromString(CoreUtilities.toLowerCase(idObj.toString()));
-            if (key == null) {
-                return;
+            LootTable table = Bukkit.getLootTable(Utilities.parseNamespacedKey(idObj.asLowerString()));
+            if (table == null) {
+                attribute.echoError("Invalid loot table ID '" + idObj + "' specified.");
+                return null;
             }
-            LootTable table = Bukkit.getLootTable(key);
-            LootContext.Builder context = new LootContext.Builder(locationObj.asType(LocationTag.class, attribute.context));
-            ObjectTag killer = map.getObject("killer");
-            ObjectTag luck = map.getObject("luck");
-            ObjectTag bonus = map.getObject("loot_bonus");
+            LootContext.Builder context = new LootContext.Builder(locationObj);
+            EntityTag killer = map.getObjectAs("killer", EntityTag.class, attribute.context);
+            ElementTag luck = map.getElement("luck");
+            ElementTag bonus = map.getElement("loot_bonus");
+            EntityTag entity = map.getObjectAs("entity", EntityTag.class, attribute.context);
+            if (entity != null) {
+                context = context.lootedEntity(entity.getBukkitEntity());
+            }
             if (killer != null) {
-                context = context.killer((HumanEntity) killer.asType(EntityTag.class, attribute.context).getLivingEntity());
+                if (killer.getLivingEntity() instanceof HumanEntity humanEntity) {
+                     context = context.killer(humanEntity);
+                }
+                else {
+                    attribute.echoError("Invalid killer '" + killer + "' specified: must be an online player or a player-type NPC.");
+                }
             }
             if (luck != null) {
-                context = context.luck(luck.asType(ElementTag.class, attribute.context).asFloat());
+                context = context.luck(luck.asFloat());
             }
             if (bonus != null) {
-                context = context.lootingModifier(bonus.asType(ElementTag.class, attribute.context).asInt());
+                context = context.lootingModifier(bonus.asInt());
             }
             Collection<ItemStack> items;
             try {
@@ -2278,39 +1808,636 @@ public class ServerTagBase {
             }
             catch (Throwable ex) {
                 attribute.echoError("Loot table failed to generate: " + ex.getMessage());
-                if (Debug.verbose) {
+                if (CoreConfiguration.debugVerbose) {
                     attribute.echoError(ex);
                 }
+                return null;
+            }
+            ListTag lootItems = new ListTag(items.size());
+            for (ItemStack item : items) {
+                lootItems.addObject(new ItemTag(item));
+            }
+            return lootItems;
+        });
+
+        // <--[tag]
+        // @attribute <server.area_notes_debug>
+        // @returns MapTag
+        // @description
+        // Generates a report about noted area tracking.
+        // This tag is strictly for internal debugging reasons.
+        // -->
+        tagProcessor.registerTag(MapTag.class, "area_notes_debug", (attribute, object) -> {
+            MapTag worlds = new MapTag();
+            for (Map.Entry<String, NotedAreaTracker.PerWorldSet> set : NotedAreaTracker.worlds.entrySet()) {
+                MapTag worldData = new MapTag();
+                worldData.putObject("global", new ListTag(set.getValue().globalSet.list, trackedArea -> trackedArea.area));
+                worldData.putObject("x50", areaNotesDebug(set.getValue().sets50));
+                worldData.putObject("x50_offset", areaNotesDebug(set.getValue().sets50_offset));
+                worldData.putObject("x200", areaNotesDebug(set.getValue().sets200));
+                worldData.putObject("x200_offset", areaNotesDebug(set.getValue().sets200_offset));
+                worlds.putObject(set.getKey(), worldData);
+            }
+            return worlds;
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name clean_flags
+        // @input None
+        // @description
+        // Cleans any expired flags from the object.
+        // Generally doesn't need to be called, using the 'skip flag cleanings' setting was enabled.
+        // This is an internal/special case mechanism, and should be avoided where possible.
+        // Does not function on all flaggable objects, particularly those that just store their flags into other objects.
+        // -->
+        tagProcessor.registerMechanism("clean_flags", false, (object, mechanism) -> {
+            DenizenCore.serverFlagMap.doTotalClean();
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name reset_recipes
+        // @input None
+        // @description
+        // Resets the server's recipe list to the default vanilla recipe list + item script recipes.
+        // @tags
+        // <server.recipe_ids[(<type>)]>
+        // -->
+        tagProcessor.registerMechanism("reset_recipes", false, (object, mechanism) -> {
+            Bukkit.resetRecipes();
+            ItemScriptHelper.rebuildRecipes();
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name remove_recipes
+        // @input ListTag
+        // @description
+        // Removes a recipe or list of recipes from the server, in Namespace:Key format.
+        // @example
+        // - adjust server remove_recipes:<item[torch].recipe_ids>
+        // @tags
+        // <server.recipe_ids[(<type>)]>
+        // -->
+        tagProcessor.registerMechanism("remove_recipes", false, ListTag.class, (object, mechanism, recipes) -> {
+            for (String recipe : recipes) {
+                Bukkit.removeRecipe(Utilities.parseNamespacedKey(recipe));
+            }
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name idle_timeout
+        // @input DurationTag
+        // @description
+        // Sets the server's current idle timeout limit (how long a player can sit still before getting kicked).
+        // Will be rounded to the nearest number of minutes.
+        // Set to 0 to disable automatic timeout kick.
+        // @tags
+        // <server.idle_timeout>
+        // -->
+        tagProcessor.registerMechanism("idle_timeout", false, DurationTag.class, (object, mechanism, timeout) -> {
+            Bukkit.setIdleTimeout((int) Math.round(timeout.getSeconds() / 60));
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name restart
+        // @input None
+        // @description
+        // Immediately stops the server entirely (Plugins will still finalize, and the shutdown event will fire), then starts it again.
+        // Requires config file setting "Commands.Restart.Allow server restart"!
+        // Note that if your server is not configured to restart, this mechanism will simply stop the server without starting it again!
+        // -->
+        tagProcessor.registerMechanism("restart", false, (object, mechanism) -> {
+            if (!Settings.allowServerRestart()) {
+                Debug.echoError("Server restart disabled by administrator (refer to mechanism documentation). Consider using 'shutdown'.");
                 return;
             }
-            ListTag result = new ListTag();
-            for (ItemStack item : items) {
-                if (item != null && item.getType() != Material.AIR) {
-                    result.addObject(new ItemTag(item));
+            Bukkit.getConsoleSender().sendMessage(ChatColor.RED + "+> Server restarted by a Denizen script, see config to prevent this!");
+            Bukkit.spigot().restart();
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name save
+        // @input None
+        // @description
+        // Immediately saves the Denizen saves files.
+        // -->
+        tagProcessor.registerMechanism("save", false, (object, mechanism) -> {
+            DenizenCore.saveAll(false);
+            Denizen.getInstance().saveSaves(false);
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name shutdown
+        // @input None
+        // @description
+        // Immediately stops the server entirely (Plugins will still finalize, and the shutdown event will fire).
+        // The server will remain shutdown until externally started again.
+        // Requires config file setting "Commands.Restart.Allow server stop"!
+        // -->
+        tagProcessor.registerMechanism("shutdown", false, (object, mechanism) -> {
+            if (!Settings.allowServerStop()) {
+                Debug.echoError("Server stop disabled by administrator (refer to mechanism documentation). Consider using 'restart'.");
+                return;
+            }
+            Bukkit.getConsoleSender().sendMessage(ChatColor.RED + "+> Server shutdown by a Denizen script, see config to prevent this!");
+            Bukkit.shutdown();
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name has_whitelist
+        // @input ElementTag(Boolean)
+        // @description
+        // Toggles whether the server's whitelist is enabled.
+        // @tags
+        // <server.has_whitelist>
+        // -->
+        tagProcessor.registerMechanism("has_whitelist", false, ElementTag.class, (object, mechanism, input) -> {
+            if (mechanism.requireBoolean()) {
+                Bukkit.setWhitelist(input.asBoolean());
+            }
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name register_permission
+        // @input MapTag
+        // @description
+        // Input must be a map with the key 'name' set to the permission name.
+        // Can also set 'description' to a description of the permission.
+        // Can also set 'parent' to the name of the parent permission (must already be registered).
+        // Can also set 'default' to any of <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/permissions/PermissionDefault.html> to define default accessibility.
+        // This mechanism should probably be executed during <@link event server prestart>.
+        // @tags
+        // <server.has_whitelist>
+        // -->
+        tagProcessor.registerMechanism("register_permission", false, MapTag.class, (object, mechanism, input) -> {
+            ElementTag name = input.getElement("name"), parentInput = input.getElement("parent"),
+                    defaultInput = input.getElement("default"), description = input.getElement("description");
+            Permission parent = parentInput == null ? null : Bukkit.getPluginManager().getPermission(parentInput.asString());
+            PermissionDefault permissionDefault = defaultInput == null ? null : defaultInput.asEnum(PermissionDefault.class);
+            if (parent == null) {
+                DefaultPermissions.registerPermission(name.asString(), description == null ? null : description.asString(), permissionDefault);
+            }
+            else {
+                DefaultPermissions.registerPermission(name.asString(), description == null ? null : description.asString(), permissionDefault, parent);
+            }
+        });
+
+        // <--[mechanism]
+        // @object server
+        // @name default_colors
+        // @input MapTag
+        // @description
+        // Sets a default value of a custom color, to be used if the config.yml does not specify a value for that color name.
+        // Input must be a map with the keys as custom color names, and the values as the default color.
+        // This mechanism should probably be executed during <@link event scripts loaded>.
+        // @tags
+        // <&>
+        // <ElementTag.custom_color>
+        // @Example
+        // on scripts loaded:
+        // - adjust server default_colors:[mymagenta=<&color[#ff00ff]>;myred=<&c>]
+        // - debug log "The custom red is <&[myred]>"
+        // -->
+        tagProcessor.registerMechanism("default_colors", false, MapTag.class, (object, mechanism, input) -> {
+            for (Map.Entry<StringHolder, ObjectTag> pair : input.entrySet()) {
+                String name = pair.getKey().low;
+                if (!CustomColorTagBase.customColors.containsKey(name)) {
+                    CustomColorTagBase.customColors.put(name, pair.getValue().toString().replace("<", "<&lt>"));
                 }
             }
-            event.setReplacedObject(result.getObjectAttribute(attribute.fulfill(1)));
-        }
+        });
+
+        // <--[tag]
+        // @attribute <server.notes[<type>]>
+        // @returns ListTag
+        // @deprecated use util.notes
+        // @description
+        // Deprecated in favor of <@link tag util.notes>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.started_time>
+        // @returns TimeTag
+        // @deprecated use util.started_time
+        // @description
+        // Deprecated in favor of <@link tag util.started_time>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.disk_free>
+        // @returns ElementTag(Number)
+        // @deprecated use util.disk_free
+        // @description
+        // Deprecated in favor of <@link tag util.disk_free>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.disk_total>
+        // @returns ElementTag(Number)
+        // @deprecated use util.disk_total
+        // @description
+        // Deprecated in favor of <@link tag util.disk_total>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.disk_usage>
+        // @returns ElementTag(Number)
+        // @deprecated use util.disk_usage
+        // @description
+        // Deprecated in favor of <@link tag util.disk_usage>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.ram_allocated>
+        // @returns ElementTag(Number)
+        // @deprecated use util.ram_allocated
+        // @description
+        // Deprecated in favor of <@link tag util.ram_allocated>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.ram_max>
+        // @returns ElementTag(Number)
+        // @deprecated use util.ram_max
+        // @description
+        // Deprecated in favor of <@link tag util.ram_max>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.ram_free>
+        // @returns ElementTag(Number)
+        // @deprecated use util.ram_free
+        // @description
+        // Deprecated in favor of <@link tag util.ram_free>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.ram_usage>
+        // @returns ElementTag(Number)
+        // @deprecated use util.ram_usage
+        // @description
+        // Deprecated in favor of <@link tag util.ram_usage>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.available_processors>
+        // @returns ElementTag(Number)
+        // @deprecated use util.available_processors
+        // @description
+        // Deprecated in favor of <@link tag util.available_processors>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.current_tick>
+        // @returns ElementTag(Number)
+        // @deprecated use util.current_tick
+        // @description
+        // Deprecated in favor of <@link tag util.current_tick>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.delta_time_since_start>
+        // @returns DurationTag
+        // @deprecated use util.delta_time_since_start
+        // @description
+        // Deprecated in favor of <@link tag util.delta_time_since_start>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.real_time_since_start>
+        // @returns DurationTag
+        // @deprecated use util.real_time_since_start
+        // @description
+        // Deprecated in favor of <@link tag util.real_time_since_start>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.current_time_millis>
+        // @returns ElementTag(Number)
+        // @deprecated use util.current_time_millis
+        // @description
+        // Deprecated in favor of <@link tag util.current_time_millis>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.has_file[<name>]>
+        // @returns ElementTag(Boolean)
+        // @deprecated use util.has_file
+        // @description
+        // Deprecated in favor of <@link tag util.has_file>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.list_files[<path>]>
+        // @returns ListTag
+        // @deprecated use util.list_files
+        // @description
+        // Deprecated in favor of <@link tag util.list_files>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.java_version>
+        // @returns ElementTag
+        // @deprecated use util.java_version
+        // @description
+        // Deprecated in favor of <@link tag util.java_version>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.sql_connections>
+        // @returns ListTag
+        // @deprecated use util.sql_connections
+        // @description
+        // Deprecated in favor of <@link tag util.sql_connections>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.scripts>
+        // @returns ListTag(ScriptTag)
+        // @deprecated use util.scripts
+        // @description
+        // Deprecated in favor of <@link tag util.scripts>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.last_reload>
+        // @returns TimeTag
+        // @deprecated use util.last_reload
+        // @description
+        // Deprecated in favor of <@link tag util.last_reload>
+        // -->
 
         // <--[tag]
         // @attribute <server.stack_trace>
         // @returns ElementTag
+        // @deprecated use util.stack_trace
         // @description
-        // Generates and shows a stack trace for the current context.
-        // This tag is strictly for internal debugging reasons.
-        // WARNING: Different Java versions generate different stack trace formats and details.
-        // WARNING: Java internally limits stack trace generation in a variety of ways. This tag cannot be relied on to output anything.
+        // Deprecated in favor of <@link tag util.stack_trace>
         // -->
-        else if (attribute.startsWith("stack_trace")) {
-            String trace = com.denizenscript.denizen.utilities.debugging.Debug.getFullExceptionMessage(new RuntimeException("TRACE"), false);
-            event.setReplacedObject(new ElementTag(trace).getObjectAttribute(attribute.fulfill(1)));
+
+        // <--[tag]
+        // @attribute <server.debug_enabled>
+        // @returns ElementTag(Boolean)
+        // @deprecated use util.debug_enabled
+        // @description
+        // Deprecated in favor of <@link tag util.debug_enabled>
+        // -->
+
+        // <--[tag]
+        // @attribute <server.color_names>
+        // @returns ListTag
+        // @deprecated use util.color_names
+        // @description
+        // Deprecated in favor of <@link tag util.color_names>
+        // -->
+        for (String tagName : new String[] { "current_time_millis", "real_time_since_start", "color_names",
+                "delta_time_since_start", "current_tick", "available_processors", "ram_usage", "ram_free", "ram_max", "ram_allocated", "disk_usage", "debug_enabled",
+                "disk_total", "disk_free", "started_time", "has_file", "list_files", "notes", "last_reload", "scripts", "sql_connections", "java_version", "stack_trace" }) {
+            TagRunnable.ObjectInterface<UtilTagBase, ?> runner = UtilTagBase.instance.tagProcessor.registeredObjectTags.get(tagName).runner;
+            tagProcessor.registerTag(ObjectTag.class, tagName, (attribute, object) -> {
+                BukkitImplDeprecations.serverUtilTags.warn(attribute.context);
+                return runner.run(attribute, UtilTagBase.instance);
+            });
+        }
+
+        // <--[mechanism]
+        // @object server
+        // @name delete_file
+        // @input ElementTag
+        // @deprecated use system.delete_file
+        // @description
+        // Deprecated in favor of <@link mechanism system.delete_file>
+        // -->
+
+        // <--[mechanism]
+        // @object server
+        // @name reset_event_stats
+        // @input None
+        // @deprecated use system.reset_event_stats
+        // @description
+        // Deprecated in favor of <@link mechanism system.reset_event_stats>
+        // -->
+
+        // <--[mechanism]
+        // @object server
+        // @name cleanmem
+        // @input None
+        // @deprecated use system.cleanmem
+        // @description
+        // Deprecated in favor of <@link mechanism system.cleanmem>
+        // -->
+
+        for (String mechName : new String[] { "delete_file", "reset_event_stats", "cleanmem" }) {
+            Mechanism.GenericMechRunnerInterface<UtilTagBase> runner = UtilTagBase.instance.tagProcessor.registeredMechanisms.get(mechName).runner;
+            tagProcessor.registerMechanism(mechName, false, (object, mechanism) -> {
+                BukkitImplDeprecations.serverSystemMechanisms.warn(mechanism.context);
+                runner.run(UtilTagBase.instance, mechanism);
+            });
+        }
+
+        if (Depends.citizens != null) {
+            registerCitizensFeatures();
         }
     }
 
+    public void registerCitizensFeatures() {
+
+        // <--[tag]
+        // @attribute <server.selected_npc>
+        // @returns NPCTag
+        // @description
+        // Returns the server's currently selected NPC.
+        // -->
+        tagProcessor.registerTag(NPCTag.class, "selected_npc", (attribute, object) -> {
+            NPC npc = Depends.citizens.getNPCSelector().getSelected(Bukkit.getConsoleSender());
+            return npc != null ? new NPCTag(npc) : null;
+        });
+
+        // <--[tag]
+        // @attribute <server.npcs_named[<name>]>
+        // @returns ListTag(NPCTag)
+        // @description
+        // Returns a list of NPCs with a certain name.
+        // -->
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "npcs_named", (attribute, object, input) -> {
+            listDeprecateWarn(attribute);
+            ListTag npcs = new ListTag();
+            String name = input.asLowerString();
+            for (NPC npc : CitizensAPI.getNPCRegistry()) {
+                if (name.equals(CoreUtilities.toLowerCase(npc.getName()))) {
+                    npcs.addObject(new NPCTag(npc));
+                }
+            }
+            return npcs;
+        }, "list_npcs_named");
+
+        // <--[tag]
+        // @attribute <server.npcs_assigned[<assignment_script>]>
+        // @returns ListTag(NPCTag)
+        // @description
+        // Returns a list of all NPCs assigned to a specified script.
+        // -->
+        tagProcessor.registerTag(ListTag.class, ScriptTag.class, "npcs_assigned", (attribute, object, script) -> {
+            listDeprecateWarn(attribute);
+            if (!(script.getContainer() instanceof AssignmentScriptContainer assignmentScriptContainer)) {
+                attribute.echoError("Invalid script '" + script + "' specified: must be an assignment script.");
+                return null;
+            }
+            ListTag npcs = new ListTag();
+            for (NPC npc : CitizensAPI.getNPCRegistry()) {
+                if (npc.hasTrait(AssignmentTrait.class) && npc.getTraitNullable(AssignmentTrait.class).isAssigned(assignmentScriptContainer)) {
+                    npcs.addObject(new NPCTag(npc));
+                }
+            }
+            return npcs;
+        }, "list_npcs_assigned");
+
+        // <--[tag]
+        // @attribute <server.spawned_npcs_flagged[<flag_name>]>
+        // @returns ListTag(NPCTag)
+        // @description
+        // Returns a list of all spawned NPCs with a specified flag set.
+        // Can use "!<flag_name>" style to only return NPCs *without* the flag.
+        // -->
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "spawned_npcs_flagged", (attribute, object, input) -> {
+            listDeprecateWarn(attribute);
+            String flag = input.asString();
+            ListTag npcs = new ListTag();
+            boolean want = true;
+            if (flag.startsWith("!")) {
+                want = false;
+                flag = flag.substring(1);
+            }
+            for (NPC npc : CitizensAPI.getNPCRegistry()) {
+                NPCTag npcTag = new NPCTag(npc);
+                if (npcTag.isSpawned() && npcTag.hasFlag(flag) == want) {
+                    npcs.addObject(npcTag);
+                }
+            }
+            return npcs;
+        }, "list_spawned_npcs_flagged");
+
+        // <--[tag]
+        // @attribute <server.npcs_flagged[<flag_name>]>
+        // @returns ListTag(NPCTag)
+        // @description
+        // Returns a list of all NPCs with a specified flag set.
+        // Can use "!<flag_name>" style to only return NPCs *without* the flag.
+        // -->
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "npcs_flagged", (attribute, object, input) -> {
+            listDeprecateWarn(attribute);
+            String flag = input.asString();
+            ListTag npcs = new ListTag();
+            boolean want = true;
+            if (flag.startsWith("!")) {
+                want = false;
+                flag = flag.substring(1);
+            }
+            for (NPC npc : CitizensAPI.getNPCRegistry()) {
+                NPCTag npcTag = new NPCTag(npc);
+                if (npcTag.hasFlag(flag) == want) {
+                    npcs.addObject(npcTag);
+                }
+            }
+            return npcs;
+        }, "list_npcs_flagged");
+
+        // <--[tag]
+        // @attribute <server.npc_registries>
+        // @returns ListTag
+        // @description
+        // Returns a list of all NPC registries.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "npc_registries", (attribute, object) -> {
+            ListTag registries = new ListTag();
+            for (NPCRegistry registry : CitizensAPI.getNPCRegistries()) {
+                registries.add(registry.getName());
+            }
+            return registries;
+        });
+
+        // <--[tag]
+        // @attribute <server.npcs[(<registry>)]>
+        // @returns ListTag(NPCTag)
+        // @description
+        // Returns a list of all NPCs.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "npcs", (attribute, object) -> {
+            listDeprecateWarn(attribute);
+            NPCRegistry registry = CitizensAPI.getNPCRegistry();
+            if (attribute.hasParam()) {
+                registry = NPCTag.getRegistryByName(attribute.getParam());
+                if (registry == null) {
+                    attribute.echoError("NPC Registry '" + attribute.getParam() + "' does not exist.");
+                    return null;
+                }
+            }
+            ListTag npcs = new ListTag();
+            for (NPC npc : registry) {
+                npcs.addObject(new NPCTag(npc));
+            }
+            return npcs;
+        }, "list_npcs");
+
+        // <--[tag]
+        // @attribute <server.traits>
+        // @Plugin Citizens
+        // @returns ListTag
+        // @description
+        // Returns a list of all available NPC traits on the server.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "traits", (attribute, object) -> {
+            listDeprecateWarn(attribute);
+            ListTag traits = new ListTag();
+            for (TraitInfo trait : CitizensAPI.getTraitFactory().getRegisteredTraits()) {
+                traits.add(trait.getTraitName());
+            }
+            return traits;
+        }, "list_traits");
+
+        // <--[mechanism]
+        // @object server
+        // @name save_citizens
+        // @input None
+        // @description
+        // Immediately saves the Citizens saves files.
+        // -->
+        tagProcessor.registerMechanism("save_citizens", false, (object, mechanism) -> {
+            Depends.citizens.storeNPCs();
+        });
+    }
+
+    public void registerEnumListTag(String name, Class<? extends Enum<?>> enumType, String... deprecatedVariants) {
+        tagProcessor.registerStaticTag(ListTag.class, name, (attribute, object) -> {
+            listDeprecateWarn(attribute);
+            Enum<?>[] enumConstants = enumType.getEnumConstants();
+            ListTag result = new ListTag(enumConstants.length);
+            for (Enum<?> constant : enumConstants) {
+                result.addObject(new ElementTag(constant));
+            }
+            return result;
+        }, deprecatedVariants);
+    }
+
+    private static MapTag areaNotesDebug(Int2ObjectOpenHashMap<NotedAreaTracker.AreaSet> set) {
+        MapTag out = new MapTag();
+        for (Int2ObjectMap.Entry<NotedAreaTracker.AreaSet> pair : set.int2ObjectEntrySet()) {
+            out.putObject(String.valueOf(pair.getIntKey()), new ListTag(pair.getValue().list, trackedArea -> trackedArea.area));
+        }
+        return out;
+    }
+
     public static void listDeprecateWarn(Attribute attribute) {
-        if (FutureWarning.futureWarningsEnabled && attribute.getAttribute(1).startsWith("list_")) {
-            Deprecations.listStyleTags.warn(attribute.context);
-            Debug.echoError("Tag '" + attribute.getAttribute(1) + "' is deprecated: remove the 'list_' prefix.");
+        if (attribute.getAttributeWithoutParam(1).startsWith("list_")) {
+            BukkitImplDeprecations.listStyleTags.warn(attribute.context);
         }
     }
 
@@ -2329,212 +2456,5 @@ public class ServerTagBase {
             }
         }
         return null;
-    }
-
-    // <--[ObjectType]
-    // @name server
-    // @prefix None
-    // @base None
-    // @format
-    // N/A
-    //
-    // @description
-    // "server" is an internal pseudo-ObjectType that is used as a mechanism adjust target for some global mechanisms.
-    //
-    // -->
-
-    public static void adjustServer(Mechanism mechanism) {
-
-        // <--[mechanism]
-        // @object server
-        // @name delete_file
-        // @input ElementTag
-        // @description
-        // Deletes the given file from the server.
-        // File path starts in the Denizen folder.
-        // Require config file setting "Commands.Delete.Allow file deletion".
-        // For example: - adjust server delete_file:schematics/house.schem
-        // @tags
-        // <server.has_file[<file>]>
-        // -->
-        if (mechanism.matches("delete_file") && mechanism.hasValue()) {
-            if (!Settings.allowDelete()) {
-                Debug.echoError("File deletion disabled by administrator (refer to mechanism documentation).");
-                return;
-            }
-            File file = new File(Denizen.getInstance().getDataFolder(), mechanism.getValue().asString());
-            if (!Utilities.canWriteToFile(file)) {
-                Debug.echoError("Cannot write to that file path due to security settings in Denizen/config.yml.");
-                return;
-            }
-            try {
-                if (!file.delete()) {
-                    Debug.echoError("Failed to delete file: returned false");
-                }
-            }
-            catch (Exception e) {
-                Debug.echoError("Failed to delete file: " + e.getMessage());
-            }
-        }
-
-        if (mechanism.matches("redirect_logging") && mechanism.hasValue()) {
-            Deprecations.serverRedirectLogging.warn(mechanism.context);
-            if (!Settings.allowConsoleRedirection()) {
-                Debug.echoError("Console redirection disabled by administrator.");
-                return;
-            }
-            if (mechanism.getValue().asBoolean()) {
-                DenizenCore.logInterceptor.redirectOutput();
-            }
-            else {
-                DenizenCore.logInterceptor.standardOutput();
-            }
-        }
-
-        // <--[mechanism]
-        // @object server
-        // @name reset_event_stats
-        // @input None
-        // @description
-        // Resets the statistics on events used for <@link tag util.event_stats>
-        // For example: - adjust server reset_event_stats
-        // @tags
-        // <util.event_stats>
-        // <util.event_stats_data>
-        // -->
-        if (mechanism.matches("reset_event_stats")) {
-            for (ScriptEvent se : ScriptEvent.events) {
-                se.eventData.stats_fires = 0;
-                se.eventData.stats_scriptFires = 0;
-                se.eventData.stats_nanoTimes = 0;
-            }
-        }
-
-        // <--[mechanism]
-        // @object server
-        // @name reset_recipes
-        // @input None
-        // @description
-        // Resets the server's recipe list to the default vanilla recipe list + item script recipes.
-        // For example: - adjust server reset_recipes
-        // @tags
-        // <server.recipe_ids[(<type>)]>
-        // -->
-        if (mechanism.matches("reset_recipes")) {
-            Bukkit.resetRecipes();
-            Denizen.getInstance().itemScriptHelper.rebuildRecipes();
-        }
-
-        // <--[mechanism]
-        // @object server
-        // @name remove_recipes
-        // @input ListTag
-        // @description
-        // Removes a recipe or list of recipes from the server, in Namespace:Key format.
-        // For example: - adjust server remove_recipes:<item[torch].recipe_ids>
-        // @tags
-        // <server.recipe_ids[(<type>)]>
-        // -->
-        if (mechanism.matches("remove_recipes")) {
-            ListTag list = mechanism.valueAsType(ListTag.class);
-            for (String str : list) {
-                NMSHandler.getItemHelper().removeRecipe(Utilities.parseNamespacedKey(str));
-            }
-        }
-
-        // <--[mechanism]
-        // @object server
-        // @name idle_timeout
-        // @input DurationTag
-        // @description
-        // Sets the server's current idle timeout limit (how long a player can sit still before getting kicked).
-        // Will be rounded to the nearest number of minutes.
-        // Set to 0 to disable automatic timeout kick.
-        // For example: - adjust server idle_timeout:5m
-        // @tags
-        // <server.idle_timeout>
-        // -->
-        if (mechanism.matches("idle_timeout") && mechanism.requireObject(DurationTag.class)) {
-            Bukkit.setIdleTimeout((int) Math.round(mechanism.valueAsType(DurationTag.class).getSeconds() / 60));
-        }
-
-        // <--[mechanism]
-        // @object server
-        // @name cleanmem
-        // @input None
-        // @description
-        // Suggests to the internal systems that it's a good time to clean the memory.
-        // Does NOT force a memory cleaning.
-        // This should generally not be used unless you have a very good specific reason to use it.
-        // For example: - adjust server cleanmem
-        // @tags
-        // <server.ram_free>
-        // -->
-        if (mechanism.matches("cleanmem")) {
-            System.gc();
-        }
-
-        // <--[mechanism]
-        // @object server
-        // @name restart
-        // @input None
-        // @description
-        // Immediately stops the server entirely (Plugins will still finalize, and the shutdown event will fire), then starts it again.
-        // Requires config file setting "Commands.Restart.Allow server restart"!
-        // Note that if your server is not configured to restart, this mechanism will simply stop the server without starting it again!
-        // For example: - adjust server restart
-        // -->
-        if (mechanism.matches("restart")) {
-            if (!Settings.allowServerRestart()) {
-                Debug.echoError("Server restart disabled by administrator (refer to mechanism documentation). Consider using 'shutdown'.");
-                return;
-            }
-            Bukkit.getConsoleSender().sendMessage(ChatColor.RED + "+> Server restarted by a Denizen script, see config to prevent this!");
-            Bukkit.spigot().restart();
-        }
-
-        // <--[mechanism]
-        // @object server
-        // @name save
-        // @input None
-        // @description
-        // Immediately saves the Denizen saves files.
-        // For example: - adjust server save
-        // -->
-        if (mechanism.matches("save")) {
-            DenizenCore.saveAll();
-            Denizen.getInstance().saveSaves(true);
-        }
-
-        // <--[mechanism]
-        // @object server
-        // @name save_citizens
-        // @input None
-        // @description
-        // Immediately saves the Citizens saves files.
-        // For example: - adjust server save_citizens
-        // -->
-        if (Depends.citizens != null && mechanism.matches("save_citizens")) {
-            Depends.citizens.storeNPCs(new CommandContext(new String[0]));
-        }
-
-        // <--[mechanism]
-        // @object server
-        // @name shutdown
-        // @input None
-        // @description
-        // Immediately stops the server entirely (Plugins will still finalize, and the shutdown event will fire).
-        // The server will remain shutdown until externally started again.
-        // Requires config file setting "Commands.Restart.Allow server stop"!
-        // For example: - adjust server shutdown
-        // -->
-        if (mechanism.matches("shutdown")) {
-            if (!Settings.allowServerStop()) {
-                Debug.echoError("Server stop disabled by administrator (refer to mechanism documentation). Consider using 'restart'.");
-                return;
-            }
-            Bukkit.getConsoleSender().sendMessage(ChatColor.RED + "+> Server shutdown by a Denizen script, see config to prevent this!");
-            Bukkit.shutdown();
-        }
     }
 }

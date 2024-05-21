@@ -1,5 +1,7 @@
 package com.denizenscript.denizen.objects.properties.material;
 
+import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.NMSVersion;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.ObjectTag;
@@ -10,11 +12,9 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.Lightable;
 import org.bukkit.block.data.Powerable;
 import org.bukkit.block.data.Openable;
-import org.bukkit.block.data.type.DaylightDetector;
-import org.bukkit.block.data.type.Dispenser;
-import org.bukkit.block.data.type.Piston;
+import org.bukkit.block.data.type.*;
 
-public class MaterialSwitchable  implements Property {
+public class MaterialSwitchable implements Property {
 
     public static boolean describes(ObjectTag material) {
         if (!(material instanceof MaterialTag)) {
@@ -30,7 +30,10 @@ public class MaterialSwitchable  implements Property {
                 || data instanceof Dispenser
                 || data instanceof DaylightDetector
                 || data instanceof Piston
-                || data instanceof Lightable;
+                || data instanceof Lightable
+                || data instanceof EndPortalFrame
+                || data instanceof Hopper
+                || (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19) && data instanceof SculkShrieker);
     }
 
     public static MaterialSwitchable getFrom(ObjectTag _material) {
@@ -46,13 +49,13 @@ public class MaterialSwitchable  implements Property {
             "switched"
     };
 
-    private MaterialSwitchable(MaterialTag _material) {
+    public MaterialSwitchable(MaterialTag _material) {
         material = _material;
     }
 
     public MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.switched>
@@ -61,19 +64,25 @@ public class MaterialSwitchable  implements Property {
         // @synonyms MaterialTag.lit, MaterialTag.open, MaterialTag.active
         // @group properties
         // @description
-        // Returns whether a Powerable material (like pressure plates) an Openable material (like doors), a dispenser, a daylight sensor, a lightable block, or a piston is switched.
+        // Returns whether a material is 'switched on', which has different semantic meaning depending on the material type.
+        // More specifically, this returns whether:
+        // - a Powerable material (like pressure plates) is activated
+        // - an Openable material (like doors) is open
+        // - a dispenser is powered and should dispense its contents
+        // - a daylight sensor is inverted (detects darkness instead of light)
+        // - a lightable block is lit
+        // - a piston block is extended
+        // - an end portal frame has an ender eye in it
+        // - a hopper is NOT being powered by redstone
+        // - a sculk_shrieker can summon a warden
         // -->
-        PropertyParser.<MaterialSwitchable, ElementTag>registerStaticTag(ElementTag.class, "switched", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialSwitchable.class, ElementTag.class, "switched", (attribute, material) -> {
             return new ElementTag(material.getState());
         });
     }
 
     public boolean isPowerable() {
         return material.getModernData() instanceof Powerable;
-    }
-
-    public Powerable getPowerable() {
-        return (Powerable) material.getModernData();
     }
 
     public boolean isOpenable() {
@@ -90,6 +99,26 @@ public class MaterialSwitchable  implements Property {
 
     public boolean isLightable() {
         return material.getModernData() instanceof Lightable;
+    }
+
+    public boolean isPiston() {
+        return material.getModernData() instanceof Piston;
+    }
+
+    public boolean isEndFrame() {
+        return material.getModernData() instanceof EndPortalFrame;
+    }
+
+    public boolean isHopper() {
+        return material.getModernData() instanceof Hopper;
+    }
+
+    public boolean isSculkShrieker() {
+        return NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19) && material.getModernData() instanceof SculkShrieker;
+    }
+
+    public Powerable getPowerable() {
+        return (Powerable) material.getModernData();
     }
 
     public Openable getOpenable() {
@@ -112,6 +141,18 @@ public class MaterialSwitchable  implements Property {
         return (Lightable) material.getModernData();
     }
 
+    public EndPortalFrame getEndFrame() {
+        return (EndPortalFrame) material.getModernData();
+    }
+
+    public Hopper getHopper() {
+        return (Hopper) material.getModernData();
+    }
+
+    /*public SculkShrieker getSculkShrieker() { // TODO: 1.19
+        return (SculkShrieker) material.getModernData();
+    }*/
+
     public boolean getState() {
         if (isOpenable()) {
             return getOpenable().isOpen();
@@ -128,9 +169,19 @@ public class MaterialSwitchable  implements Property {
         else if (isLightable()) {
             return getLightable().isLit();
         }
-        else {
+        else if (isPiston()) {
             return getPiston().isExtended();
         }
+        else if (isEndFrame()) {
+            return getEndFrame().hasEye();
+        }
+        else if (isHopper()) {
+            return getHopper().isEnabled();
+        }
+        else if (isSculkShrieker()) {
+            return ((SculkShrieker) material.getModernData()).isCanSummon();
+        }
+        return false; // Unreachable
     }
 
     public void setState(boolean state) {
@@ -149,8 +200,17 @@ public class MaterialSwitchable  implements Property {
         else if (isLightable()) {
             getLightable().setLit(state);
         }
-        else {
+        else if (isPiston()) {
             getPiston().setExtended(state);
+        }
+        else if (isEndFrame()) {
+            getEndFrame().setEye(state);
+        }
+        else if (isHopper()) {
+            getHopper().setEnabled(state);
+        }
+        else if (isSculkShrieker()) {
+            ((SculkShrieker) material.getModernData()).setCanSummon(state);
         }
     }
 
@@ -172,7 +232,17 @@ public class MaterialSwitchable  implements Property {
         // @name switched
         // @input ElementTag(Boolean)
         // @description
-        // Sets whether a Powerable material (like pressure plates) an Openable material (like doors), a dispenser, a daylight sensor, a lightable block, or a piston is switched.
+        // Sets whether a material is 'switched on', which has different semantic meaning depending on the material type.
+        // More specifically, this sets whether:
+        // - a Powerable material (like pressure plates) is activated
+        // - an Openable material (like doors) is open
+        // - a dispenser is powered and should dispense its contents
+        // - a daylight sensor can see the sun
+        // - a lightable block is lit
+        // - a piston block is extended
+        // - an end portal frame has an ender eye in it
+        // - a hopper is NOT being powered by redstone
+        // - a sculk_shrieker can summon a warden
         // @tags
         // <MaterialTag.switched>
         // -->

@@ -1,7 +1,8 @@
 package com.denizenscript.denizen.scripts.commands.npc;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.npc.traits.TriggerTrait;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
@@ -10,8 +11,6 @@ import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-
-import java.util.function.Consumer;
 
 public class TriggerCommand extends AbstractCommand {
 
@@ -73,11 +72,8 @@ public class TriggerCommand extends AbstractCommand {
     private enum Toggle {TOGGLE, TRUE, FALSE}
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        addOne.accept("name:click");
-        addOne.accept("name:chat");
-        addOne.accept("name:damage");
-        addOne.accept("name:proximity");
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.add("name:click", "name:chat", "name:damage", "name:proximity");
     }
 
     @Override
@@ -94,7 +90,7 @@ public class TriggerCommand extends AbstractCommand {
                 scriptEntry.addObject("radius", arg.asElement());
             }
             else if (!scriptEntry.hasObject("toggle")
-                    && arg.matchesEnum(Toggle.values())) {
+                    && arg.matchesEnum(Toggle.class)) {
                 scriptEntry.addObject("toggle", arg.asElement());
             }
             else if (!scriptEntry.hasObject("npc")
@@ -134,16 +130,16 @@ public class TriggerCommand extends AbstractCommand {
             npc.getCitizen().addTrait(TriggerTrait.class);
         }
         TriggerTrait trait = npc.getCitizen().getOrAddTrait(TriggerTrait.class);
+        if (!trait.triggerNameIsValid(trigger.asString())) {
+            throw new InvalidArgumentsRuntimeException("Invalid trigger name '" + trigger + "' - are you sure you spelled it right?");
+        }
         switch (Toggle.valueOf(toggle.asString().toUpperCase())) {
-
             case TOGGLE:
                 trait.toggleTrigger(trigger.asString());
                 break;
-
             case TRUE:
                 trait.toggleTrigger(trigger.asString(), true);
                 break;
-
             case FALSE:
                 trait.toggleTrigger(trigger.asString(), false);
                 break;

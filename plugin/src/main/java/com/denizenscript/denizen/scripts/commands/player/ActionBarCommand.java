@@ -4,7 +4,7 @@ import com.denizenscript.denizen.scripts.containers.core.FormatScriptContainer;
 import com.denizenscript.denizen.tags.BukkitTagContext;
 import com.denizenscript.denizen.utilities.FormattedTextHelper;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -26,7 +26,7 @@ public class ActionBarCommand extends AbstractCommand {
 
     public ActionBarCommand() {
         setName("actionbar");
-        setSyntax("actionbar [<text>] (targets:<player>|...) (format:<name>) (per_player)");
+        setSyntax("actionbar [<text>] (targets:<player>|...) (format:<script>) (per_player)");
         setRequiredArguments(1, 4);
         setParseArgs(false);
         isProcedural = false;
@@ -34,7 +34,7 @@ public class ActionBarCommand extends AbstractCommand {
 
     // <--[command]
     // @Name ActionBar
-    // @Syntax actionbar [<text>] (targets:<player>|...) (format:<name>) (per_player)
+    // @Syntax actionbar [<text>] (targets:<player>|...) (format:<script>) (per_player)
     // @Required 1
     // @Maximum 4
     // @Short Sends a message to a player's action bar.
@@ -87,7 +87,7 @@ public class ActionBarCommand extends AbstractCommand {
                 scriptEntry.addObject("per_player", new ElementTag(true));
             }
             else if (!scriptEntry.hasObject("text")) {
-                scriptEntry.addObject("text", new ElementTag(arg.getRawValue()));
+                scriptEntry.addObject("text", arg.getRawElement());
             }
             else {
                 arg.reportUnhandled();

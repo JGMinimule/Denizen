@@ -3,7 +3,7 @@ package com.denizenscript.denizen.utilities;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.objects.PlayerTag;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
 import com.denizenscript.denizencore.objects.ObjectTag;
@@ -137,7 +137,7 @@ public class LegacySavesUpdater {
                 }
             }.runTaskLater(Denizen.getInstance(), 3);
         }
-        Denizen.getInstance().saveSaves(true);
+        Denizen.getInstance().saveSaves(false);
         Debug.log("==== Done updating legacy saves (except NPCs) ====");
     }
 

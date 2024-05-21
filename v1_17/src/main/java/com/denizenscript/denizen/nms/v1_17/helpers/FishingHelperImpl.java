@@ -2,7 +2,7 @@ package com.denizenscript.denizen.nms.v1_17.helpers;
 
 import com.denizenscript.denizen.nms.interfaces.FishingHelper;
 import com.denizenscript.denizen.nms.v1_17.ReflectionMappingsInfo;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.utilities.ReflectionHelper;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -106,9 +106,9 @@ public class FishingHelperImpl implements FishingHelper {
         return getRandomReward(fishHook, BuiltInLootTables.FISHING_FISH);
     }
 
-    public static Field FISHING_HOOK_NIBBLE_SETTER = ReflectionHelper.getFields(FishingHook.class).get(ReflectionMappingsInfo.FishingHook_nibble);
-    public static Field FISHING_HOOK_LURE_TIME_SETTER = ReflectionHelper.getFields(FishingHook.class).get(ReflectionMappingsInfo.FishingHook_timeUntilLured);
-    public static Field FISHING_HOOK_HOOK_TIME_SETTER = ReflectionHelper.getFields(FishingHook.class).get(ReflectionMappingsInfo.FishingHook_timeUntilHooked);
+    public static Field FISHING_HOOK_NIBBLE_SETTER = ReflectionHelper.getFields(FishingHook.class).get(ReflectionMappingsInfo.FishingHook_nibble, int.class);
+    public static Field FISHING_HOOK_LURE_TIME_SETTER = ReflectionHelper.getFields(FishingHook.class).get(ReflectionMappingsInfo.FishingHook_timeUntilLured, int.class);
+    public static Field FISHING_HOOK_HOOK_TIME_SETTER = ReflectionHelper.getFields(FishingHook.class).get(ReflectionMappingsInfo.FishingHook_timeUntilHooked, int.class);
 
     @Override
     public FishHook getHookFrom(Player player) {

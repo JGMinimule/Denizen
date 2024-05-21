@@ -4,13 +4,14 @@ import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizen.scripts.containers.core.InventoryScriptContainer;
 import com.denizenscript.denizen.scripts.containers.core.InventoryScriptHelper;
 import com.denizenscript.denizen.scripts.containers.core.ItemScriptHelper;
-import com.denizenscript.denizen.utilities.AdvancedTextImpl;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizen.utilities.PaperAPITools;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.depends.Depends;
 import com.denizenscript.denizen.utilities.inventory.InventoryTrackerSystem;
 import com.denizenscript.denizen.utilities.inventory.RecipeHelper;
 import com.denizenscript.denizen.utilities.inventory.SlotHelper;
 import com.denizenscript.denizen.utilities.nbt.CustomNBT;
+import com.denizenscript.denizencore.events.ScriptEvent;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
 import com.denizenscript.denizencore.flags.FlaggableObject;
 import com.denizenscript.denizencore.flags.SavableMapFlagTracker;
@@ -31,7 +32,7 @@ import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import com.denizenscript.denizencore.utilities.YamlConfiguration;
 import net.citizensnpcs.api.CitizensAPI;
 import org.bukkit.Bukkit;
@@ -40,6 +41,7 @@ import org.bukkit.Material;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.DoubleChest;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.*;
@@ -55,8 +57,14 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
     // @prefix in
     // @base ElementTag
     // @implements FlaggableObject, PropertyHolderObject
+    // @ExampleTagBase player.inventory
+    // @ExampleValues <player.inventory>
+    // @ExampleForReturns
+    // - note %VALUE% as:my_new_inventory
+    // @ExampleForReturns
+    // - inventory set o:%VALUE% d:stick slot:5
     // @format
-    // The identity format for inventories is a the classification type of inventory to use. All other data is specified through properties.
+    // The identity format for inventories is the classification type of inventory to use. All other data is specified through properties.
     //
     // @description
     // An InventoryTag represents an inventory, generically or attached to some in-the-world object.
@@ -71,6 +79,15 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
     //
     // This object type is flaggable when it is noted.
     // Flags on this object type will be stored in the notables.yml file.
+    //
+    // @Matchable
+    // InventoryTag matchers, sometimes identified as "<inventory>":
+    // "inventory" plaintext: always matches.
+    // "note" plaintext: matches if the inventory is noted.
+    // Inventory script name: matches if the inventory comes from an inventory script of the given name, using advanced matchers.
+    // Inventory note name: matches if the inventory is noted with the given name, using advanced matchers.
+    // Inventory type: matches if the inventory is of a given type, using advanced matchers.
+    // "inventory_flagged:<flag>": a Flag Matchable for InventoryTag flags.
     //
     // -->
 
@@ -99,18 +116,14 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             return result;
         }
         // Iterate through offline player inventories
-        for (Map.Entry<UUID, PlayerInventory> inv : ImprovedOfflinePlayer.offlineInventories.entrySet()) {
-            if (inv.getValue().equals(inventory)) {
-                return new InventoryTag(NMSHandler.getPlayerHelper().getOfflineData(inv.getKey()));
+        for (ImprovedOfflinePlayer player : ImprovedOfflinePlayer.offlinePlayers.values()) {
+            if (player.inventory != null && player.inventory.equals(inventory)) {
+                return new InventoryTag(player);
+            }
+            if (player.enderchest != null && player.enderchest.equals(inventory)) {
+                return new InventoryTag(player, true);
             }
         }
-        // Iterate through offline player enderchests
-        for (Map.Entry<UUID, Inventory> inv : ImprovedOfflinePlayer.offlineEnderChests.entrySet()) {
-            if (inv.getValue().equals(inventory)) {
-                return new InventoryTag(NMSHandler.getPlayerHelper().getOfflineData(inv.getKey()), true);
-            }
-        }
-
         return new InventoryTag(inventory);
     }
 
@@ -159,21 +172,21 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         this.inventory = inventory;
     }
 
-    public String noteName;
+    public String noteName = null, priorNoteName = null;
 
     public void makeUnique(String id) {
         InventoryTag toNote = new InventoryTag(inventory, idType, idHolder);
         toNote.uniquifier = null;
-        String title = AdvancedTextImpl.instance.getTitle(inventory);
+        String title = PaperAPITools.instance.getTitle(inventory);
         if (title == null || title.startsWith("container.")) {
             title = toNote.inventory.getType().getDefaultTitle();
         }
         ItemStack[] contents = toNote.inventory.getContents();
         if (getInventoryType() == InventoryType.CHEST) {
-            toNote.inventory = AdvancedTextImpl.instance.createInventory(null, toNote.inventory.getSize(), title);
+            toNote.inventory = PaperAPITools.instance.createInventory(null, toNote.inventory.getSize(), title);
         }
         else {
-            toNote.inventory = AdvancedTextImpl.instance.createInventory(null, toNote.inventory.getType(), title);
+            toNote.inventory = PaperAPITools.instance.createInventory(null, toNote.inventory.getType(), title);
         }
         toNote.inventory.setContents(contents);
         InventoryScriptHelper.notedInventories.put(toNote.inventory, toNote);
@@ -188,10 +201,27 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
 
     @Override
     public void forget() {
+        if (noteName == null) {
+            return;
+        }
+        priorNoteName = noteName;
         NoteManager.remove(this);
         InventoryScriptHelper.notedInventories.remove(inventory);
         flagTracker = null;
         noteName = null;
+    }
+
+    @Override
+    public InventoryTag refreshState() {
+        if (noteName == null && priorNoteName != null) {
+            Notable note = NoteManager.getSavedObject(priorNoteName);
+            if (note instanceof InventoryTag) {
+                return (InventoryTag) note;
+            }
+            priorNoteName = null;
+        }
+        trackTemporaryInventory(this);
+        return this;
     }
 
     @Override
@@ -315,7 +345,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         }
         InventoryTag result = null;
         if (typeName.equals("generic")) {
-            if (holder != null && !new ElementTag(holder).matchesEnum(InventoryType.values())) {
+            if (holder != null && !new ElementTag(holder).matchesEnum(InventoryType.class)) {
                 if (context == null || context.showErrors()) {
                     Debug.echoError("Unknown inventory type '" + holder + "'");
                 }
@@ -348,7 +378,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 result = ((InventoryScriptContainer) script.getContainer()).getInventoryFrom(context);
             }
         }
-        if (result == null && new ElementTag(typeName).matchesEnum(InventoryType.values())) {
+        if (result == null && new ElementTag(typeName).matchesEnum(InventoryType.class)) {
             InventoryType type = InventoryType.valueOf(typeName.toUpperCase());
             if (size == -1 || type != InventoryType.CHEST) {
                 result = new InventoryTag(type);
@@ -377,10 +407,9 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 continue;
             }
             String name = CoreUtilities.toLowerCase(data.get(0));
-            String description = ObjectFetcher.unescapeProperty(data.get(1));
-            ElementTag descriptionElement = new ElementTag(description);
-            Mechanism mechanism = new Mechanism(data.get(0), descriptionElement, context);
             if (!name.equals("holder") && !name.equals("uniquifier") && !name.equals("size") && !name.equals("script_name")) {
+                String description = ObjectFetcher.unescapeProperty(data.get(1));
+                Mechanism mechanism = new Mechanism(name, ObjectFetcher.pickObjectFor(description, context), context);
                 result.safeAdjust(mechanism);
             }
         }
@@ -413,7 +442,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         if (ScriptRegistry.containsScript(string, InventoryScriptContainer.class)) {
             return ScriptRegistry.getScriptContainerAs(string, InventoryScriptContainer.class).getInventoryFrom(context);
         }
-        if (new ElementTag(string).matchesEnum(InventoryType.values())) {
+        if (new ElementTag(string).matchesEnum(InventoryType.class)) {
             InventoryType type = InventoryType.valueOf(string.toUpperCase());
             return new InventoryTag(type);
         }
@@ -431,7 +460,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         if (arg.contains("[")) {
             tid = arg.substring(0, arg.indexOf('['));
         }
-        if (new ElementTag(tid).matchesEnum(InventoryType.values())) {
+        if (new ElementTag(tid).matchesEnum(InventoryType.class)) {
             return true;
         }
         if (ScriptRegistry.containsScript(tid, InventoryScriptContainer.class)) {
@@ -462,7 +491,9 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
 
     public Inventory inventory = null;
 
-    public String prefix = getObjectType();
+    public String customTitle = null;
+
+    public String prefix = "Inventory";
 
     private InventoryTag(Inventory inventory) {
         this.inventory = inventory;
@@ -502,7 +533,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             Debug.echoError("InventorySize must be multiple of 9, and greater than 0.");
             return;
         }
-        inventory = AdvancedTextImpl.instance.createInventory(null, size, title);
+        inventory = PaperAPITools.instance.createInventory(null, size, title);
         idType = "generic";
         idHolder = new ElementTag("chest");
     }
@@ -514,7 +545,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
     }
 
     public InventoryTag(InventoryType type, String title) {
-        inventory = AdvancedTextImpl.instance.createInventory(null, type, title);
+        inventory = PaperAPITools.instance.createInventory(null, type, title);
         idType = "generic";
         idHolder = new ElementTag(CoreUtilities.toLowerCase(type.name()));
     }
@@ -567,13 +598,16 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             return;
         }
         else if (inventory == null) {
+            uniquifier = null;
             inventory = Bukkit.getServer().createInventory(null, size, "Chest");
+            trackTemporaryInventory(this);
             return;
         }
         int oldSize = inventory.getSize();
         if (oldSize == size) {
             return;
         }
+        uniquifier = null;
         ItemStack[] oldContents = inventory.getContents();
         ItemStack[] newContents = new ItemStack[size];
         if (oldSize > size) {
@@ -583,12 +617,12 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         else {
             newContents = oldContents;
         }
-        String title = AdvancedTextImpl.instance.getTitle(inventory);
+        String title = PaperAPITools.instance.getTitle(inventory);
         if (title == null) {
             setInventory(Bukkit.getServer().createInventory(null, size));
         }
         else {
-            setInventory(AdvancedTextImpl.instance.createInventory(null, size, title));
+            setInventory(PaperAPITools.instance.createInventory(null, size, title));
         }
         inventory.setContents(newContents);
         trackTemporaryInventory(this);
@@ -652,10 +686,9 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             if (idHolder instanceof PlayerTag) {
                 return;
             }
-            // Iterate through offline player inventories
-            for (Map.Entry<UUID, PlayerInventory> inv : ImprovedOfflinePlayer.offlineInventories.entrySet()) { // TODO: Less weird lookup?
-                if (inv.getValue().equals(inventory)) {
-                    idHolder = new PlayerTag(inv.getKey());
+            for (ImprovedOfflinePlayer player : ImprovedOfflinePlayer.offlinePlayers.values()) { // TODO: Less weird lookup?
+                if (player.inventory != null && player.inventory.equals(inventory)) {
+                    idHolder = new PlayerTag(player.player);
                     return;
                 }
             }
@@ -665,9 +698,9 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 return;
             }
             // Iterate through offline player enderchests
-            for (Map.Entry<UUID, Inventory> inv : ImprovedOfflinePlayer.offlineEnderChests.entrySet()) { // TODO: Less weird lookup?
-                if (inv.getValue().equals(inventory)) {
-                    idHolder = new PlayerTag(inv.getKey());
+            for (ImprovedOfflinePlayer player : ImprovedOfflinePlayer.offlinePlayers.values()) { // TODO: Less weird lookup?
+                if (player.enderchest != null && player.enderchest.equals(inventory)) {
+                    idHolder = new PlayerTag(player.player);
                     return;
                 }
             }
@@ -829,24 +862,31 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         }
     }
 
-    public int firstPartial(int startSlot, ItemStack item) {
+    private boolean isSlotAllowed(String allowedSlots, int slot) {
+        if (allowedSlots == null) {
+            return true;
+        }
+        return SlotHelper.doesMatch(allowedSlots, idHolder instanceof EntityFormObject ? ((EntityFormObject) idHolder).getDenizenEntity().getBukkitEntity() : null, slot);
+    }
+
+    public int firstPartial(int startSlot, ItemStack item, String allowedSlots) {
         ItemStack[] inventory = getContents();
         if (item == null) {
             return -1;
         }
         for (int i = startSlot; i < inventory.length; i++) {
             ItemStack item1 = inventory[i];
-            if (item1 != null && item1.getAmount() < item.getMaxStackSize() && item1.isSimilar(item)) {
+            if (item1 != null && item1.getAmount() < item.getMaxStackSize() && item1.isSimilar(item) && isSlotAllowed(allowedSlots, i)) {
                 return i;
             }
         }
         return -1;
     }
 
-    public int firstEmpty(int startSlot) {
+    public int firstEmpty(int startSlot, String allowedSlots) {
         ItemStack[] inventory = getStorageContents();
         for (int i = startSlot; i < inventory.length; i++) {
-            if (inventory[i] == null) {
+            if (inventory[i] == null && isSlotAllowed(allowedSlots, i)) {
                 return i;
             }
         }
@@ -867,11 +907,11 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             int max = item.getMaxStackSize();
             while (true) {
                 // Do we already have a stack of it?
-                int firstPartial = firstPartial(slot, item);
+                int firstPartial = firstPartial(slot, item, null);
                 // Drat! no partial stack
                 if (firstPartial == -1) {
                     // Find a free spot!
-                    int firstFree = firstEmpty(slot);
+                    int firstFree = firstEmpty(slot, null);
                     if (firstFree == -1) {
                         // No space at all!
                         break;
@@ -881,12 +921,12 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                         if (amount > max) {
                             ItemStack clone = item.clone();
                             clone.setAmount(max);
-                            NMSHandler.getItemHelper().setInventoryItem(inventory, clone, firstFree);
+                            NMSHandler.itemHelper.setInventoryItem(inventory, clone, firstFree);
                             item.setAmount(amount -= max);
                         }
                         else {
                             // Just store it
-                            NMSHandler.getItemHelper().setInventoryItem(inventory, item, firstFree);
+                            NMSHandler.itemHelper.setInventoryItem(inventory, item, firstFree);
                             break;
                         }
                     }
@@ -910,7 +950,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         return this;
     }
 
-    public List<ItemStack> addWithLeftovers(int slot, boolean keepMaxStackSize, ItemStack... items) {
+    public List<ItemStack> addWithLeftovers(int slot, String allowedSlots, boolean keepMaxStackSize, ItemStack... items) {
         if (inventory == null || items == null) {
             return null;
         }
@@ -930,12 +970,11 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             }
             while (true) {
                 // Do we already have a stack of it?
-                int firstPartial = firstPartial(slot, item);
+                int firstPartial = firstPartial(slot, item, allowedSlots);
                 // Drat! no partial stack
                 if (firstPartial == -1) {
                     // Find a free spot!
-                    int firstFree = firstEmpty(slot);
-
+                    int firstFree = firstEmpty(slot, allowedSlots);
                     if (firstFree == -1) {
                         // No space at all!
                         leftovers.add(item);
@@ -946,12 +985,12 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                         if (amount > max) {
                             ItemStack clone = item.clone();
                             clone.setAmount(max);
-                            NMSHandler.getItemHelper().setInventoryItem(inventory, clone, firstFree);
+                            NMSHandler.itemHelper.setInventoryItem(inventory, clone, firstFree);
                             item.setAmount(amount -= max);
                         }
                         else {
                             // Just store it
-                            NMSHandler.getItemHelper().setInventoryItem(inventory, item, firstFree);
+                            NMSHandler.itemHelper.setInventoryItem(inventory, item, firstFree);
                             break;
                         }
                     }
@@ -1070,13 +1109,13 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         }
         for (int i = 0; i < c; i++) {
             if (i >= items.length || items[i] == null) {
-                NMSHandler.getItemHelper().setInventoryItem(inventory, new ItemStack(Material.AIR), slot + i);
+                NMSHandler.itemHelper.setInventoryItem(inventory, new ItemStack(Material.AIR), slot + i);
             }
             ItemStack item = items[i];
             if (slot + i < 0 || slot + i >= inventory.getSize()) {
                 break;
             }
-            NMSHandler.getItemHelper().setInventoryItem(inventory, item, slot + i);
+            NMSHandler.itemHelper.setInventoryItem(inventory, item, slot + i);
         }
         if (Depends.citizens != null && idHolder instanceof NPCTag) {
             ((NPCTag) idHolder).getInventoryTrait().setContents(inventory.getContents());
@@ -1088,11 +1127,6 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         if (inventory != null) {
             inventory.clear();
         }
-    }
-
-    @Override
-    public String getObjectType() {
-        return "Inventory";
     }
 
     @Override
@@ -1118,6 +1152,17 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
     }
 
     @Override
+    public String debuggable() {
+        if (isUnique()) {
+            return "<LG>in@<Y>" + NoteManager.getSavedId(this);
+        }
+        else {
+            trackTemporaryInventory(this);
+            return "<LG>in@<Y>" + idType + PropertyParser.getPropertiesDebuggable(this);
+        }
+    }
+
+    @Override
     public String identifySimple() {
         return identify();
     }
@@ -1127,7 +1172,12 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         return identify();
     }
 
-    public static void registerTags() {
+    @Override
+    public Object getJavaObject() {
+        return inventory;
+    }
+
+    public static void register() {
 
         AbstractFlagTracker.registerFlagHandlers(tagProcessor);
         PropertyParser.registerPropertyTagHandlers(InventoryTag.class, tagProcessor);
@@ -1171,7 +1221,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             }
 
             InventoryType type = object.inventory.getType();
-            InventoryTag dummyInv = new InventoryTag(type == InventoryType.PLAYER ? InventoryType.CHEST : type, AdvancedTextImpl.instance.getTitle(object.inventory));
+            InventoryTag dummyInv = new InventoryTag(type == InventoryType.PLAYER ? InventoryType.CHEST : type, PaperAPITools.instance.getTitle(object.inventory));
             ItemStack[] contents = object.getStorageContents();
             if (dummyInv.getInventoryType() == InventoryType.CHEST) {
                 dummyInv.setSize(contents.length);
@@ -1191,7 +1241,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 ItemStack toAdd = items.get(0).getItemStack().clone();
                 int totalCount = 64 * 64 * 4; // Technically nothing stops us from ridiculous numbers in an ItemStack amount.
                 toAdd.setAmount(totalCount);
-                List<ItemStack> leftovers = dummyInv.addWithLeftovers(0, true, toAdd);
+                List<ItemStack> leftovers = dummyInv.addWithLeftovers(0, null, true, toAdd);
                 int result = 0;
                 if (leftovers.size() > 0) {
                     result += leftovers.get(0).getAmount();
@@ -1208,7 +1258,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             // -->
             if ((attribute.startsWith("quantity", 2) || attribute.startsWith("qty", 2)) && attribute.hasContext(2)) {
                 if (attribute.startsWith("qty", 2)) {
-                    Deprecations.qtyTags.warn(attribute.context);
+                    BukkitImplDeprecations.qtyTags.warn(attribute.context);
                 }
                 int qty = attribute.getIntContext(2);
                 ItemTag itemZero = new ItemTag(items.get(0).getItemStack().clone());
@@ -1219,7 +1269,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
 
             // NOTE: Could just also convert items to an array and pass it all in at once...
             for (ItemTag itm : items) {
-                List<ItemStack> leftovers = dummyInv.addWithLeftovers(0, true, itm.getItemStack().clone());
+                List<ItemStack> leftovers = dummyInv.addWithLeftovers(0, null, true, itm.getItemStack().clone());
                 if (!leftovers.isEmpty()) {
                     return new ElementTag(false);
                 }
@@ -1238,7 +1288,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 return null;
             }
             List<ItemTag> items = ListTag.getListFor(attribute.getParamObject(), attribute.context).filter(ItemTag.class, attribute.context);
-            InventoryTag dummyInv = new InventoryTag(object.inventory.getType(), AdvancedTextImpl.instance.getTitle(object.inventory));
+            InventoryTag dummyInv = new InventoryTag(object.inventory.getType(), PaperAPITools.instance.getTitle(object.inventory));
             if (object.inventory.getType() == InventoryType.CHEST) {
                 dummyInv.setSize(object.inventory.getSize());
             }
@@ -1257,7 +1307,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             // -->
             if ((attribute.startsWith("quantity", 2) || attribute.startsWith("qty", 2)) && attribute.hasContext(2)) {
                 if (attribute.startsWith("qty", 2)) {
-                    Deprecations.qtyTags.warn(attribute.context);
+                    BukkitImplDeprecations.qtyTags.warn(attribute.context);
                 }
                 int qty = attribute.getIntContext(2);
                 ItemTag itemZero = new ItemTag(items.get(0).getItemStack().clone());
@@ -1282,7 +1332,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 return null;
             }
             String matcher = attribute.getParam();
-            InventoryTag dummyInv = new InventoryTag(object.inventory.getType(), AdvancedTextImpl.instance.getTitle(object.inventory));
+            InventoryTag dummyInv = new InventoryTag(object.inventory.getType(), PaperAPITools.instance.getTitle(object.inventory));
             if (object.inventory.getType() == InventoryType.CHEST) {
                 dummyInv.setSize(object.inventory.getSize());
             }
@@ -1306,7 +1356,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             }
             for (int slot = 0; slot < dummyInv.inventory.getSize(); slot++) {
                 ItemStack item = dummyInv.inventory.getItem(slot);
-                if (item != null && BukkitScriptEvent.tryItem(new ItemTag(item), matcher)) {
+                if (item != null && new ItemTag(item).tryAdvancedMatcher(matcher)) {
                     quantity -= item.getAmount();
                     if (quantity >= 0) {
                         dummyInv.inventory.setItem(slot, null);
@@ -1325,12 +1375,12 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         });
 
         tagProcessor.registerTag(InventoryTag.class, "exclude", (attribute, object) -> {
-            Deprecations.inventoryNonMatcherTags.warn(attribute.context);
+            BukkitImplDeprecations.inventoryNonMatcherTags.warn(attribute.context);
             if (!attribute.hasParam()) {
                 return null;
             }
             List<ItemTag> items = ListTag.getListFor(attribute.getParamObject(), attribute.context).filter(ItemTag.class, attribute.context);
-            InventoryTag dummyInv = new InventoryTag(object.inventory.getType(), AdvancedTextImpl.instance.getTitle(object.inventory));
+            InventoryTag dummyInv = new InventoryTag(object.inventory.getType(), PaperAPITools.instance.getTitle(object.inventory));
             if (object.inventory.getType() == InventoryType.CHEST) {
                 dummyInv.setSize(object.inventory.getSize());
             }
@@ -1342,7 +1392,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             trackTemporaryInventory(dummyInv);
             if ((attribute.startsWith("quantity", 2) || attribute.startsWith("qty", 2)) && attribute.hasContext(2)) {
                 if (attribute.startsWith("qty", 2)) {
-                    Deprecations.qtyTags.warn(attribute.context);
+                    BukkitImplDeprecations.qtyTags.warn(attribute.context);
                 }
                 int qty = attribute.getIntContext(2);
                 ItemTag itemZero = new ItemTag(items.get(0).getItemStack().clone());
@@ -1398,7 +1448,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         // @returns ElementTag(Boolean)
         // @description
         // Returns whether the inventory contains any item that matches the specified item matcher.
-        // Uses the system behind <@link language Advanced Script Event Matching>.
+        // Uses the system behind <@link language Advanced Object Matching>.
         // -->
         tagProcessor.registerTag(ElementTag.class, "contains_item", (attribute, object) -> {
             if (!attribute.hasParam()) {
@@ -1412,7 +1462,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             // @returns ElementTag(Boolean)
             // @description
             // Returns whether the inventory contains a certain number of items that match the specified item matcher.
-            // Uses the system behind <@link language Advanced Script Event Matching>.
+            // Uses the system behind <@link language Advanced Object Matching>.
             // -->
             if (attribute.startsWith("quantity", 2) && attribute.hasContext(2)) {
                 qty = attribute.getIntContext(2);
@@ -1421,7 +1471,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             int found_items = 0;
             for (ItemStack item : object.getContents()) {
                 if (item != null) {
-                    if (BukkitScriptEvent.tryItem(new ItemTag(item), matcher)) {
+                    if (new ItemTag(item).tryAdvancedMatcher(matcher)) {
                         found_items += item.getAmount();
                         if (found_items >= qty) {
                             break;
@@ -1466,7 +1516,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 // -->
                 if ((attribute.startsWith("quantity", 3) || attribute.startsWith("qty", 3)) && attribute.hasContext(3)) {
                     if (attribute.startsWith("qty", 3)) {
-                        Deprecations.qtyTags.warn(attribute.context);
+                        BukkitImplDeprecations.qtyTags.warn(attribute.context);
                     }
                     qty = attribute.getIntContext(3);
                     attribute.fulfill(1);
@@ -1549,7 +1599,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 // -->
                 if ((attribute.startsWith("quantity", 3) || attribute.startsWith("qty", 3)) && attribute.hasContext(3)) {
                     if (attribute.startsWith("qty", 3)) {
-                        Deprecations.qtyTags.warn(attribute.context);
+                        BukkitImplDeprecations.qtyTags.warn(attribute.context);
                     }
                     qty = attribute.getIntContext(3);
                     attribute.fulfill(1);
@@ -1610,7 +1660,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 return new ElementTag(found_items >= qty);
             }
             if (attribute.startsWith("scriptname", 2)) {
-                Deprecations.inventoryNonMatcherTags.warn(attribute.context);
+                BukkitImplDeprecations.inventoryNonMatcherTags.warn(attribute.context);
                 if (!attribute.hasContext(2)) {
                     return null;
                 }
@@ -1623,7 +1673,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
 
                 if ((attribute.startsWith("quantity", 3) || attribute.startsWith("qty", 3)) && attribute.hasContext(3)) {
                     if (attribute.startsWith("qty", 3)) {
-                        Deprecations.qtyTags.warn(attribute.context);
+                        BukkitImplDeprecations.qtyTags.warn(attribute.context);
                     }
                     qty = attribute.getIntContext(3);
                     attribute.fulfill(1);
@@ -1644,7 +1694,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 return new ElementTag(found_items >= qty);
             }
             if (attribute.startsWith("flagged", 2)) {
-                Deprecations.inventoryNonMatcherTags.warn(attribute.context);
+                BukkitImplDeprecations.inventoryNonMatcherTags.warn(attribute.context);
                 if (!attribute.hasContext(2)) {
                     return null;
                 }
@@ -1675,7 +1725,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 return new ElementTag(found_items >= qty);
             }
             if (attribute.startsWith("nbt", 2)) {
-                Deprecations.itemNbt.warn(attribute.context);
+                BukkitImplDeprecations.itemNbt.warn(attribute.context);
                 if (!attribute.hasContext(2)) {
                     return null;
                 }
@@ -1683,7 +1733,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 int qty = 1;
                 if ((attribute.startsWith("quantity", 3) || attribute.startsWith("qty", 3)) && attribute.hasContext(3)) {
                     if (attribute.startsWith("qty", 3)) {
-                        Deprecations.qtyTags.warn(attribute.context);
+                        BukkitImplDeprecations.qtyTags.warn(attribute.context);
                     }
                     qty = attribute.getIntContext(3);
                     attribute.fulfill(1);
@@ -1701,7 +1751,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 return new ElementTag(found_items >= qty);
             }
             if (attribute.startsWith("material", 2)) {
-                Deprecations.inventoryNonMatcherTags.warn(attribute.context);
+                BukkitImplDeprecations.inventoryNonMatcherTags.warn(attribute.context);
                 if (!attribute.hasContext(2)) {
                     return null;
                 }
@@ -1710,7 +1760,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
 
                 if ((attribute.startsWith("quantity", 3) || attribute.startsWith("qty", 3)) && attribute.hasContext(3)) {
                     if (attribute.startsWith("qty", 3)) {
-                        Deprecations.qtyTags.warn(attribute.context);
+                        BukkitImplDeprecations.qtyTags.warn(attribute.context);
                     }
                     qty = attribute.getIntContext(3);
                     attribute.fulfill(1);
@@ -1742,10 +1792,10 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             }
             int qty = 1;
 
-            Deprecations.inventoryNonMatcherTags.warn(attribute.context);
+            BukkitImplDeprecations.inventoryNonMatcherTags.warn(attribute.context);
             if ((attribute.startsWith("quantity", 2) || attribute.startsWith("qty", 2)) && attribute.hasContext(2)) {
                 if (attribute.startsWith("qty", 2)) {
-                    Deprecations.qtyTags.warn(attribute.context);
+                    BukkitImplDeprecations.qtyTags.warn(attribute.context);
                 }
                 qty = attribute.getIntContext(2);
                 attribute.fulfill(1);
@@ -1763,7 +1813,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         });
 
         tagProcessor.registerTag(ElementTag.class, "contains_any", (attribute, object) -> {
-            Deprecations.inventoryNonMatcherTags.warn(attribute.context);
+            BukkitImplDeprecations.inventoryNonMatcherTags.warn(attribute.context);
             if (!attribute.hasParam()) {
                 return null;
             }
@@ -1775,7 +1825,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
 
             if ((attribute.startsWith("quantity", 2) || attribute.startsWith("qty", 2)) && attribute.hasContext(2)) {
                 if (attribute.startsWith("qty", 2)) {
-                    Deprecations.qtyTags.warn(attribute.context);
+                    BukkitImplDeprecations.qtyTags.warn(attribute.context);
                 }
                 qty = attribute.getIntContext(2);
                 attribute.fulfill(1);
@@ -1799,7 +1849,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         // Returns -1 if the inventory is full.
         // -->
         tagProcessor.registerTag(ElementTag.class, "first_empty", (attribute, object) -> {
-            int val = object.firstEmpty(0);
+            int val = object.firstEmpty(0, null);
             return new ElementTag(val >= 0 ? (val + 1) : -1);
         });
 
@@ -1809,7 +1859,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         // @description
         // Returns the location of the first slot that contains an item that matches the given item matcher.
         // Returns -1 if there's no match.
-        // Uses the system behind <@link language Advanced Script Event Matching>.
+        // Uses the system behind <@link language Advanced Object Matching>.
         // -->
         tagProcessor.registerTag(ElementTag.class, "find_item", (attribute, object) -> {
             if (!attribute.hasParam()) {
@@ -1819,7 +1869,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             for (int i = 0; i < object.inventory.getSize(); i++) {
                 ItemStack item = object.inventory.getItem(i);
                 if (item != null) {
-                    if (BukkitScriptEvent.tryItem(new ItemTag(item), matcher)) {
+                    if (new ItemTag(item).tryAdvancedMatcher(matcher)) {
                         return new ElementTag(i + 1);
                     }
                 }
@@ -1833,7 +1883,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         // @description
         // Returns a list of the location of all slots that contains an item that matches the given item matcher.
         // Returns an empty list if there's no match.
-        // Uses the system behind <@link language Advanced Script Event Matching>.
+        // Uses the system behind <@link language Advanced Object Matching>.
         // -->
         tagProcessor.registerTag(ListTag.class, "find_all_items", (attribute, object) -> {
             if (!attribute.hasParam()) {
@@ -1844,7 +1894,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
             for (int i = 0; i < object.inventory.getSize(); i++) {
                 ItemStack item = object.inventory.getItem(i);
                 if (item != null) {
-                    if (BukkitScriptEvent.tryItem(new ItemTag(item), matcher)) {
+                    if (new ItemTag(item).tryAdvancedMatcher(matcher)) {
                         result.addObject(new ElementTag(i + 1));
                     }
                 }
@@ -1853,7 +1903,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         });
 
         tagProcessor.registerTag(ElementTag.class, "find", (attribute, object) -> {
-            Deprecations.inventoryNonMatcherTags.warn(attribute.context);
+            BukkitImplDeprecations.inventoryNonMatcherTags.warn(attribute.context);
             if (attribute.startsWith("material", 2)) {
                 ListTag list = attribute.contextAsType(2, ListTag.class);
                 if (list == null) {
@@ -1910,7 +1960,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         });
 
         tagProcessor.registerTag(ElementTag.class, "find_imperfect", (attribute, object) -> {
-            Deprecations.inventoryNonMatcherTags.warn(attribute.context);
+            BukkitImplDeprecations.inventoryNonMatcherTags.warn(attribute.context);
             if (!attribute.hasParam() || !ItemTag.matches(attribute.getParam())) {
                 return null;
             }
@@ -1971,14 +2021,14 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         // @description
         // Returns the combined quantity of itemstacks that match an item matcher if one is specified,
         // or the combined quantity of all itemstacks if one is not.
-        // Uses the system behind <@link language Advanced Script Event Matching>.
+        // Uses the system behind <@link language Advanced Object Matching>.
         // -->
         tagProcessor.registerTag(ElementTag.class, "quantity_item", (attribute, object) -> {
             String matcher = attribute.hasParam() ? attribute.getParam() : null;
             int found_items = 0;
             for (ItemStack item : object.getContents()) {
                 if (item != null) {
-                    if (matcher == null || BukkitScriptEvent.tryItem(new ItemTag(item), matcher)) {
+                    if (matcher == null || new ItemTag(item).tryAdvancedMatcher(matcher)) {
                         found_items += item.getAmount();
                     }
                 }
@@ -1987,7 +2037,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         });
 
         tagProcessor.registerTag(ElementTag.class, "quantity", (attribute, object) -> {
-            Deprecations.inventoryNonMatcherTags.warn(attribute.context);
+            BukkitImplDeprecations.inventoryNonMatcherTags.warn(attribute.context);
             if (attribute.startsWith("scriptname", 2)) {
                 if (!attribute.hasContext(2)) {
                     return null;
@@ -2040,8 +2090,8 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         // @attribute <InventoryTag.slot[<#>|...]>
         // @returns ObjectTag
         // @description
-        // If one slot is specified, returns the ItemTag in the specified slot.
-        // If more than one slot is specified, returns a ListTag(ItemTag) of the item in each given slot.
+        // If just a single slot is specified, returns the ItemTag in the specified slot.
+        // If a list is specified, returns a ListTag(ItemTag) of the item in each given slot.
         // -->
         tagProcessor.registerTag(ObjectTag.class, "slot", (attribute, object) -> {
             if (!attribute.hasParam()) {
@@ -2054,8 +2104,12 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 }
                 return null;
             }
-            else if (slots.size() == 1) {
+            else if (slots.size() == 1 && !attribute.getParamObject().shouldBeType(ListTag.class)) {
                 int slot = SlotHelper.nameToIndexFor(attribute.getParam(), object.getInventory().getHolder());
+                if (slot == -1) {
+                    attribute.echoError("Invalid slot index '" + attribute.getParam() + "'.");
+                    return null;
+                }
                 if (slot < 0) {
                     slot = 0;
                 }
@@ -2068,6 +2122,10 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
                 ListTag result = new ListTag();
                 for (String slotText : slots) {
                     int slot = SlotHelper.nameToIndexFor(slotText, object.getInventory().getHolder());
+                    if (slot == -1) {
+                        attribute.echoError("Invalid slot index '" + slotText + "'.");
+                        return null;
+                    }
                     if (slot < 0) {
                         slot = 0;
                     }
@@ -2147,8 +2205,11 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         // -->
         tagProcessor.registerTag(ElementTag.class, "recipe", (attribute, object) -> {
             Recipe recipe;
-            if ((object.inventory instanceof CraftingInventory)) {
+            if (object.inventory instanceof CraftingInventory) {
                 recipe = ((CraftingInventory) object.inventory).getRecipe();
+            }
+            else if (object.inventory instanceof SmithingInventory) {
+                recipe = ((SmithingInventory) object.inventory).getRecipe();
             }
             else {
                 return null;
@@ -2280,17 +2341,40 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         tagProcessor.registerFutureTagDeprecation("input", "smelting");
 
         // <--[tag]
-        // @attribute <InventoryTag.advanced_matches[<matcher>]>
-        // @returns ElementTag(Boolean)
-        // @group element checking
+        // @attribute <InventoryTag.viewers>
+        // @returns ListTag(PlayerTag)
         // @description
-        // Returns whether the inventory matches some matcher text, using the system behind <@link language Advanced Script Event Matching>.
+        // Returns a list of players viewing the inventory.
         // -->
-        tagProcessor.registerTag(ElementTag.class, "advanced_matches", (attribute, object) -> {
-            if (!attribute.hasParam()) {
-                return null;
+        tagProcessor.registerTag(ListTag.class, "viewers", (attribute, object) -> {
+            ListTag list = new ListTag();
+            for (HumanEntity viewer : object.getInventory().getViewers()) {
+                if (!EntityTag.isNPC(viewer) && viewer instanceof Player) {
+                    list.addObject(new PlayerTag((Player) viewer));
+                }
             }
-            return new ElementTag(BukkitScriptEvent.tryInventory(object, attribute.getParam()));
+            return list;
+        });
+
+        // <--[tag]
+        // @attribute <InventoryTag.find_empty_slots>
+        // @returns ListTag
+        // @description
+        // Returns the index of all the empty slots in an inventory.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "find_empty_slots", (attribute, object) -> {
+            if (object == null) {
+                return new ListTag();
+            }
+            ListTag indexes = new ListTag(object.getContents().length);
+            int index = 1;
+            for (ItemStack itemStack : object.getContents()) {
+                if (itemStack == null || itemStack.getType() == Material.AIR) {
+                    indexes.addObject(new ElementTag(index));
+                }
+                index++;
+            }
+            return indexes;
         });
     }
 
@@ -2302,13 +2386,13 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
     }
 
     public void applyProperty(Mechanism mechanism) {
-        Debug.echoError("Cannot apply properties to non-generic inventory!");
+        mechanism.echoError("Cannot apply properties to non-generic inventory!");
     }
 
     @Override
     public void adjust(Mechanism mechanism) {
 
-        CoreUtilities.autoPropertyMechanism(this, mechanism);
+        tagProcessor.processMechanism(this, mechanism);
 
         // <--[mechanism]
         // @object InventoryTag
@@ -2321,7 +2405,7 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         // -->
         if (mechanism.matches("matrix") && mechanism.requireObject(ListTag.class)) {
             if (!(inventory instanceof CraftingInventory)) {
-                Debug.echoError("Inventory is not a crafting inventory, cannot set matrix.");
+                mechanism.echoError("Inventory is not a crafting inventory, cannot set matrix.");
                 return;
             }
             CraftingInventory craftingInventory = (CraftingInventory) inventory;
@@ -2474,8 +2558,42 @@ public class InventoryTag implements ObjectTag, Notable, Adjustable, FlaggableOb
         }
     }
 
+    public boolean compareInventoryToMatch(ScriptEvent.MatchHelper matcher) {
+        if (matcher instanceof ScriptEvent.InverseMatchHelper) {
+            return !compareInventoryToMatch(((ScriptEvent.InverseMatchHelper) matcher).matcher);
+        }
+        if (matcher.doesMatch(getInventoryType().name())) {
+            return true;
+        }
+        if (matcher.doesMatch(getIdType())) {
+            return true;
+        }
+        if (matcher.doesMatch(getIdHolder().toString())) {
+            return true;
+        }
+        if (getIdHolder() instanceof ScriptTag && matcher.doesMatch(((ScriptTag) getIdHolder()).getName())) {
+            return true;
+        }
+        String notedId = NoteManager.getSavedId(this);
+        if (notedId != null && matcher.doesMatch(notedId)) {
+            return true;
+        }
+        return false;
+    }
+
     @Override
-    public boolean advancedMatches(String matcher) {
-        return BukkitScriptEvent.tryInventory(this, matcher);
+    public boolean advancedMatches(String comparedto) {
+        String matcherLow = CoreUtilities.toLowerCase(comparedto);
+        if (matcherLow.equals("inventory")) {
+            return true;
+        }
+        if (matcherLow.equals("notable") || matcherLow.equals("note")) {
+            return NoteManager.isSaved(this);
+        }
+        if (matcherLow.startsWith("inventory_flagged:")) {
+            return flagTracker != null && BukkitScriptEvent.coreFlaggedCheck(comparedto.substring("inventory_flagged:".length()), flagTracker);
+        }
+        ScriptEvent.MatchHelper matcher = BukkitScriptEvent.createMatcher(comparedto);
+        return compareInventoryToMatch(matcher);
     }
 }

@@ -1,12 +1,12 @@
 package com.denizenscript.denizen.events.entity;
 
+import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
-import com.denizenscript.denizen.events.BukkitScriptEvent;
+import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
-import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
@@ -45,41 +45,32 @@ public class EntityCombustsScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public EntityCombustsScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> combusts");
+        this.<EntityCombustsScriptEvent, ObjectTag>registerOptionalDetermination(null, ObjectTag.class, (evt, context, determination) -> {
+            if (determination instanceof ElementTag element && element.isInt()) {
+                evt.event.setDuration(element.asInt());
+                return true;
+            }
+            else if (determination.canBeType(DurationTag.class)) {
+                evt.event.setDuration(determination.asType(DurationTag.class, context).getSecondsAsInt());
+                return true;
+            }
+            return false;
+        });
     }
 
-    public static EntityCombustsScriptEvent instance;
     public EntityTag entity;
     public EntityCombustEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityCombusts";
-    }
-
-    @Override
-    public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag && ((ElementTag) determinationObj).isInt()) {
-            event.setDuration(((ElementTag) determinationObj).asInt());
-            return true;
-        }
-        else if (DurationTag.matches(determinationObj.toString())) {
-            event.setDuration(DurationTag.valueOf(determinationObj.toString(), getTagContext(path)).getTicksAsInt());
-            return true;
-        }
-        return super.applyDetermination(path, determinationObj);
     }
 
     @Override
@@ -91,12 +82,12 @@ public class EntityCombustsScriptEvent extends BukkitScriptEvent implements List
     public ObjectTag getContext(String name) {
         switch (name) {
             case "entity":
-                return entity;
+                return entity.getDenizenObject();
             case "duration":
                 return new DurationTag(event.getDuration());
             case "source":
                 if (event instanceof EntityCombustByEntityEvent) {
-                    return new EntityTag(((EntityCombustByEntityEvent) event).getCombuster());
+                    return new EntityTag(((EntityCombustByEntityEvent) event).getCombuster()).getDenizenObject();
                 }
                 else if (event instanceof EntityCombustByBlockEvent) {
                     Block combuster = ((EntityCombustByBlockEvent) event).getCombuster();

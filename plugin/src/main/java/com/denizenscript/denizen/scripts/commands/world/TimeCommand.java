@@ -2,7 +2,7 @@ package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -82,7 +82,7 @@ public class TimeCommand extends AbstractCommand {
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("type")
-                    && arg.matchesEnum(Type.values())) {
+                    && arg.matchesEnum(Type.class)) {
                 scriptEntry.addObject("type", arg.asElement());
             }
             else if (!scriptEntry.hasObject("value")
@@ -134,11 +134,7 @@ public class TimeCommand extends AbstractCommand {
         ElementTag freeze = scriptEntry.getElement("freeze");
         Type type = Type.valueOf(type_element.asString().toUpperCase());
         if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), type_element.debug()
-                    + (reset != null ? reset.debug() : value.debug())
-                    + (freeze != null ? freeze.debug() : "")
-                    + (resetAfter != null ? resetAfter.debug() : "")
-                    + world.debug());
+            Debug.report(scriptEntry, getName(), type_element, reset, value, freeze, resetAfter, world);
         }
         if (type.equals(Type.GLOBAL)) {
             world.getWorld().setTime(value.getTicks());
@@ -158,7 +154,13 @@ public class TimeCommand extends AbstractCommand {
                         Bukkit.getScheduler().cancelTask(existingTask);
                         resetTasks.remove(player.getUniqueId());
                     }
-                    player.setPlayerTime(value.getTicks(), freeze == null || !freeze.asBoolean());
+                    if (freeze == null || !freeze.asBoolean()) {
+                        // sets a relative time, so subtract by the world time to keep the command absolute
+                        player.setPlayerTime(value.getTicks() - player.getWorld().getTime(), true);
+                    }
+                    else {
+                        player.setPlayerTime(value.getTicks(), false);
+                    }
                     if (resetAfter != null) {
                         int newTask = Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.getInstance(), player::resetPlayerTime, resetAfter.getTicks());
                         resetTasks.put(player.getUniqueId(), newTask);

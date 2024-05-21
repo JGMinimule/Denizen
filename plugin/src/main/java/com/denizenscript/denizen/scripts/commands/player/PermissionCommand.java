@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.player;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.depends.Depends;
 import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
@@ -31,10 +31,11 @@ public class PermissionCommand extends AbstractCommand {
     // @Plugin Vault
     //
     // @Description
-    // Adds or removes a permission node from a player or group. Accepts a world for world-based permissions
-    // plugins. By default changes the attached player's permissions. Accepts the 'group:<name>' argument to change
-    // a group's permission nodes rather than a player's.
-    // Note: This requires a permissions plugin.
+    // Adds or removes a permission node from a player or group.
+    // Accepts a world for world-based permissions plugins.
+    // By default changes the attached player's permissions.
+    // Accepts the 'group:<name>' argument to change a group's permission nodes rather than a player's.
+    // Note: This requires a permissions plugin and Vault.
     //
     // @Tags
     // <PlayerTag.has_permission[permission.node]>
@@ -68,7 +69,7 @@ public class PermissionCommand extends AbstractCommand {
         }
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("action")
-                    && arg.matchesEnum(Action.values())) {
+                    && arg.matchesEnum(Action.class)) {
                 scriptEntry.addObject("action", arg.asElement());
             }
             else if (!scriptEntry.hasObject("group")

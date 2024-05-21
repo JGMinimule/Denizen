@@ -32,7 +32,7 @@ public class ItemBookGeneration implements Property {
             "book_generation"
     };
 
-    private ItemBookGeneration(ItemTag _item) {
+    public ItemBookGeneration(ItemTag _item) {
         item = _item;
     }
 
@@ -58,7 +58,7 @@ public class ItemBookGeneration implements Property {
             if (!meta.hasGeneration()) {
                 return null;
             }
-            return new ElementTag(meta.getGeneration().name()).getObjectAttribute(attribute.fulfill(1));
+            return new ElementTag(meta.getGeneration()).getObjectAttribute(attribute.fulfill(1));
         }
 
         return null;
@@ -90,7 +90,7 @@ public class ItemBookGeneration implements Property {
         // @tags
         // <ItemTag.book_generation>
         // -->
-        if (mechanism.matches("book_generation") && mechanism.requireEnum(false, BookMeta.Generation.values())) {
+        if (mechanism.matches("book_generation") && mechanism.requireEnum(BookMeta.Generation.class)) {
             BookMeta meta = (BookMeta) item.getItemMeta();
             meta.setGeneration(BookMeta.Generation.valueOf(mechanism.getValue().asString().toUpperCase()));
             item.setItemMeta(meta);

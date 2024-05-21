@@ -38,10 +38,8 @@ public class EntityTamesScriptEvent extends BukkitScriptEvent implements Listene
     // -->
 
     public EntityTamesScriptEvent() {
-        instance = this;
     }
 
-    public static EntityTamesScriptEvent instance;
     public EntityTag entity;
     public EntityTag owner;
     public EntityTameEvent event;
@@ -62,21 +60,13 @@ public class EntityTamesScriptEvent extends BukkitScriptEvent implements Listene
         String cmd = path.eventArgLowerAt(1);
         String ownerTest = cmd.equals("tames") ? path.eventArgLowerAt(0) : path.eventArgLowerAt(2);
         String tamed = cmd.equals("tamed") ? path.eventArgLowerAt(0) : path.eventArgLowerAt(2);
-
-        if (!tryEntity(owner, ownerTest) || !tryEntity(entity, tamed)) {
+        if (!owner.tryAdvancedMatcher(ownerTest) || !entity.tryAdvancedMatcher(tamed)) {
             return false;
         }
-
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityTames";
     }
 
     @Override
@@ -102,5 +92,4 @@ public class EntityTamesScriptEvent extends BukkitScriptEvent implements Listene
         this.event = event;
         fire(event);
     }
-
 }

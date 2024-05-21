@@ -4,7 +4,7 @@ import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.scripts.containers.core.AssignmentScriptContainer;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.npc.traits.AssignmentTrait;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
@@ -12,14 +12,11 @@ import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.core.ScriptTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
-import com.denizenscript.denizencore.scripts.ScriptRegistry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-import com.denizenscript.denizencore.scripts.containers.ScriptContainer;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class AssignmentCommand extends AbstractCommand {
 
@@ -77,22 +74,15 @@ public class AssignmentCommand extends AbstractCommand {
     private enum Action {SET, ADD, REMOVE, CLEAR}
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        addOne.accept("set");
-        addOne.accept("add");
-        addOne.accept("remove");
-        addOne.accept("clear");
-        for (ScriptContainer script : ScriptRegistry.scriptContainers.values()) {
-            if (script instanceof AssignmentScriptContainer) {
-                addOne.accept(script.getName());
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.add("set", "add", "remove", "clear");
+        tab.addScriptsOfType(AssignmentScriptContainer.class);
     }
 
     @Override
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
-            if (arg.matchesEnum(Action.values())
+            if (arg.matchesEnum(Action.class)
                     && !scriptEntry.hasObject("action")) {
                 scriptEntry.addObject("action", Action.valueOf(arg.getValue().toUpperCase()));
             }
@@ -154,7 +144,7 @@ public class AssignmentCommand extends AbstractCommand {
                     break;
                 case REMOVE:
                     if (script == null) {
-                        Deprecations.assignmentRemove.warn(scriptEntry);
+                        BukkitImplDeprecations.assignmentRemove.warn(scriptEntry);
                         if (npc.getCitizen().hasTrait(AssignmentTrait.class)) {
                             npc.getCitizen().getOrAddTrait(AssignmentTrait.class).clearAssignments(player);
                             npc.getCitizen().removeTrait(AssignmentTrait.class);

@@ -29,13 +29,13 @@ public class MaterialShape implements Property {
             "shape"
     };
 
-    private MaterialShape(MaterialTag _material) {
+    public MaterialShape(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.shape>
@@ -46,8 +46,8 @@ public class MaterialShape implements Property {
         // Returns the shape of a block.
         // For stairs, output is the corner shape as INNER_LEFT, INNER_RIGHT, OUTER_LEFT, OUTER_RIGHT, or STRAIGHT.
         // -->
-        PropertyParser.<MaterialShape, ElementTag>registerStaticTag(ElementTag.class, "shape", (attribute, material) -> {
-            return new ElementTag(material.getStairs().getShape().name());
+        PropertyParser.registerStaticTag(MaterialShape.class, ElementTag.class, "shape", (attribute, material) -> {
+            return new ElementTag(material.getStairs().getShape());
         });
     }
 
@@ -78,7 +78,7 @@ public class MaterialShape implements Property {
         // @tags
         // <MaterialTag.shape>
         // -->
-        if (mechanism.matches("shape") && mechanism.requireEnum(false, Stairs.Shape.values())) {
+        if (mechanism.matches("shape") && mechanism.requireEnum(Stairs.Shape.class)) {
             getStairs().setShape(Stairs.Shape.valueOf(mechanism.getValue().asString().toUpperCase()));
         }
     }

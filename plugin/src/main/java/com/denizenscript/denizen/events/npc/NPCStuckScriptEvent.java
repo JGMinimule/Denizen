@@ -6,7 +6,6 @@ import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
 import net.citizensnpcs.api.ai.TeleportStuckAction;
 import net.citizensnpcs.api.ai.event.NavigationStuckEvent;
 import org.bukkit.event.EventHandler;
@@ -18,13 +17,13 @@ public class NPCStuckScriptEvent extends BukkitScriptEvent implements Listener {
     // @Events
     // npc stuck
     //
-    // @Regex ^on npc stuck$
-    //
     // @Group NPC
     //
     // @Location true
     //
     // @Triggers when an NPC's navigator is stuck.
+    //
+    // @Switch npc:<npc> to only process the event if the spawned NPC matches.
     //
     // @Context
     // <context.action> returns 'teleport' or 'none'
@@ -38,33 +37,25 @@ public class NPCStuckScriptEvent extends BukkitScriptEvent implements Listener {
     // -->
 
     public NPCStuckScriptEvent() {
-        instance = this;
+        registerCouldMatcher("npc stuck");
+        registerSwitches("npc");
+        this.<NPCStuckScriptEvent, ElementTag>registerDetermination(null, ElementTag.class, (evt, context, action) -> {
+            evt.event.setAction(action.asLowerString().equals("none") ? null : TeleportStuckAction.INSTANCE);
+        });
     }
 
-    public static NPCStuckScriptEvent instance;
     public NavigationStuckEvent event;
     public NPCTag npc;
 
     @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventLower.startsWith("npc stuck")) {
+    public boolean matches(ScriptPath path) {
+        if (!path.tryObjectSwitch("npc", npc)) {
             return false;
         }
-        return true;
-    }
-
-    @Override
-    public boolean matches(ScriptPath path) {
         if (!runInCheck(path, npc.getLocation())) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "NPCStuck";
     }
 
     @Override
@@ -73,25 +64,11 @@ public class NPCStuckScriptEvent extends BukkitScriptEvent implements Listener {
     }
 
     @Override
-    public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        String lowVal = CoreUtilities.toLowerCase(determinationObj.toString());
-        if (lowVal.equals("none")) {
-            event.setAction(null);
-            return true;
-        }
-        else if (lowVal.equals("teleport")) {
-            event.setAction(TeleportStuckAction.INSTANCE);
-            return true;
-        }
-        return super.applyDetermination(path, determinationObj);
-    }
-
-    @Override
     public ObjectTag getContext(String name) {
-        if (name.equals("action")) {
-            return new ElementTag(event.getAction() == TeleportStuckAction.INSTANCE ? "teleport" : "none");
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "action" -> new ElementTag(event.getAction() == TeleportStuckAction.INSTANCE ? "teleport" : "none");
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler
@@ -100,5 +77,4 @@ public class NPCStuckScriptEvent extends BukkitScriptEvent implements Listener {
         this.event = event;
         fire(event);
     }
-
 }

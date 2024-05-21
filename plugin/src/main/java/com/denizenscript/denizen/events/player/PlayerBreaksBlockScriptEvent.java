@@ -25,6 +25,8 @@ public class PlayerBreaksBlockScriptEvent extends BukkitScriptEvent implements L
     //
     // @Regex ^on player breaks [^\s]+$
     //
+    // @Synonyms player mines block,player mines ore,player digs block
+    //
     // @Group Player
     //
     // @Location true
@@ -50,10 +52,8 @@ public class PlayerBreaksBlockScriptEvent extends BukkitScriptEvent implements L
     // -->
 
     public PlayerBreaksBlockScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerBreaksBlockScriptEvent instance;
     public LocationTag location;
     public MaterialTag material;
     public BlockBreakEvent event;
@@ -77,7 +77,7 @@ public class PlayerBreaksBlockScriptEvent extends BukkitScriptEvent implements L
     @Override
     public boolean matches(ScriptPath path) {
         String mat = path.eventArgLowerAt(2);
-        if (!tryMaterial(material, mat)) {
+        if (!material.tryAdvancedMatcher(mat)) {
             return false;
         }
         if (!runInCheck(path, location)) {
@@ -88,15 +88,10 @@ public class PlayerBreaksBlockScriptEvent extends BukkitScriptEvent implements L
         }
         // Deprecated in favor of with: format
         if (path.eventArgLowerAt(3).equals("with")
-                && !tryItem(new ItemTag(event.getPlayer().getEquipment().getItemInMainHand()), path.eventArgLowerAt(4))) {
+                && !path.tryArgObject(4, new ItemTag(event.getPlayer().getEquipment().getItemInMainHand()))) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerBreaksBlock";
     }
 
     @Override
@@ -127,7 +122,7 @@ public class PlayerBreaksBlockScriptEvent extends BukkitScriptEvent implements L
 
     @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(PlayerTag.mirrorBukkitPlayer(event.getPlayer()), null);
+        return new BukkitScriptEntryData(event.getPlayer());
     }
 
     @Override
@@ -155,5 +150,4 @@ public class PlayerBreaksBlockScriptEvent extends BukkitScriptEvent implements L
         this.event = event;
         fire(event);
     }
-
 }

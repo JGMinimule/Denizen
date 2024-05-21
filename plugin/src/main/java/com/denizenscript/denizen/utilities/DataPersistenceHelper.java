@@ -2,7 +2,7 @@ package com.denizenscript.denizen.utilities;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.objects.ObjectFetcher;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
@@ -52,12 +52,12 @@ public class DataPersistenceHelper {
     }
 
     public static boolean hasDenizenKey(PersistentDataHolder holder, String keyName) {
-        return NMSHandler.getInstance().containerHas(holder.getPersistentDataContainer(), "denizen:" + keyName);
+        return NMSHandler.instance.containerHas(holder.getPersistentDataContainer(), "denizen:" + keyName);
     }
 
     public static ObjectTag getDenizenKey(PersistentDataHolder holder, String keyName) {
         try {
-            String str = NMSHandler.getInstance().containerGetString(holder.getPersistentDataContainer(), "denizen:" + keyName);
+            String str = NMSHandler.instance.containerGetString(holder.getPersistentDataContainer(), "denizen:" + keyName);
             if (str == null) {
                 return null;
             }
@@ -68,7 +68,7 @@ public class DataPersistenceHelper {
                 Debug.echoError("Failed to read ObjectTag from entity key '" + keyName + "' for entity " + ((Entity) holder).getUniqueId() + "...");
             }
             else {
-                Debug.echoError("Failed to read ObjectTag from object key '" + keyName + "' for holder '" + holder.toString() + "'...");
+                Debug.echoError("Failed to read ObjectTag from object key '" + keyName + "' for holder '" + holder + "'...");
             }
             Debug.echoError(ex);
             return null;

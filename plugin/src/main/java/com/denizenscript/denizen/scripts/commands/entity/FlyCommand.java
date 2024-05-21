@@ -3,7 +3,7 @@ package com.denizenscript.denizen.scripts.commands.entity;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Conversion;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.entity.Position;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.EntityTag;
@@ -215,8 +215,8 @@ public class FlyCommand extends AbstractCommand {
                 if (flying && entity.isValid()) {
                     // To avoid excessive turbulence, only have the entity rotate
                     // when it really needs to
-                    if (!NMSHandler.getEntityHelper().isFacingLocation(entity, location, rotationThreshold)) {
-                        NMSHandler.getEntityHelper().faceLocation(entity, location);
+                    if (!NMSHandler.entityHelper.isFacingLocation(entity, location, rotationThreshold)) {
+                        NMSHandler.entityHelper.faceLocation(entity, location);
                     }
                     Vector v1 = entity.getLocation().toVector();
                     Vector v2 = location.toVector();

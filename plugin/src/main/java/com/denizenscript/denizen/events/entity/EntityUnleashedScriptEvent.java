@@ -4,7 +4,6 @@ import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityUnleashEvent;
@@ -31,32 +30,25 @@ public class EntityUnleashedScriptEvent extends BukkitScriptEvent implements Lis
     // -->
 
     public EntityUnleashedScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> unleashed (because <'reason'>)");
     }
 
-    public static EntityUnleashedScriptEvent instance;
     public EntityTag entity;
     public ElementTag reason;
     public EntityUnleashEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
-        if (path.eventArgAt(2).equals("because") && !path.eventArgLowerAt(3).equals(CoreUtilities.toLowerCase(reason.asString()))) {
+        if (path.eventArgAt(2).equals("because") && !path.eventArgLowerAt(3).equals(reason.asLowerString())) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityUnleashed";
     }
 
     @Override
@@ -77,5 +69,4 @@ public class EntityUnleashedScriptEvent extends BukkitScriptEvent implements Lis
         this.event = event;
         fire(event);
     }
-
 }

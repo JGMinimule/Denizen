@@ -19,8 +19,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.event.block.SignChangeEvent;
 
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.UUID;
 
 public class DenizenPacketListenerImpl extends AbstractListenerPlayInImpl {
 
@@ -34,7 +32,7 @@ public class DenizenPacketListenerImpl extends AbstractListenerPlayInImpl {
 
     @Override
     public void handlePlayerInput(final ServerboundPlayerInputPacket packet) {
-        if (!PlayerSteersEntityScriptEvent.instance.enabled) {
+        if (!PlayerSteersEntityScriptEvent.instance.eventData.isEnabled) {
             super.handlePlayerInput(packet);
             return;
         }
@@ -61,36 +59,27 @@ public class DenizenPacketListenerImpl extends AbstractListenerPlayInImpl {
 
     @Override
     public void handleAnimate(ServerboundSwingPacket packet) {
-        HashMap<UUID, FakeEquipCommand.EquipmentOverride> playersMap = FakeEquipCommand.overrides.get(player.getUUID());
-        if (playersMap != null) {
-            FakeEquipCommand.EquipmentOverride override = playersMap.get(player.getUUID());
-            if (override != null && (override.hand != null || override.offhand != null)) {
-                player.getBukkitEntity().updateInventory();
-            }
+        FakeEquipCommand.EquipmentOverride override = FakeEquipCommand.getOverrideFor(player.getUUID(), player.getBukkitEntity());
+        if (override != null && (override.hand != null || override.offhand != null)) {
+            player.getBukkitEntity().updateInventory();
         }
         super.handleAnimate(packet);
     }
 
     @Override
     public void handleSetCarriedItem(ServerboundSetCarriedItemPacket packet) {
-        HashMap<UUID, FakeEquipCommand.EquipmentOverride> playersMap = FakeEquipCommand.overrides.get(player.getUUID());
-        if (playersMap != null) {
-            FakeEquipCommand.EquipmentOverride override = playersMap.get(player.getUUID());
-            if (override != null && override.hand != null) {
-                Bukkit.getScheduler().runTaskLater(NMSHandler.getJavaPlugin(), player.getBukkitEntity()::updateInventory, 2);
-            }
+        FakeEquipCommand.EquipmentOverride override = FakeEquipCommand.getOverrideFor(player.getUUID(), player.getBukkitEntity());
+        if (override != null && override.hand != null) {
+            Bukkit.getScheduler().runTaskLater(NMSHandler.getJavaPlugin(), player.getBukkitEntity()::updateInventory, 2);
         }
         super.handleSetCarriedItem(packet);
     }
 
     @Override
     public void handleContainerClick(ServerboundContainerClickPacket packet) {
-        HashMap<UUID, FakeEquipCommand.EquipmentOverride> playersMap = FakeEquipCommand.overrides.get(player.getUUID());
-        if (playersMap != null) {
-            FakeEquipCommand.EquipmentOverride override = playersMap.get(player.getUUID());
-            if (override != null && packet.getContainerId() == 0) {
-                Bukkit.getScheduler().runTaskLater(NMSHandler.getJavaPlugin(), player.getBukkitEntity()::updateInventory, 1);
-            }
+        FakeEquipCommand.EquipmentOverride override = FakeEquipCommand.getOverrideFor(player.getUUID(), player.getBukkitEntity());
+        if (override != null && packet.getContainerId() == 0) {
+            Bukkit.getScheduler().runTaskLater(NMSHandler.getJavaPlugin(), player.getBukkitEntity()::updateInventory, 1);
         }
         super.handleContainerClick(packet);
     }
@@ -113,7 +102,6 @@ public class DenizenPacketListenerImpl extends AbstractListenerPlayInImpl {
         if (fakeSignExpected != null && packet.getPos().equals(fakeSignExpected)) {
             fakeSignExpected = null;
             PlayerChangesSignScriptEvent evt = (PlayerChangesSignScriptEvent) PlayerChangesSignScriptEvent.instance.clone();
-            evt.cancelled = false;
             evt.material = new MaterialTag(org.bukkit.Material.OAK_WALL_SIGN);
             evt.location = new LocationTag(player.getBukkitEntity().getLocation());
             LocationTag loc = evt.location.clone();

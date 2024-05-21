@@ -3,7 +3,7 @@ package com.denizenscript.denizen.scripts.commands.entity;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Conversion;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.entity.Position;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.EntityTag;
@@ -210,13 +210,13 @@ public class PushCommand extends AbstractCommand implements Holdable {
             entity.spawnAt(originLocation);
             entityList.addObject(entity);
             if (!no_rotate) {
-                NMSHandler.getEntityHelper().faceLocation(entity.getBukkitEntity(), destination);
+                NMSHandler.entityHelper.faceLocation(entity.getBukkitEntity(), destination);
             }
             if (entity.isProjectile() && originEntity != null) {
                 entity.setShooter(originEntity);
             }
         }
-        scriptEntry.addObject("pushed_entities", entityList);
+        scriptEntry.saveObject("pushed_entities", entityList);
         Position.mount(Conversion.convertEntities(entities));
         final EntityTag lastEntity = entities.get(entities.size() - 1);
         final Vector v2 = destination.toVector();

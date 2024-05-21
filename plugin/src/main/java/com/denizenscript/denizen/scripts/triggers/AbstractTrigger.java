@@ -4,7 +4,7 @@ import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.tags.BukkitTagContext;
 import com.denizenscript.denizen.utilities.Settings;
 import com.denizenscript.denizen.scripts.containers.core.InteractScriptContainer;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
@@ -20,6 +20,12 @@ import com.denizenscript.denizencore.utilities.debugging.SlowWarning;
 import java.util.*;
 
 public abstract class AbstractTrigger {
+
+    /**
+     * Number of times this trigger has been seen as enabled in onSpawn of NPCs since start.
+     * If value is '0', trigger isn't in use.
+     */
+    public int timesUsed = 0;
 
     protected String name;
 
@@ -71,7 +77,7 @@ public abstract class AbstractTrigger {
         return parse(npc, player, script, id, null);
     }
 
-    public static SlowWarning missetWarning = new SlowWarning("Trigger '{NAME}' on NPC '{NPC}' activated and used but not properly set via the 'trigger' command in 'on assignment'.");
+    public static SlowWarning missetWarning = new SlowWarning("npcTriggerMisset", "Trigger '{NAME}' on NPC '{NPC}' activated and used but not properly set via the 'trigger' command in 'on assignment'.");
 
     public boolean parse(NPCTag npc, PlayerTag player, InteractScriptContainer script, String id, Map<String, ObjectTag> context) {
         if (npc == null || player == null || script == null) {

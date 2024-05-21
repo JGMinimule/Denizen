@@ -69,18 +69,13 @@ public class PlayerChangesSignScriptEvent extends BukkitScriptEvent implements L
     @Override
     public boolean matches(ScriptPath path) {
         String mat = path.eventArgLowerAt(2);
-        if (!mat.equals("sign") && (!tryMaterial(material, mat))) {
+        if (!mat.equals("sign") && (!material.tryAdvancedMatcher(mat))) {
             return false;
         }
         if (!runInCheck(path, location)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerChangesSign";
     }
 
     @Override
@@ -98,7 +93,7 @@ public class PlayerChangesSignScriptEvent extends BukkitScriptEvent implements L
 
     @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(PlayerTag.mirrorBukkitPlayer(event.getPlayer()), null);
+        return new BukkitScriptEntryData(event.getPlayer());
     }
 
     @Override
@@ -135,5 +130,4 @@ public class PlayerChangesSignScriptEvent extends BukkitScriptEvent implements L
         this.event = event;
         fire(event);
     }
-
 }

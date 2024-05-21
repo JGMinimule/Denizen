@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.entity;
 
 import com.denizenscript.denizen.objects.PlayerTag;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.nms.abstracts.AnimationHelper;
 import com.denizenscript.denizen.nms.interfaces.EntityAnimation;
@@ -16,7 +16,6 @@ import org.bukkit.EntityEffect;
 import org.bukkit.entity.Player;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 public class AnimateCommand extends AbstractCommand {
 
@@ -51,10 +50,14 @@ public class AnimateCommand extends AbstractCommand {
     // In addition, Denizen adds a few new entity animations:
     // SKELETON_START_SWING_ARM, SKELETON_STOP_SWING_ARM,
     // POLAR_BEAR_START_STANDING, POLAR_BEAR_STOP_STANDING,
-    // HORSE_BUCK, HORSE_START_STANDING, HORSE_STOP_STANDING
-    // IRON_GOLEM_ATTACK
+    // HORSE_BUCK, HORSE_START_STANDING, HORSE_STOP_STANDING,
+    // IRON_GOLEM_ATTACK,
+    // VILLAGER_SHAKE_HEAD,
+    // SWING_MAIN_HAND, SWING_OFF_HAND
     //
     // Note that the above list only applies where logical, EG 'WOLF_' animations only apply to wolves.
+    //
+    // In versions 1.20+, to specify the direction of damage for the HURT animation, use <@link mechanism EntityTag.play_hurt_animation>
     //
     // @Tags
     // None
@@ -69,23 +72,14 @@ public class AnimateCommand extends AbstractCommand {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        if (arg.startsWith("animation:")) {
-            for (EntityEffect effect : EntityEffect.values()) {
-                addOne.accept("animation:" + effect.name());
-            }
-            for (PlayerAnimation anim : PlayerAnimation.values()) {
-                addOne.accept("animation:" + anim.name());
-            }
-            for (String nmsAnim : AnimationHelper.entityAnimations.keySet()) {
-                addOne.accept("animation:" + nmsAnim);
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addWithPrefix("animation:", EntityEffect.values());
+        tab.addWithPrefix("animation:", PlayerAnimation.values());
+        tab.addWithPrefix("animation:", AnimationHelper.entityAnimations.keySet());
     }
 
     @Override
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
-        AnimationHelper animationHelper = NMSHandler.getAnimationHelper();
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("for")
                     && arg.matchesPrefix("for")
@@ -99,13 +93,13 @@ public class AnimateCommand extends AbstractCommand {
             if (!scriptEntry.hasObject("animation") &&
                     !scriptEntry.hasObject("effect") &&
                     !scriptEntry.hasObject("nms_animation")) {
-                if (arg.matchesEnum(PlayerAnimation.values())) {
+                if (arg.matchesEnum(PlayerAnimation.class)) {
                     scriptEntry.addObject("animation", PlayerAnimation.valueOf(arg.getValue().toUpperCase()));
                 }
-                if (arg.matchesEnum(EntityEffect.values())) {
+                if (arg.matchesEnum(EntityEffect.class)) {
                     scriptEntry.addObject("effect", EntityEffect.valueOf(arg.getValue().toUpperCase()));
                 }
-                if (animationHelper.hasEntityAnimation(arg.getValue())) {
+                if (NMSHandler.animationHelper.hasEntityAnimation(arg.getValue())) {
                     scriptEntry.addObject("nms_animation", arg.getValue());
                 }
             }
@@ -140,7 +134,7 @@ public class AnimateCommand extends AbstractCommand {
                     else if (effect != null) {
                         if (forPlayers != null) {
                             for (PlayerTag player : forPlayers) {
-                                NMSHandler.getPacketHelper().sendEntityEffect(player.getPlayerEntity(), entity.getBukkitEntity(), effect.getData());
+                                NMSHandler.packetHelper.sendEntityEffect(player.getPlayerEntity(), entity.getBukkitEntity(), effect);
                             }
                         }
                         else {
@@ -148,7 +142,7 @@ public class AnimateCommand extends AbstractCommand {
                         }
                     }
                     else if (nmsAnimation != null) {
-                        EntityAnimation entityAnimation = NMSHandler.getAnimationHelper().getEntityAnimation(nmsAnimation);
+                        EntityAnimation entityAnimation = NMSHandler.animationHelper.getEntityAnimation(nmsAnimation);
                         entityAnimation.play(entity.getBukkitEntity());
                     }
                     else {
@@ -156,7 +150,7 @@ public class AnimateCommand extends AbstractCommand {
                     }
                 }
                 catch (Exception e) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Error playing that animation!");
+                    Debug.echoError(scriptEntry, "Error playing that animation!");
                     Debug.echoError(e);
                 }
             }

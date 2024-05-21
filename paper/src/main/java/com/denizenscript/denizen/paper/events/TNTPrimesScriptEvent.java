@@ -13,35 +13,10 @@ import org.bukkit.event.Listener;
 
 public class TNTPrimesScriptEvent extends BukkitScriptEvent implements Listener {
 
-    // <--[event]
-    // @Events
-    // tnt primes
-    //
-    // @Location true
-    //
-    // @Plugin Paper
-    //
-    // @Group Paper
-    //
-    // @Cancellable true
-    //
-    // @Triggers when TNT is activated and will soon explode.
-    //
-    // @Context
-    // <context.entity> returns the entity that primed the TNT, if any.
-    // <context.location> returns the location of the TNT block being primed.
-    // <context.reason> returns the reason the TNT was primed. Refer to <@link url https://papermc.io/javadocs/paper/1.17/com/destroystokyo/paper/event/block/TNTPrimeEvent.PrimeReason.html>
-    //
-    // @Player when the priming entity is a player.
-    //
-    // -->
-
     public TNTPrimesScriptEvent() {
-        instance = this;
         registerCouldMatcher("tnt primes");
     }
 
-    public static TNTPrimesScriptEvent instance;
     public TNTPrimeEvent event;
     public LocationTag location;
 
@@ -54,11 +29,6 @@ public class TNTPrimesScriptEvent extends BukkitScriptEvent implements Listener 
     }
 
     @Override
-    public String getName() {
-        return "TNTPrimes";
-    }
-
-    @Override
     public ScriptEntryData getScriptEntryData() {
         return new BukkitScriptEntryData(event.getPrimerEntity());
     }
@@ -66,13 +36,13 @@ public class TNTPrimesScriptEvent extends BukkitScriptEvent implements Listener 
     @Override
     public ObjectTag getContext(String name) {
         if (name.equals("entity") && event.getPrimerEntity() != null) {
-            return new EntityTag(event.getPrimerEntity());
+            return new EntityTag(event.getPrimerEntity()).getDenizenObject();
         }
         else if (name.equals("location")) {
             return location;
         }
         else if (name.equals("reason")) {
-            return new ElementTag(event.getReason().name());
+            return new ElementTag(event.getReason());
         }
         return super.getContext(name);
     }

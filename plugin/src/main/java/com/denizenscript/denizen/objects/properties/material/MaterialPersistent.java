@@ -29,13 +29,13 @@ public class MaterialPersistent implements Property {
             "persistent"
     };
 
-    private MaterialPersistent(MaterialTag _material) {
+    public MaterialPersistent(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.persistent>
@@ -45,17 +45,13 @@ public class MaterialPersistent implements Property {
         // @description
         // Returns whether this block will decay from being too far away from a tree.
         // -->
-        PropertyParser.<MaterialPersistent, ElementTag>registerStaticTag(ElementTag.class, "persistent", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialPersistent.class, ElementTag.class, "persistent", (attribute, material) -> {
             return new ElementTag(material.getLeaves().isPersistent());
         });
     }
 
     public Leaves getLeaves() {
         return (Leaves) material.getModernData();
-    }
-
-    public int getDistance() {
-        return getLeaves().getDistance();
     }
 
     @Override

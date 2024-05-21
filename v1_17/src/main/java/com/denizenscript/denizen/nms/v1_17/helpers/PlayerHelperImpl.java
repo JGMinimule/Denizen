@@ -1,7 +1,9 @@
 package com.denizenscript.denizen.nms.v1_17.helpers;
 
 import com.denizenscript.denizen.Denizen;
+import com.denizenscript.denizen.nms.abstracts.ImprovedOfflinePlayer;
 import com.denizenscript.denizen.nms.enums.CustomEntityType;
+import com.denizenscript.denizen.nms.interfaces.PlayerHelper;
 import com.denizenscript.denizen.nms.v1_17.Handler;
 import com.denizenscript.denizen.nms.v1_17.ReflectionMappingsInfo;
 import com.denizenscript.denizen.nms.v1_17.impl.ImprovedOfflinePlayerImpl;
@@ -17,20 +19,19 @@ import com.denizenscript.denizen.utilities.FormattedTextHelper;
 import com.denizenscript.denizen.utilities.entity.DenizenEntityType;
 import com.denizenscript.denizen.utilities.entity.FakeEntity;
 import com.denizenscript.denizencore.objects.Mechanism;
-import com.mojang.authlib.GameProfile;
-import com.denizenscript.denizen.nms.abstracts.ImprovedOfflinePlayer;
-import com.denizenscript.denizen.nms.interfaces.PlayerHelper;
 import com.denizenscript.denizencore.utilities.ReflectionHelper;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
+import com.mojang.authlib.GameProfile;
 import net.md_5.bungee.api.ChatColor;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.*;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerEntity;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ChunkMap;
+import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.server.players.ServerOpList;
 import net.minecraft.server.players.ServerOpListEntry;
@@ -38,12 +39,12 @@ import net.minecraft.stats.ServerRecipeBook;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import org.bukkit.*;
 import org.bukkit.boss.BossBar;
 import org.bukkit.craftbukkit.v1_17_R1.CraftServer;
 import org.bukkit.craftbukkit.v1_17_R1.CraftWorld;
 import org.bukkit.craftbukkit.v1_17_R1.boss.CraftBossBar;
-import org.bukkit.craftbukkit.v1_17_R1.entity.CraftEntity;
 import org.bukkit.craftbukkit.v1_17_R1.entity.CraftPlayer;
 import org.bukkit.craftbukkit.v1_17_R1.inventory.CraftItemStack;
 import org.bukkit.entity.Entity;
@@ -57,12 +58,11 @@ import java.util.*;
 
 public class PlayerHelperImpl extends PlayerHelper {
 
-    public static final Field ATTACK_COOLDOWN_TICKS = ReflectionHelper.getFields(LivingEntity.class).get(ReflectionMappingsInfo.LivingEntity_attackStrengthTicker);
+    public static final Field ATTACK_COOLDOWN_TICKS = ReflectionHelper.getFields(LivingEntity.class).get(ReflectionMappingsInfo.LivingEntity_attackStrengthTicker, int.class);
 
-    public static final Map<String, Field> PLAYER_CONNECTION_FIELDS = ReflectionHelper.getFields(ServerGamePacketListenerImpl.class);
-    public static final Field FLY_TICKS = PLAYER_CONNECTION_FIELDS.get(ReflectionMappingsInfo.ServerGamePacketListenerImpl_aboveGroundTickCount);
-    public static final Field VEHICLE_FLY_TICKS = PLAYER_CONNECTION_FIELDS.get(ReflectionMappingsInfo.ServerGamePacketListenerImpl_aboveGroundVehicleTickCount);
-    public static final MethodHandle PLAYER_RESPAWNFORCED_SETTER = ReflectionHelper.getFinalSetter(ServerPlayer.class, ReflectionMappingsInfo.ServerPlayer_respawnForced);
+    public static final Field FLY_TICKS = ReflectionHelper.getFields(ServerGamePacketListenerImpl.class).get(ReflectionMappingsInfo.ServerGamePacketListenerImpl_aboveGroundTickCount, int.class);
+    public static final Field VEHICLE_FLY_TICKS = ReflectionHelper.getFields(ServerGamePacketListenerImpl.class).get(ReflectionMappingsInfo.ServerGamePacketListenerImpl_aboveGroundVehicleTickCount, int.class);
+    public static final MethodHandle PLAYER_RESPAWNFORCED_SETTER = ReflectionHelper.getFinalSetter(ServerPlayer.class, ReflectionMappingsInfo.ServerPlayer_respawnForced, boolean.class);
 
     public static final EntityDataAccessor<Byte> ENTITY_HUMAN_SKINLAYERS_DATAWATCHER;
 
@@ -262,11 +262,6 @@ public class PlayerHelperImpl extends PlayerHelper {
     }
 
     @Override
-    public float getAttackCooldownPercent(Player player) {
-        return ((CraftPlayer) player).getHandle().getAttackStrengthScale(0.5f);
-    }
-
-    @Override
     public void setAttackCooldown(Player player, int ticks) {
         try {
             ATTACK_COOLDOWN_TICKS.setInt(((CraftPlayer) player).getHandle(), ticks);
@@ -282,11 +277,6 @@ public class PlayerHelperImpl extends PlayerHelper {
         return ((CraftWorld) chunk.getWorld()).getHandle().getChunkProvider().chunkMap
                 .getPlayers(new ChunkPos(chunk.getX(), chunk.getZ()), false)
                 .anyMatch(entityPlayer -> entityPlayer.getUUID().equals(player.getUniqueId()));
-    }
-
-    @Override
-    public int getPing(Player player) {
-        return ((CraftPlayer) player).getHandle().latency;
     }
 
     @Override
@@ -316,11 +306,6 @@ public class PlayerHelperImpl extends PlayerHelper {
     }
 
     @Override
-    public ImprovedOfflinePlayer getOfflineData(OfflinePlayer offlinePlayer) {
-        return new ImprovedOfflinePlayerImpl(offlinePlayer.getUniqueId());
-    }
-
-    @Override
     public void resendRecipeDetails(Player player) {
         Collection<Recipe<?>> recipes = ((CraftServer) Bukkit.getServer()).getServer().getRecipeManager().getRecipes();
         ClientboundUpdateRecipesPacket updatePacket = new ClientboundUpdateRecipesPacket(recipes);
@@ -346,7 +331,7 @@ public class PlayerHelperImpl extends PlayerHelper {
     }
 
     @Override
-    public String getPlayerBrand(Player player) {
+    public String getClientBrand(Player player) {
         return ((DenizenNetworkManagerImpl) ((CraftPlayer) player).getHandle().connection.connection).packetListener.brand;
     }
 
@@ -367,11 +352,6 @@ public class PlayerHelperImpl extends PlayerHelper {
     }
 
     @Override
-    public void doAttack(Player attacker, Entity victim) {
-        ((CraftPlayer) attacker).getHandle().attack(((CraftEntity) victim).getHandle());
-    }
-
-    @Override
     public boolean getSpawnForced(Player player) {
         return ((CraftPlayer) player).getHandle().isRespawnForced();
     }
@@ -385,6 +365,20 @@ public class PlayerHelperImpl extends PlayerHelper {
         catch (Throwable ex) {
             Debug.echoError(ex);
         }
+    }
+
+    @Override
+    public Location getBedSpawnLocation(Player player) {
+        ServerPlayer nmsPlayer = ((CraftPlayer) player).getHandle();
+        BlockPos spawnPosition = nmsPlayer.getRespawnPosition();
+        if (spawnPosition == null) {
+            return null;
+        }
+        Level nmsWorld = MinecraftServer.getServer().getLevel(nmsPlayer.getRespawnDimension());
+        if (nmsWorld == null) {
+            return null;
+        }
+        return new Location(nmsWorld.getWorld(), spawnPosition.getX(), spawnPosition.getY(), spawnPosition.getZ(), nmsPlayer.getRespawnAngle(), 0);
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.NMSVersion;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
@@ -9,24 +10,27 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 public class PlaySoundCommand extends AbstractCommand {
 
     public PlaySoundCommand() {
         setName("playsound");
-        setSyntax("playsound (<location>|...) (<player>|...) [sound:<name>] (volume:<#.#>) (pitch:<#.#>) (custom) (sound_category:<category name>)");
+        setSyntax("playsound (<location>|...) (<player>|...) [sound:<name>] (volume:<#.#>) (pitch:<#.#>) (custom) (sound_category:<category_name>)");
         setRequiredArguments(2, 7);
         isProcedural = false;
+        setBooleansHandled("custom");
+        setPrefixesHandled("sound_category", "pitch", "volume");
     }
 
     // <--[command]
     // @Name PlaySound
-    // @Syntax playsound (<location>|...) (<player>|...) [sound:<name>] (volume:<#.#>) (pitch:<#.#>) (custom) (sound_category:<category name>)
+    // @Syntax playsound (<location>|...) (<player>|...) [sound:<name>] (volume:<#.#>) (pitch:<#.#>) (custom) (sound_category:<category_name>)
     // @Required 2
     // @Maximum 7
     // @Short Plays a sound at the location or to a list of players.
@@ -69,12 +73,8 @@ public class PlaySoundCommand extends AbstractCommand {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        if (arg.startsWith("sound:")) {
-            for (Sound sound : Sound.values()) {
-                addOne.accept("sound:" + sound.name());
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addWithPrefix("sound:", Sound.values());
     }
 
     @Override
@@ -88,26 +88,9 @@ public class PlaySoundCommand extends AbstractCommand {
                     && arg.matchesArgumentList(PlayerTag.class)) {
                 scriptEntry.addObject("entities", arg.asType(ListTag.class).filter(PlayerTag.class, scriptEntry));
             }
-            else if (!scriptEntry.hasObject("volume")
-                    && arg.matchesFloat()
-                    && arg.matchesPrefix("volume", "v")) {
-                scriptEntry.addObject("volume", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("pitch")
-                    && arg.matchesFloat()
-                    && arg.matchesPrefix("pitch", "p")) {
-                scriptEntry.addObject("pitch", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("sound")) {
+            else if (!scriptEntry.hasObject("sound")
+                    && arg.limitToOnlyPrefix("sound")) {
                 scriptEntry.addObject("sound", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("custom")
-                    && arg.matches("custom")) {
-                scriptEntry.addObject("custom", new ElementTag(true));
-            }
-            else if (!scriptEntry.hasObject("sound_category")
-                    && arg.matchesPrefix("sound_category")) {
-                scriptEntry.addObject("sound_category", arg.asElement());
             }
             else {
                 arg.reportUnhandled();
@@ -119,10 +102,6 @@ public class PlaySoundCommand extends AbstractCommand {
         if (!scriptEntry.hasObject("locations") && !scriptEntry.hasObject("entities")) {
             throw new InvalidArgumentsException("Missing location argument!");
         }
-        scriptEntry.defaultObject("volume", new ElementTag(1));
-        scriptEntry.defaultObject("pitch", new ElementTag(1));
-        scriptEntry.defaultObject("custom", new ElementTag(false));
-        scriptEntry.defaultObject("sound_category", new ElementTag("MASTER"));
     }
 
     @Override
@@ -130,56 +109,65 @@ public class PlaySoundCommand extends AbstractCommand {
         List<LocationTag> locations = (List<LocationTag>) scriptEntry.getObject("locations");
         List<PlayerTag> players = (List<PlayerTag>) scriptEntry.getObject("entities");
         ElementTag soundElement = scriptEntry.getElement("sound");
-        ElementTag volumeElement = scriptEntry.getElement("volume");
-        ElementTag pitchElement = scriptEntry.getElement("pitch");
-        ElementTag custom = scriptEntry.getElement("custom");
-        ElementTag sound_category = scriptEntry.getElement("sound_category");
+        ElementTag volumeElement = scriptEntry.argForPrefixAsElement("volume", "1");
+        ElementTag pitchElement = scriptEntry.argForPrefixAsElement("pitch", "1");
+        boolean custom = scriptEntry.argAsBoolean("custom");
+        ElementTag sound_category = scriptEntry.argForPrefixAsElement("sound_category", "MASTER");
         if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), db("locations", locations), db("entities", players), soundElement, volumeElement, pitchElement, custom);
+            Debug.report(scriptEntry, getName(), db("locations", locations), db("entities", players), soundElement, volumeElement, pitchElement, db("custom", custom));
         }
         String sound = soundElement.asString();
         float volume = volumeElement.asFloat();
         float pitch = pitchElement.asFloat();
         String category = sound_category.asString().toUpperCase();
+        SoundCategory categoryEnum = category != null ? new ElementTag(category).asEnum(SoundCategory.class) : null;
+        if (categoryEnum == null) {
+            categoryEnum = SoundCategory.MASTER;
+        }
         try {
             if (players == null) {
-                if (custom.asBoolean()) {
+                if (custom) {
                     for (LocationTag location : locations) {
-                        NMSHandler.getSoundHelper().playSound(null, location, sound, volume, pitch, category);
+                        location.getWorld().playSound(location, sound, categoryEnum, volume, pitch);
                     }
                 }
                 else {
                     for (LocationTag location : locations) {
-                        NMSHandler.getSoundHelper().playSound(null, location, Sound.valueOf(sound.toUpperCase()), volume, pitch, category);
+                        location.getWorld().playSound(location, Sound.valueOf(sound.toUpperCase()), categoryEnum, volume, pitch);
                     }
                 }
             }
             else if (locations != null) {
                 for (LocationTag location : locations) {
                     for (PlayerTag player : players) {
-                        if (custom.asBoolean()) {
-                            NMSHandler.getSoundHelper().playSound(player.getPlayerEntity(), location, sound, volume, pitch, category);
+                        if (custom) {
+                            player.getPlayerEntity().playSound(location, sound, categoryEnum, volume, pitch);
                         }
                         else {
-                            NMSHandler.getSoundHelper().playSound(player.getPlayerEntity(), location, Sound.valueOf(sound.toUpperCase()), volume, pitch, category);
+                            player.getPlayerEntity().playSound(location, Sound.valueOf(sound.toUpperCase()), categoryEnum, volume, pitch);
                         }
                     }
                 }
             }
             else {
                 for (PlayerTag player : players) {
-                    if (custom.asBoolean()) {
-                        NMSHandler.getSoundHelper().playSound(player.getPlayerEntity(), player.getLocation(), sound, volume, pitch, category);
+                    if (custom) {
+                        player.getPlayerEntity().playSound(player.getLocation(), sound, categoryEnum, volume, pitch);
                     }
                     else {
-                        NMSHandler.getSoundHelper().playSound(player.getPlayerEntity(), player.getLocation(), Sound.valueOf(sound.toUpperCase()), volume, pitch, category);
+                        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18)) {
+                            player.getPlayerEntity().playSound(player.getPlayerEntity(), Sound.valueOf(sound.toUpperCase()), categoryEnum, volume, pitch);
+                        }
+                        else {
+                            player.getPlayerEntity().playSound(player.getLocation(), Sound.valueOf(sound.toUpperCase()), categoryEnum, volume, pitch);
+                        }
                     }
                 }
             }
         }
         catch (Exception e) {
             Debug.echoDebug(scriptEntry, "Unable to play sound.");
-            if (Debug.verbose) {
+            if (CoreConfiguration.debugVerbose) {
                 Debug.echoError(e);
             }
         }

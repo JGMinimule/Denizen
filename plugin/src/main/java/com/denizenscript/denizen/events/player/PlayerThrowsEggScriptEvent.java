@@ -24,7 +24,7 @@ public class PlayerThrowsEggScriptEvent extends BukkitScriptEvent implements Lis
     //
     // @Cancellable true
     //
-    // @Triggers when a player throws an egg.
+    // @Triggers when a player throws an egg - this event specifically fires when the egg hits, for the initial throw event use <@link event projectile launched>.
     //
     // @Context
     // <context.egg> returns the EntityTag of the egg.
@@ -38,11 +38,9 @@ public class PlayerThrowsEggScriptEvent extends BukkitScriptEvent implements Lis
     // -->
 
     public PlayerThrowsEggScriptEvent() {
-        instance = this;
         registerCouldMatcher("player throws (hatching|non-hatching) egg");
     }
 
-    public static PlayerThrowsEggScriptEvent instance;
     public EntityTag egg;
     public PlayerEggThrowEvent event;
 
@@ -59,11 +57,6 @@ public class PlayerThrowsEggScriptEvent extends BukkitScriptEvent implements Lis
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerThrowsEgg";
     }
 
     @Override
@@ -108,7 +101,6 @@ public class PlayerThrowsEggScriptEvent extends BukkitScriptEvent implements Lis
         EntityTag.rememberEntity(eggEntity);
         egg = new EntityTag(event.getEgg());
         this.event = event;
-        cancelled = false;
         fire(event);
         EntityTag.forgetEntity(eggEntity);
     }

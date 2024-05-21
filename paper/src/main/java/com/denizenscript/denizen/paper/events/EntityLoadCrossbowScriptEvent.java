@@ -46,30 +46,23 @@ public class EntityLoadCrossbowScriptEvent extends BukkitScriptEvent implements 
     // -->
 
     public EntityLoadCrossbowScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> loads crossbow");
         registerSwitches("crossbow");
     }
 
-    public static EntityLoadCrossbowScriptEvent instance;
 
     public EntityLoadCrossbowEvent event;
     public EntityTag entity;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
         if (!runWithCheck(path, new ItemTag(event.getCrossbow()), "crossbow")) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityLoadsCrossbow";
     }
 
     @Override
@@ -97,7 +90,7 @@ public class EntityLoadCrossbowScriptEvent extends BukkitScriptEvent implements 
             case "crossbow":
                 return new ItemTag(event.getCrossbow());
             case "hand":
-                return new ElementTag(event.getHand().name());
+                return new ElementTag(event.getHand());
             case "consumes":
                 return new ElementTag(event.shouldConsumeItem());
         }

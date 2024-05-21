@@ -14,11 +14,7 @@ public class EntityExitsVehicleScriptEvent extends BukkitScriptEvent implements 
     // <--[event]
     // @Events
     // entity exits vehicle
-    // entity exits <vehicle>
-    // <entity> exits vehicle
-    // <entity> exits <vehicle>
-    //
-    // @Regex ^on [^\s]+ exits [^\s]+$
+    // <entity> exits <entity>
     //
     // @Group Entity
     //
@@ -39,45 +35,27 @@ public class EntityExitsVehicleScriptEvent extends BukkitScriptEvent implements 
     // -->
 
     public EntityExitsVehicleScriptEvent() {
-        instance = this;
+        registerCouldMatcher("<entity> exits <entity>");
     }
 
-    public static EntityExitsVehicleScriptEvent instance;
     public EntityTag vehicle;
     public EntityTag entity;
+    // TODO: 1.20.6: EntityDismountEvent changed packages, might need to register in version-specific modules? or reflection?
     public EntityDismountEvent event;
 
     @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventArgLowerAt(1).equals("exits")) {
-            return false;
-        }
-        if (!couldMatchEntity(path.eventArgLowerAt(0))) {
-            return false;
-        }
-        if (!couldMatchEntity(path.eventArgLowerAt(2))) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
-        if (!path.eventArgLowerAt(2).equals("vehicle") && !tryEntity(vehicle, path.eventArgLowerAt(2))) {
+        String vehicleLabel = path.eventArgLowerAt(2);
+        if (!vehicleLabel.equals("vehicle") && !vehicle.tryAdvancedMatcher(vehicleLabel)) {
             return false;
         }
         if (!runInCheck(path, vehicle.getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityExitsVehicle";
     }
 
     @Override
@@ -88,10 +66,10 @@ public class EntityExitsVehicleScriptEvent extends BukkitScriptEvent implements 
     @Override
     public ObjectTag getContext(String name) {
         if (name.equals("vehicle")) {
-            return vehicle;
+            return vehicle.getDenizenObject();
         }
         else if (name.equals("entity")) {
-            return entity;
+            return entity.getDenizenObject();
         }
         return super.getContext(name);
     }

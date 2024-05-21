@@ -26,9 +26,19 @@ package com.denizenscript.denizen.nms.abstracts;
  * @name ImprovedOfflinePlayer
  * @version 1.6.0
  * @author one4me
+ *
+ *
+ *
+ * Modified by mcmonkey and the DenizenScript team, to update to more recent Minecraft versions and improve performance
+ *
  */
 
 import com.denizenscript.denizen.nms.util.jnbt.*;
+import com.denizenscript.denizen.utilities.Settings;
+import com.denizenscript.denizencore.DenizenCore;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.scheduling.OneTimeSchedulable;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -38,23 +48,63 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.util.Vector;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public abstract class ImprovedOfflinePlayer {
 
-    protected UUID player;
-    protected File file;
-    protected CompoundTag compound;
-    protected boolean exists;
-    protected boolean autosave = true;
-    public static Map<UUID, PlayerInventory> offlineInventories = new HashMap<>();
-    public static Map<UUID, Inventory> offlineEnderChests = new HashMap<>();
+    public static void invalidateNow(UUID id) {
+        ImprovedOfflinePlayer player = offlinePlayers.remove(id);
+        if (player != null) {
+            if (player.inventory != null) {
+                player.setInventory(player.inventory);
+            }
+            if (player.enderchest != null) {
+                player.setEnderChest(player.enderchest);
+            }
+            if (player.modified) {
+                player.saveToFile();
+            }
+        }
+    }
+
+    public static Map<UUID, ImprovedOfflinePlayer> offlinePlayers = new HashMap<>();
+
+    public UUID player;
+    public File file;
+    public CompoundTag compound;
+    public boolean exists;
+    public PlayerInventory inventory;
+    public Inventory enderchest;
+    public boolean modified = false;
+    public long timeLastLoaded;
+
+    public void markModified() {
+        if (CoreConfiguration.debugVerbose) {
+            Debug.verboseLog("[Verbose] player data modified for " + player + ", wasModified=" + modified + ", delay=" + Settings.worldPlayerDataSaveDelay);
+        }
+        if (Settings.worldPlayerDataSaveDelay <= 0) {
+            saveToFile();
+            return;
+        }
+        if (!modified && Settings.worldPlayerDataSaveDelay < 60 * 60 * 24) {
+            DenizenCore.schedule(new OneTimeSchedulable(() -> {
+                if (modified && offlinePlayers.get(player) == this) {
+                    modified = false;
+                    CompoundTag tag = compound;
+                    if (CoreConfiguration.debugVerbose) {
+                        Debug.verboseLog("[Verbose] async-saving player data for " + player);
+                    }
+                    DenizenCore.runAsync(() -> {
+                        saveInternal(tag);
+                    });
+                }
+            }, Settings.worldPlayerDataSaveDelay));
+        }
+        modified = true;
+    }
 
     public ImprovedOfflinePlayer(UUID playeruuid) {
+        timeLastLoaded = DenizenCore.currentTimeMonotonicMillis;
         this.exists = loadPlayerData(playeruuid);
     }
 
@@ -96,9 +146,7 @@ public abstract class ImprovedOfflinePlayer {
                 .putInt("Dimension", w.getEnvironment().ordinal())
                 .put("Pos", new JNBTListTag(DoubleTag.class, position))
                 .put("Rotation", new JNBTListTag(FloatTag.class, rotation)).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public float getHealthFloat() {
@@ -107,9 +155,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setHealthFloat(float input) {
         this.compound = compound.createBuilder().putFloat("Health", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public abstract double getMaxHealth();
@@ -118,18 +164,17 @@ public abstract class ImprovedOfflinePlayer {
 
     protected abstract boolean loadPlayerData(UUID uuid);
 
-    public abstract void savePlayerData();
+    public void saveToFile() {
+        if (exists && modified) {
+            modified = false;
+            saveInternal(compound);
+        }
+    }
+
+    public abstract void saveInternal(CompoundTag compound);
 
     public boolean exists() {
         return this.exists;
-    }
-
-    public boolean getAutoSave() {
-        return this.autosave;
-    }
-
-    public void setAutoSave(boolean autosave) {
-        this.autosave = autosave;
     }
 
     public float getAbsorptionAmount() {
@@ -138,34 +183,37 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setAbsorptionAmount(float input) {
         this.compound = compound.createBuilder().putFloat("AbsorptionAmount", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
-    public Location getBedSpawnLocation() {
-        return new Location(
-                Bukkit.getWorld(this.compound.getString("SpawnWorld")),
-                this.compound.getInt("SpawnX"),
-                this.compound.getInt("SpawnY"),
-                this.compound.getInt("SpawnZ")
-        );
+    public void setBedSpawnLocation(Location location) {
+        if (location == null && !compound.containsKey("SpawnDimension")) {
+            return;
+        }
+        CompoundTagBuilder builder = compound.createBuilder();
+        if (location != null) {
+            builder.putInt("SpawnX", location.getBlockX())
+                    .putInt("SpawnY", location.getBlockY())
+                    .putInt("SpawnZ", location.getBlockZ())
+                    .putFloat("SpawnAngle", location.getYaw())
+                    .putString("SpawnDimension", location.getWorld().getKey().toString());
+        }
+        else {
+            builder.remove("SpawnX").remove("SpawnY").remove("SpawnZ").remove("SpawnAngle").remove("SpawnDimension");
+        }
+        this.compound = builder.build();
+        markModified();
+        // Must save to file immediately to work with normal Spigot OfflinePlayer API
+        saveToFile();
     }
 
     public boolean isSpawnForced() {
         return this.compound.getBoolean("SpawnForced");
     }
 
-    public void setBedSpawnLocation(Location location, boolean override) {
-        this.compound = compound.createBuilder()
-                .putInt("SpawnX", (int) location.getX())
-                .putInt("SpawnY", (int) location.getY())
-                .putInt("SpawnZ", (int) location.getZ())
-                .putString("SpawnWorld", location.getWorld().getName())
-                .putBoolean("SpawnForced", override).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+    public void setSpawnForced(boolean spawnForced) {
+        this.compound = compound.createBuilder().putBoolean("SpawnForced", spawnForced).build();
+        markModified();
     }
 
     public float getExhaustion() {
@@ -174,9 +222,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setExhaustion(float input) {
         this.compound = compound.createBuilder().putFloat("foodExhaustionLevel", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public float getExp() {
@@ -185,9 +231,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setExp(float input) {
         this.compound = compound.createBuilder().putFloat("XpP", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public float getFallDistance() {
@@ -196,9 +240,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setFallDistance(float input) {
         this.compound = compound.createBuilder().putFloat("FallDistance", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public int getFireTicks() {
@@ -207,22 +249,18 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setFireTicks(int input) {
         this.compound = compound.createBuilder().putShort("Fire", (short) input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public float getFlySpeed() {
-        return ((CompoundTag) this.compound.getValue().get("abilities")).getFloat("flySpeed");
+        return ((CompoundTag) this.compound.getValue().get("abilities")).getFloat("flySpeed") * 2;
     }
 
     public void setFlySpeed(float speed) {
         CompoundTag compoundTag = (CompoundTag) this.compound.getValue().get("abilities");
-        compoundTag = compoundTag.createBuilder().putFloat("flySpeed", speed).build();
+        compoundTag = compoundTag.createBuilder().putFloat("flySpeed", speed / 2).build();
         this.compound = compound.createBuilder().put("abilities", compoundTag).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public int getFoodLevel() {
@@ -231,54 +269,16 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setFoodLevel(int input) {
         this.compound = compound.createBuilder().putInt("foodLevel", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
-    }
-
-    public int getFoodTickTimer() {
-        return this.compound.getInt("foodTickTimer");
-    }
-
-    public void setFoodTickTimer(int input) {
-        this.compound = compound.createBuilder().putInt("foodTickTimer", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public GameMode getGameMode() {
         return GameMode.getByValue(this.compound.getInt("playerGameType"));
     }
 
-    @SuppressWarnings("deprecation")//Will most likely break in 1.7
     public void setGameMode(GameMode input) {
         this.compound = compound.createBuilder().putInt("playerGameType", input.getValue()).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
-    }
-
-    public int getHealthInt() {
-        return this.compound.getShort("Health");
-    }
-
-    public void setHealthInt(int input) {
-        this.compound = compound.createBuilder().putShort("Health", (short) input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
-    }
-
-    public boolean getIsInvulnerable() {
-        return compound.getBoolean("Invulnerable");
-    }
-
-    public void setIsInvulnerable(boolean input) {
-        this.compound = compound.createBuilder().putBoolean("Invulnerable", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public boolean getIsOnGround() {
@@ -287,20 +287,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setIsOnGround(boolean input) {
         this.compound = compound.createBuilder().putBoolean("OnGround", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
-    }
-
-    public boolean getIsSleeping() {
-        return this.compound.getBoolean("Sleeping");
-    }
-
-    public void setIsSleeping(boolean input) {
-        this.compound = compound.createBuilder().putBoolean("Sleeping", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public int getItemInHand() {
@@ -309,9 +296,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setItemInHand(int input) {
         this.compound = compound.createBuilder().putInt("SelectedItemSlot", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public int getLevel() {
@@ -320,24 +305,11 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setLevel(int input) {
         this.compound = compound.createBuilder().putInt("XpLevel", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public UUID getUniqueId() {
         return this.player;
-    }
-
-    public int getPortalCooldown() {
-        return this.compound.getInt("PortalCooldown");
-    }
-
-    public void setPortalCooldown(int input) {
-        this.compound = compound.createBuilder().putInt("PortalCooldown", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
     }
 
     public int getRemainingAir() {
@@ -346,9 +318,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setRemainingAir(int input) {
         this.compound = compound.createBuilder().putShort("Air", (short) input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public float getSaturation() {
@@ -357,9 +327,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setSaturation(float input) {
         this.compound = compound.createBuilder().putFloat("foodSaturationLevel", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public float getScore() {
@@ -368,9 +336,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setScore(int input) {
         this.compound = compound.createBuilder().putInt("Score", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public short getTimeAttack() {
@@ -379,9 +345,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setTimeAttack(short input) {
         this.compound = compound.createBuilder().putShort("AttackTime", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public short getTimeDeath() {
@@ -390,9 +354,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setTimeDeath(short input) {
         this.compound = compound.createBuilder().putShort("DeathTime", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public short getTimeHurt() {
@@ -401,9 +363,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setTimeHurt(short input) {
         this.compound = compound.createBuilder().putShort("HurtTime", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public short getTimeSleep() {
@@ -412,9 +372,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setTimeSleep(short input) {
         this.compound = compound.createBuilder().putShort("SleepTimer", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public int getTotalExperience() {
@@ -423,9 +381,7 @@ public abstract class ImprovedOfflinePlayer {
 
     public void setTotalExperience(int input) {
         this.compound = compound.createBuilder().putInt("XpTotal", input).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public Vector getVelocity() {
@@ -439,21 +395,37 @@ public abstract class ImprovedOfflinePlayer {
         motion.add(new DoubleTag(vector.getY()));
         motion.add(new DoubleTag(vector.getZ()));
         this.compound = compound.createBuilder().put("Motion", new JNBTListTag(DoubleTag.class, motion)).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
     }
 
     public float getWalkSpeed() {
-        return ((CompoundTag) this.compound.getValue().get("abilities")).getFloat("walkSpeed");
+        return ((CompoundTag) this.compound.getValue().get("abilities")).getFloat("walkSpeed") * 2;
     }
 
     public void setWalkSpeed(float speed) {
         CompoundTag compoundTag = (CompoundTag) this.compound.getValue().get("abilities");
-        compoundTag = compoundTag.createBuilder().putFloat("walkSpeed", speed).build();
+        compoundTag = compoundTag.createBuilder().putFloat("walkSpeed", speed / 2).build();
         this.compound = compound.createBuilder().put("abilities", compoundTag).build();
-        if (this.autosave) {
-            savePlayerData();
-        }
+        markModified();
+    }
+
+    public boolean getAllowFlight() {
+        return ((CompoundTag) this.compound.getValue().get("abilities")).getBoolean("mayfly");
+    }
+
+    public void setAllowFlight(boolean allow) {
+        CompoundTag compoundTag = (CompoundTag) this.compound.getValue().get("abilities");
+        compoundTag = compoundTag.createBuilder().putBoolean("mayfly", allow).build();
+        this.compound = compound.createBuilder().put("abilities", compoundTag).build();
+        markModified();
+    }
+
+    public void setLastDeathLocation(Location deathLoc) {
+        CompoundTag compoundTag = (CompoundTag) this.compound.getValue().get("LastDeathLocation");
+        compoundTag = compoundTag.createBuilder()
+                .putIntArray("pos", new int[] {deathLoc.getBlockX(), deathLoc.getBlockY(), deathLoc.getBlockZ()})
+                .putString("dimension", deathLoc.getWorld().getKey().toString()).build();
+        this.compound = compound.createBuilder().put("LastDeathLocation", compoundTag).build();
+        markModified();
     }
 }

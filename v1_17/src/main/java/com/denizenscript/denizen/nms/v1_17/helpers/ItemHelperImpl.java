@@ -1,21 +1,22 @@
 package com.denizenscript.denizen.nms.v1_17.helpers;
 
+import com.denizenscript.denizen.nms.interfaces.ItemHelper;
+import com.denizenscript.denizen.nms.util.PlayerProfile;
+import com.denizenscript.denizen.nms.util.jnbt.CompoundTag;
+import com.denizenscript.denizen.nms.util.jnbt.IntArrayTag;
+import com.denizenscript.denizen.nms.util.jnbt.Tag;
 import com.denizenscript.denizen.nms.v1_17.ReflectionMappingsInfo;
+import com.denizenscript.denizen.nms.v1_17.impl.jnbt.CompoundTagImpl;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.utilities.FormattedTextHelper;
 import com.denizenscript.denizencore.utilities.ReflectionHelper;
-import com.denizenscript.denizen.nms.util.jnbt.*;
-import com.denizenscript.denizen.nms.v1_17.impl.jnbt.CompoundTagImpl;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.LinkedHashMultiset;
 import com.google.common.collect.Multiset;
 import com.google.common.collect.Multisets;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
-import com.denizenscript.denizen.nms.interfaces.ItemHelper;
-import com.denizenscript.denizen.nms.util.PlayerProfile;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
 import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.chat.ComponentSerializer;
@@ -47,13 +48,10 @@ import org.bukkit.craftbukkit.v1_17_R1.inventory.CraftInventoryPlayer;
 import org.bukkit.craftbukkit.v1_17_R1.inventory.CraftItemStack;
 import org.bukkit.craftbukkit.v1_17_R1.util.CraftMagicNumbers;
 import org.bukkit.craftbukkit.v1_17_R1.util.CraftNamespacedKey;
-import org.bukkit.inventory.RecipeChoice;
-import org.bukkit.inventory.ShapedRecipe;
-import org.bukkit.inventory.Recipe;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
+import org.bukkit.inventory.RecipeChoice;
+import org.bukkit.inventory.ShapedRecipe;
 
 import java.util.*;
 
@@ -73,7 +71,7 @@ public class ItemHelperImpl extends ItemHelper {
     public void setMaxStackSize(Material material, int size) {
         try {
             ReflectionHelper.getFinalSetter(Material.class, "maxStack").invoke(material, size);
-            ReflectionHelper.getFinalSetter(Item.class, ReflectionMappingsInfo.Item_maxStackSize).invoke(Registry.ITEM.get(ResourceLocation.tryParse(material.getKey().getKey())), size);
+            ReflectionHelper.getFinalSetter(Item.class, ReflectionMappingsInfo.Item_maxStackSize).invoke(Registry.ITEM.get(CraftNamespacedKey.toMinecraft(material.getKey())), size);
         }
         catch (Throwable ex) {
             Debug.echoError(ex);
@@ -83,34 +81,6 @@ public class ItemHelperImpl extends ItemHelper {
     @Override
     public Integer burnTime(Material material) {
         return AbstractFurnaceBlockEntity.getFuel().get(CraftMagicNumbers.getItem(material));
-    }
-
-    @Override
-    public Recipe getRecipeById(NamespacedKey key) {
-        net.minecraft.world.item.crafting.Recipe<?> recipe = getNMSRecipe(key);
-        if (recipe == null) {
-            return null;
-        }
-        return recipe.toBukkitRecipe();
-    }
-
-    @Override
-    public void removeRecipe(NamespacedKey key) {
-        ResourceLocation nmsKey = CraftNamespacedKey.toMinecraft(key);
-        for (Object2ObjectLinkedOpenHashMap<ResourceLocation, net.minecraft.world.item.crafting.Recipe<?>> recipeMap : ((CraftServer) Bukkit.getServer()).getServer().getRecipeManager().recipes.values()) {
-            recipeMap.remove(nmsKey);
-        }
-    }
-
-    @Override
-    public void clearDenizenRecipes() {
-        for (Object2ObjectLinkedOpenHashMap<ResourceLocation, net.minecraft.world.item.crafting.Recipe<?>> recipeMap : ((CraftServer) Bukkit.getServer()).getServer().getRecipeManager().recipes.values()) {
-            for (ResourceLocation key : new ArrayList<>(recipeMap.keySet())) {
-                if (key.getNamespace().equalsIgnoreCase("denizen")) {
-                    recipeMap.remove(key);
-                }
-            }
-        }
     }
 
     @Override
@@ -141,7 +111,7 @@ public class ItemHelperImpl extends ItemHelper {
     }
 
     @Override
-    public void registerFurnaceRecipe(String keyName, String group, ItemStack result, ItemStack[] ingredient, float exp, int time, String type, boolean exact) {
+    public void registerFurnaceRecipe(String keyName, String group, ItemStack result, ItemStack[] ingredient, float exp, int time, String type, boolean exact, String category) {
         ResourceLocation key = new ResourceLocation("denizen", keyName);
         Ingredient itemRecipe = itemArrayToRecipe(ingredient, exact);
         AbstractCookingRecipe recipe;
@@ -169,7 +139,7 @@ public class ItemHelperImpl extends ItemHelper {
     }
 
     @Override
-    public void registerSmithingRecipe(String keyName, ItemStack result, ItemStack[] baseItem, boolean baseExact, ItemStack[] upgradeItem, boolean upgradeExact) {
+    public void registerSmithingRecipe(String keyName, ItemStack result, ItemStack[] baseItem, boolean baseExact, ItemStack[] upgradeItem, boolean upgradeExact, ItemStack[] templateItem, boolean templateExact) {
         ResourceLocation key = new ResourceLocation("denizen", keyName);
         Ingredient baseItemRecipe = itemArrayToRecipe(baseItem, baseExact);
         Ingredient upgradeItemRecipe = itemArrayToRecipe(upgradeItem, upgradeExact);
@@ -178,7 +148,7 @@ public class ItemHelperImpl extends ItemHelper {
     }
 
     @Override
-    public void registerShapelessRecipe(String keyName, String group, ItemStack result, List<ItemStack[]> ingredients, boolean[] exact) {
+    public void registerShapelessRecipe(String keyName, String group, ItemStack result, List<ItemStack[]> ingredients, boolean[] exact, String category) {
         ResourceLocation key = new ResourceLocation("denizen", keyName);
         ArrayList<Ingredient> ingredientList = new ArrayList<>();
         for (int i = 0; i < ingredients.size(); i++) {
@@ -186,17 +156,6 @@ public class ItemHelperImpl extends ItemHelper {
         }
         ShapelessRecipe recipe = new ShapelessRecipe(key, group, CraftItemStack.asNMSCopy(result), NonNullList.of(null, ingredientList.toArray(new Ingredient[0])));
         ((CraftServer) Bukkit.getServer()).getServer().getRecipeManager().addRecipe(recipe);
-    }
-
-    @Override
-    public String getInternalNameFromMaterial(Material material) {
-        // In 1.13+ Material names match their internal name
-        return "minecraft:" + CoreUtilities.toLowerCase(material.name());
-    }
-
-    @Override
-    public Material getMaterialFromInternalName(String internalName) {
-        return Material.matchMaterial(internalName);
     }
 
     @Override
@@ -277,11 +236,6 @@ public class ItemHelperImpl extends ItemHelper {
     }
 
     @Override
-    public PotionEffect getPotionEffect(PotionEffectType type, int duration, int amplifier, boolean ambient, boolean particles, boolean icon) {
-        return new PotionEffect(type, duration, amplifier, ambient, particles, icon);
-    }
-
-    @Override
     public void setInventoryItem(Inventory inventory, ItemStack item, int slot) {
         if (inventory instanceof CraftInventoryPlayer && ((CraftInventoryPlayer) inventory).getInventory().player == null) {
             ((CraftInventoryPlayer) inventory).getInventory().setItem(slot, CraftItemStack.asNMSCopy(item));
@@ -309,7 +263,7 @@ public class ItemHelperImpl extends ItemHelper {
         net.minecraft.world.item.ItemStack nmsItemStack = CraftItemStack.asNMSCopy(item.getItemStack());
         String jsonText = ((net.minecraft.nbt.CompoundTag) nmsItemStack.getTag().get("display")).getString("Name");
         BaseComponent[] nameComponent = ComponentSerializer.parse(jsonText);
-        return FormattedTextHelper.stringify(nameComponent, ChatColor.WHITE);
+        return FormattedTextHelper.stringify(nameComponent);
     }
 
     @Override
@@ -322,7 +276,7 @@ public class ItemHelperImpl extends ItemHelper {
         List<String> outList = new ArrayList<>();
         for (int i = 0; i < list.size(); i++) {
             BaseComponent[] lineComponent = ComponentSerializer.parse(list.getString(i));
-            outList.add(FormattedTextHelper.stringify(lineComponent, ChatColor.WHITE));
+            outList.add(FormattedTextHelper.stringify(lineComponent));
         }
         return outList;
     }
@@ -503,5 +457,12 @@ public class ItemHelperImpl extends ItemHelper {
         }
         renderFullMap(worldmap, xMin, zMin, xMax, zMax);
         return true;
+    }
+
+    @Override
+    public boolean isValidMix(ItemStack input, ItemStack ingredient) {
+        net.minecraft.world.item.ItemStack nmsInput = CraftItemStack.asNMSCopy(input);
+        net.minecraft.world.item.ItemStack nmsIngredient = CraftItemStack.asNMSCopy(ingredient);
+        return net.minecraft.world.item.alchemy.PotionBrewing.hasMix(nmsInput, nmsIngredient);
     }
 }

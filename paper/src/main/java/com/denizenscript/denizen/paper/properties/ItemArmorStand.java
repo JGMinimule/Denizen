@@ -28,7 +28,7 @@ public class ItemArmorStand implements Property {
             "armor_stand_data"
     };
 
-    private ItemArmorStand(ItemTag item) {
+    public ItemArmorStand(ItemTag item) {
         this.item = item;
     }
 
@@ -62,7 +62,7 @@ public class ItemArmorStand implements Property {
         return "armor_stand_data";
     }
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <ItemTag.armor_stand_data>
@@ -74,7 +74,7 @@ public class ItemArmorStand implements Property {
         // Returns a map of basic armor stand data, with keys matching EntityTag property names.
         // Keys: base_plate, visible, marker, is_small, arms
         // -->
-        PropertyParser.<ItemArmorStand, MapTag>registerTag(MapTag.class, "armor_stand_data", (attribute, item) -> {
+        PropertyParser.registerTag(ItemArmorStand.class, MapTag.class, "armor_stand_data", (attribute, item) -> {
             return item.getDataMap();
         });
     }
@@ -87,6 +87,7 @@ public class ItemArmorStand implements Property {
         // @name armor_stand_data
         // @input MapTag
         // @Plugin Paper
+        // @group properties
         // @description
         // Sets a map of basic armor stand data, with keys matching EntityTag property names.
         // Allowed keys: base_plate, visible, marker, is_small, arms
@@ -96,25 +97,25 @@ public class ItemArmorStand implements Property {
         if (mechanism.matches("armor_stand_data") && mechanism.requireObject(MapTag.class)) {
             MapTag map = mechanism.valueAsType(MapTag.class);
             ArmorStandMeta meta = (ArmorStandMeta) item.getItemMeta();
-            ObjectTag base_plate = map.getObject("base_plate");
-            ObjectTag visible = map.getObject("visible");
-            ObjectTag marker = map.getObject("marker");
-            ObjectTag is_small = map.getObject("is_small");
-            ObjectTag arms = map.getObject("arms");
+            ElementTag base_plate = map.getElement("base_plate");
+            ElementTag visible = map.getElement("visible");
+            ElementTag marker = map.getElement("marker");
+            ElementTag is_small = map.getElement("is_small");
+            ElementTag arms = map.getElement("arms");
             if (base_plate != null) {
-                meta.setNoBasePlate(!((ElementTag) base_plate).asBoolean());
+                meta.setNoBasePlate(!base_plate.asBoolean());
             }
             if (visible != null) {
-                meta.setInvisible(!((ElementTag) visible).asBoolean());
+                meta.setInvisible(!visible.asBoolean());
             }
             if (marker != null) {
-                meta.setMarker(((ElementTag) marker).asBoolean());
+                meta.setMarker(marker.asBoolean());
             }
             if (is_small != null) {
-                meta.setSmall(((ElementTag) is_small).asBoolean());
+                meta.setSmall(is_small.asBoolean());
             }
             if (arms != null) {
-                meta.setShowArms(((ElementTag) arms).asBoolean());
+                meta.setShowArms(arms.asBoolean());
             }
             item.setItemMeta(meta);
         }

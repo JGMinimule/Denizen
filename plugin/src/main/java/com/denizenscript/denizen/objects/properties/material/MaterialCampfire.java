@@ -6,7 +6,7 @@ import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.objects.properties.PropertyParser;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import org.bukkit.block.data.type.Campfire;
 
 @Deprecated
@@ -31,16 +31,15 @@ public class MaterialCampfire implements Property {
             "signal_fire"
     };
 
-    private MaterialCampfire(MaterialTag _material) {
+    public MaterialCampfire(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
-
-        PropertyParser.<MaterialCampfire, ElementTag>registerTag(ElementTag.class, "signal_fire", (attribute, material) -> {
-            Deprecations.materialCampfire.warn(attribute.context);
+    public static void register() {
+        PropertyParser.registerTag(MaterialCampfire.class, ElementTag.class, "signal_fire", (attribute, material) -> {
+            BukkitImplDeprecations.materialCampfire.warn(attribute.context);
             return new ElementTag(material.getCampfire().isSignalFire());
         });
     }
@@ -51,7 +50,7 @@ public class MaterialCampfire implements Property {
 
     @Override
     public String getPropertyString() {
-        return String.valueOf(getCampfire().isSignalFire());
+        return null;
     }
 
     @Override
@@ -61,11 +60,9 @@ public class MaterialCampfire implements Property {
 
     @Override
     public void adjust(Mechanism mechanism) {
-
         if (mechanism.matches("signal_fire") && mechanism.requireBoolean()) {
-            Deprecations.materialCampfire.warn(mechanism.context);
+            BukkitImplDeprecations.materialCampfire.warn(mechanism.context);
             getCampfire().setSignalFire(mechanism.getValue().asBoolean());
         }
     }
 }
-

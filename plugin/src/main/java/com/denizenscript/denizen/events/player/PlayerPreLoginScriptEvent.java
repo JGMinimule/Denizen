@@ -8,6 +8,7 @@ import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.QueueTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import org.bukkit.Bukkit;
@@ -45,17 +46,15 @@ public class PlayerPreLoginScriptEvent extends BukkitScriptEvent implements List
     // @Determine
     // QueueTag to cause the event to wait until the queue is complete.
     // "KICKED" to kick the player from the server.
-    // "KICKED " + ElementTag to kick the player and specify a message to show.
+    // "KICKED <ElementTag>" to kick the player and specify a message to show.
     //
     // @Player When the player has previously joined (and thus the UUID is valid).
     //
     // -->
 
     public PlayerPreLoginScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerPreLoginScriptEvent instance;
     public AsyncPlayerPreLoginEvent event;
     public PlayerTag player;
     public List<QueueTag> waitForQueues = new ArrayList<>();
@@ -68,11 +67,6 @@ public class PlayerPreLoginScriptEvent extends BukkitScriptEvent implements List
     @Override
     public boolean matches(ScriptPath path) {
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerPreLogin";
     }
 
     @Override
@@ -114,18 +108,18 @@ public class PlayerPreLoginScriptEvent extends BukkitScriptEvent implements List
     }
 
     public boolean needsToWait() {
-        if (Debug.verbose) {
+        if (CoreConfiguration.debugVerbose) {
             Debug.log("Prelogin: queues that might need waiting: " + waitForQueues.size());
         }
         for (QueueTag queue : waitForQueues) {
             if (!queue.getQueue().isStopped) {
-                if (Debug.verbose) {
+                if (CoreConfiguration.debugVerbose) {
                     Debug.log("Prelogin: need to wait for " + queue.getQueue().id);
                 }
                 return true;
             }
         }
-        if (Debug.verbose) {
+        if (CoreConfiguration.debugVerbose) {
             Debug.log("Prelogin: no need to wait");
         }
         return false;

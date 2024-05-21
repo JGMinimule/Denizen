@@ -1,7 +1,6 @@
 package com.denizenscript.denizen.utilities.entity;
 
 import com.denizenscript.denizen.Denizen;
-import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
@@ -37,7 +36,7 @@ public class HideEntitiesHelper {
                 }
                 EntityTag entityTag = new EntityTag(entity);
                 for (String matchable : matchersHidden) {
-                    if (BukkitScriptEvent.tryEntity(entityTag, matchable)) {
+                    if (entityTag.tryAdvancedMatcher(matchable)) {
                         if (entity instanceof Player) {
                             Player thisPlayer = Bukkit.getPlayer(player);
                             if (thisPlayer != null && thisPlayer.canSee((Player) entity)) {
@@ -89,7 +88,7 @@ public class HideEntitiesHelper {
     public static boolean playerShouldHide(UUID player, Entity ent) {
         PlayerHideMap map = playerHides.get(player);
         if (map == null) {
-            return defaultHidden.contains(ent.getUniqueId());
+            return defaultHidden.contains(ent.getUniqueId()) && !player.equals(ent.getUniqueId());
         }
         return map.shouldHide(ent);
     }
@@ -109,11 +108,11 @@ public class HideEntitiesHelper {
         if (addHide(player == null ? null : player.getUniqueId(), entity.getUniqueId())) {
             if (player == null) {
                 for (Player pl : Bukkit.getOnlinePlayers()) {
-                    NMSHandler.getEntityHelper().sendHidePacket(pl, entity);
+                    NMSHandler.entityHelper.sendHidePacket(pl, entity);
                 }
             }
             else {
-                NMSHandler.getEntityHelper().sendHidePacket(player, entity);
+                NMSHandler.entityHelper.sendHidePacket(player, entity);
             }
         }
     }
@@ -147,11 +146,11 @@ public class HideEntitiesHelper {
         if (removeHide(player == null ? null : player.getUniqueId(), entity.getUniqueId())) {
             if (player == null) {
                 for (Player pl : Bukkit.getOnlinePlayers()) {
-                    NMSHandler.getEntityHelper().sendShowPacket(pl, entity);
+                    NMSHandler.entityHelper.sendShowPacket(pl, entity);
                 }
             }
             else {
-                NMSHandler.getEntityHelper().sendShowPacket(player, entity);
+                NMSHandler.entityHelper.sendShowPacket(player, entity);
             }
         }
     }
@@ -178,7 +177,7 @@ public class HideEntitiesHelper {
                         if (map.matchersHidden != null) {
                             for (Entity entity : pl.getWorld().getEntities()) {
                                 if (map.shouldHide(entity)) {
-                                    NMSHandler.getEntityHelper().sendHidePacket(pl, entity);
+                                    NMSHandler.entityHelper.sendHidePacket(pl, entity);
                                 }
                             }
                         }
@@ -186,7 +185,7 @@ public class HideEntitiesHelper {
                             for (UUID id : map.entitiesHidden) {
                                 Entity ent = Bukkit.getEntity(id);
                                 if (ent != null) {
-                                    NMSHandler.getEntityHelper().sendHidePacket(pl, ent);
+                                    NMSHandler.entityHelper.sendHidePacket(pl, ent);
                                 }
                             }
                         }

@@ -4,7 +4,12 @@ import com.denizenscript.denizen.events.ScriptEventRegistry;
 import com.denizenscript.denizen.events.bukkit.SavesReloadEvent;
 import com.denizenscript.denizen.events.server.ServerPrestartScriptEvent;
 import com.denizenscript.denizen.events.server.ServerStartScriptEvent;
-import com.denizenscript.denizen.nms.NMSVersion;
+import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.interfaces.FakeArrow;
+import com.denizenscript.denizen.nms.interfaces.FakePlayer;
+import com.denizenscript.denizen.nms.interfaces.ItemProjectile;
+import com.denizenscript.denizen.npc.DenizenNPCHelper;
+import com.denizenscript.denizen.npc.TraitRegistry;
 import com.denizenscript.denizen.objects.InventoryTag;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.objects.PlayerTag;
@@ -14,62 +19,62 @@ import com.denizenscript.denizen.scripts.commands.player.ClickableCommand;
 import com.denizenscript.denizen.scripts.containers.ContainerRegistry;
 import com.denizenscript.denizen.scripts.containers.core.*;
 import com.denizenscript.denizen.scripts.triggers.TriggerRegistry;
+import com.denizenscript.denizen.scripts.triggers.core.ChatTrigger;
 import com.denizenscript.denizen.tags.BukkitTagContext;
 import com.denizenscript.denizen.tags.core.NPCTagBase;
-import com.denizenscript.denizen.tags.core.ServerTagBase;
 import com.denizenscript.denizen.utilities.*;
+import com.denizenscript.denizen.utilities.blocks.FullBlockData;
 import com.denizenscript.denizen.utilities.command.*;
 import com.denizenscript.denizen.utilities.command.manager.CommandManager;
 import com.denizenscript.denizen.utilities.command.manager.Injector;
 import com.denizenscript.denizen.utilities.command.manager.messaging.Messaging;
 import com.denizenscript.denizen.utilities.debugging.BStatsMetricsLite;
+import com.denizenscript.denizen.utilities.debugging.DebugSubmit;
 import com.denizenscript.denizen.utilities.debugging.StatsRecord;
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.depends.Depends;
 import com.denizenscript.denizen.utilities.entity.DenizenEntityType;
 import com.denizenscript.denizen.utilities.flags.PlayerFlagHandler;
 import com.denizenscript.denizen.utilities.flags.WorldFlagHandler;
 import com.denizenscript.denizen.utilities.implementation.DenizenCoreImplementation;
 import com.denizenscript.denizen.utilities.maps.DenizenMapManager;
-import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.interfaces.FakeArrow;
-import com.denizenscript.denizen.nms.interfaces.FakePlayer;
-import com.denizenscript.denizen.nms.interfaces.ItemProjectile;
-import com.denizenscript.denizen.npc.TraitRegistry;
-import com.denizenscript.denizen.npc.DenizenNPCHelper;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
 import com.denizenscript.denizen.utilities.world.VoidGenerator;
+import com.denizenscript.denizen.utilities.world.WorldListChangeTracker;
 import com.denizenscript.denizencore.DenizenCore;
-import com.denizenscript.denizencore.events.OldEventManager;
-import com.denizenscript.denizencore.flags.MapTagBasedFlagTracker;
 import com.denizenscript.denizencore.objects.ObjectFetcher;
+import com.denizenscript.denizencore.objects.core.SecretTag;
 import com.denizenscript.denizencore.objects.core.TimeTag;
 import com.denizenscript.denizencore.objects.notable.NoteManager;
 import com.denizenscript.denizencore.scripts.ScriptHelper;
-import com.denizenscript.denizencore.scripts.ScriptRegistry;
-import com.denizenscript.denizencore.scripts.commands.core.AdjustCommand;
 import com.denizenscript.denizencore.scripts.commands.queue.RunLaterCommand;
-import com.denizenscript.denizencore.tags.TagManager;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.debugging.SlowWarning;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.DebugInternals;
 import com.denizenscript.denizencore.utilities.debugging.StrongWarning;
 import com.denizenscript.denizencore.utilities.text.ConfigUpdater;
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
+import org.bukkit.event.player.PlayerChatEvent;
 import org.bukkit.generator.ChunkGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.*;
 import java.net.URLDecoder;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class Denizen extends JavaPlugin {
 
@@ -78,6 +83,8 @@ public class Denizen extends JavaPlugin {
     public static Denizen getInstance() {
         return instance;
     }
+
+    public static boolean hasTickedOnce = false;
 
     public static String versionTag = null;
     private boolean startedSuccessful = false;
@@ -88,8 +95,6 @@ public class Denizen extends JavaPlugin {
 
     public TriggerRegistry triggerRegistry;
     public DenizenNPCHelper npcHelper;
-
-    public OldEventManager eventManager;
 
     public BukkitWorldScriptHelper worldScriptHelper;
 
@@ -104,14 +109,15 @@ public class Denizen extends JavaPlugin {
      */
     @Override
     public void onEnable() {
+        long startTime = System.currentTimeMillis();
         instance = this;
         try {
             versionTag = this.getDescription().getVersion();
 
             CoreUtilities.noDebugContext = new BukkitTagContext(null, null, null, false, null);
+            CoreUtilities.noDebugContext.showErrors = () -> false;
             CoreUtilities.basicContext = new BukkitTagContext(null, null, null, true, null);
             CoreUtilities.errorButNoDebugContext = new BukkitTagContext(null, null, null, false, null);
-            CoreUtilities.errorButNoDebugContext.showErrors = true;
             // Load Denizen's core
             DenizenCore.init(coreImplementation);
         }
@@ -125,26 +131,25 @@ public class Denizen extends JavaPlugin {
         if (!PlayerFlagHandler.dataFolder.exists()) {
             PlayerFlagHandler.dataFolder.mkdir();
         }
+        DebugInternals.alternateTrimLogic = FormattedTextHelper::bukkitSafeDebugTrimming;
         String javaVersion = System.getProperty("java.version");
-        getLogger().info("Running on java version: " + javaVersion);
-        if (javaVersion.startsWith("8") || javaVersion.startsWith("1.8")) {
-            getLogger().info("Running on fully supported Java 8.");
-        }
-        else if (javaVersion.startsWith("11")) {
-            getLogger().info("Running on mostly supported Java 11. Some warnings may show or limitations may apply due to Java 11. If these limits become problems, switch to Java 8 or Java 16.");
-        }
-        else if (javaVersion.startsWith("9") || javaVersion.startsWith("1.9") || javaVersion.startsWith("10") || javaVersion.startsWith("1.10")
+        Debug.log("Running on java version: " + javaVersion);
+        if (javaVersion.startsWith("8") || javaVersion.startsWith("1.8") || javaVersion.startsWith("9") || javaVersion.startsWith("1.9")
+                || javaVersion.startsWith("10") || javaVersion.startsWith("1.10") || javaVersion.startsWith("11")
                 || javaVersion.startsWith("12") || javaVersion.startsWith("13") || javaVersion.startsWith("14") || javaVersion.startsWith("15")) {
-            getLogger().warning("Running unreliable Java version. Old Minecraft is built for Java 8, modern Minecraft is built for Java 16. Other Java versions are not guaranteed to function properly.");
+            Debug.log("Running on outdated Java version somehow. Denizen requires Java 16+ or newer to function.");
         }
         else if (javaVersion.startsWith("16")) {
-            getLogger().info("Running on fully supported Java 16.");
+            Debug.log("Running on fully supported Java 16.");
         }
         else if (javaVersion.startsWith("17")) {
-            getLogger().info("Running on probably(?) supported Java 17. Denizen is primarily tested against Java 16, not 17. If something breaks, try Java 16 instead.");
+            Debug.log("Running on fully supported Java 17.");
+        }
+        else if (javaVersion.startsWith("18") || javaVersion.startsWith("19")) {
+            getLogger().warning("Running unreliable future Java version. modern Minecraft versions are built for Java 17. Other Java versions are not guaranteed to function properly.");
         }
         else {
-            getLogger().info("Running on unrecognized (future?) Java version. May or may not work.");
+            Debug.log("Running on unrecognized (future?) Java version. May or may not work.");
         }
         if (!NMSHandler.initialize(this)) {
             getLogger().warning("-------------------------------------");
@@ -154,14 +159,13 @@ public class Denizen extends JavaPlugin {
             startedSuccessful = false;
             return;
         }
-        if (!NMSHandler.getInstance().isCorrectMappingsCode()) {
+        if (!NMSHandler.instance.isCorrectMappingsCode()) {
             getLogger().warning("-------------------------------------");
             getLogger().warning("This build of Denizen was built for a different Spigot revision! This may potentially cause issues."
                     + " If you are experiencing trouble, update Denizen and Spigot both to latest builds!"
                     + " If this message appears with both Denizen and Spigot fully up-to-date, contact the Denizen team (via GitHub, Spigot, or Discord) to request an update be built.");
             getLogger().warning("-------------------------------------");
         }
-        BukkitCommandRegistry commandRegistry = new BukkitCommandRegistry();
         triggerRegistry = new TriggerRegistry();
         boolean citizensBork = false;
         try {
@@ -173,7 +177,7 @@ public class Denizen extends JavaPlugin {
                     getLogger().warning("Citizens is present but doesn't seem to be activated! You may have an error earlier in your logs, or you may have a broken plugin load order.");
                 }
                 else {
-                    getLogger().warning("Citizens does not seem to be available! Denizen will have greatly reduced functionality!");
+                    getLogger().warning("Citizens does not seem to be available! Denizen will have reduced functionality!");
                 }
             }
             startedSuccessful = true;
@@ -187,12 +191,11 @@ public class Denizen extends JavaPlugin {
             reloadConfig();
             // Startup procedure
             Debug.log(ChatColor.LIGHT_PURPLE + "+-------------------------+");
-            Debug.log(ChatColor.YELLOW + " _/_ _  ._  _ _  ");
-            Debug.log(ChatColor.YELLOW + "(/(-/ )/ /_(-/ ) " + ChatColor.GRAY + " scriptable minecraft");
+            Debug.log(ChatColor.YELLOW + " Denizen " + ChatColor.GRAY + " scriptable minecraft");
             Debug.log("");
-            Debug.log(ChatColor.GRAY + "by: " + ChatColor.WHITE + "The DenizenScript team");
-            Debug.log(ChatColor.GRAY + "Chat with us at: " + ChatColor.WHITE + " https://discord.gg/Q6pZGSR");
-            Debug.log(ChatColor.GRAY + "Or learn more at: " + ChatColor.WHITE + " https://denizenscript.com");
+            Debug.log(ChatColor.GRAY + "by:" + ChatColor.WHITE + " The DenizenScript team");
+            Debug.log(ChatColor.GRAY + "Chat with us at:" + ChatColor.WHITE + " https://discord.gg/Q6pZGSR");
+            Debug.log(ChatColor.GRAY + "Or learn more at:" + ChatColor.WHITE + " https://denizenscript.com");
             Debug.log(ChatColor.GRAY + "version: " + ChatColor.WHITE + versionTag);
             Debug.log(ChatColor.LIGHT_PURPLE + "+-------------------------+");
         }
@@ -218,6 +221,7 @@ public class Denizen extends JavaPlugin {
             Debug.echoError(e);
         }
         try {
+            DebugSubmit.init();
             // If Citizens is enabled, Create the NPC Helper
             if (Depends.citizens != null) {
                 npcHelper = new DenizenNPCHelper();
@@ -242,15 +246,7 @@ public class Denizen extends JavaPlugin {
             Debug.echoError(e);
         }
         try {
-            DenizenCore.commandRegistry = commandRegistry;
-            commandRegistry.registerCommands();
-        }
-        catch (Exception e) {
-            Debug.echoError(e);
-        }
-        try {
-            // Register script-container types
-            ScriptRegistry._registerCoreTypes();
+            BukkitCommandRegistry.registerCommands();
         }
         catch (Exception e) {
             Debug.echoError(e);
@@ -327,14 +323,8 @@ public class Denizen extends JavaPlugin {
             Debug.echoError(e);
         }
         try {
-            AdjustCommand.specialAdjustables.put("server", ServerTagBase::adjustServer);
-            eventManager = new OldEventManager();
-            // Register all the modern script events
             ScriptEventRegistry.registerMainEvents();
-            // Register Core ObjectTags with the ObjectFetcher
-            ObjectFetcher.registerCoreObjects();
             CommonRegistries.registerMainObjects();
-            TagManager.registerCoreTags();
             CommonRegistries.registerMainTagHandlers();
         }
         catch (Exception e) {
@@ -369,12 +359,14 @@ public class Denizen extends JavaPlugin {
             supportsPaper = false;
             Debug.echoError(ex);
         }
+        Debug.log("Loaded <A>" + DenizenCore.commandRegistry.instances.size() + "<W> core commands and <A>" + ObjectFetcher.objectsByPrefix.size() + "<W> core object types, at <A>" + (System.currentTimeMillis() - startTime) + "<W>ms from start.");
         exCommand = new ExCommandHandler();
         exCommand.enableFor(getCommand("ex"));
         ExSustainedCommandHandler exsCommand = new ExSustainedCommandHandler();
         exsCommand.enableFor(getCommand("exs"));
+        FullBlockData.init();
         // Load script files without processing.
-        DenizenCore.preloadScripts();
+        DenizenCore.preloadScripts(false, null);
         // Load the saves.yml into memory
         reloadSaves();
         try {
@@ -384,9 +376,11 @@ public class Denizen extends JavaPlugin {
         catch (Throwable ex) {
             Debug.echoError(ex);
         }
+        Debug.log("Final full init took <A>" + (System.currentTimeMillis() - startTime) + "<W>ms.");
         final boolean hadCitizensBork = citizensBork;
         // Run everything else on the first server tick
         Bukkit.getScheduler().scheduleSyncDelayedTask(this, () -> {
+            hasTickedOnce = true;
             try {
                 if (hadCitizensBork) {
                     Depends.setupCitizens();
@@ -396,7 +390,7 @@ public class Denizen extends JavaPlugin {
                         Depends.citizens.registerCommandClass(NPCCommandHandler.class);
                         TraitRegistry.registerMainTraits();
                         triggerRegistry.registerCoreMembers();
-                        commandRegistry.registerCitizensCommands();
+                        BukkitCommandRegistry.registerCitizensCommands();
                         ScriptEventRegistry.registerCitizensEvents();
                         new NPCTagBase();
                         ObjectFetcher.registerWithObjectFetcher(NPCTag.class, NPCTag.tagProcessor);
@@ -419,14 +413,13 @@ public class Denizen extends JavaPlugin {
                     Bukkit.shutdown();
                 }
                 Bukkit.getScheduler().scheduleSyncRepeatingTask(Denizen.this, () -> {
-                    Debug.outputThisTick = 0;
-                    Debug.errorDuplicatePrevention = false;
                     DenizenCore.tick(50); // Sadly, minecraft has no delta timing, so a tick is always 50ms.
                 }, 1, 1);
                 InventoryTag.setupInventoryTracker();
-                if (!MapTagBasedFlagTracker.skipAllCleanings && NMSHandler.getVersion().isAtLeast(NMSVersion.v1_16)) {
+                if (!CoreConfiguration.skipAllFlagCleanings && !Settings.skipChunkFlagCleaning) {
                     BukkitWorldScriptHelper.cleanAllWorldChunkFlags();
                 }
+                Bukkit.getPluginManager().registerEvents(new PlayerFlagHandler(), this);
                 Debug.log("Denizen fully loaded at: " + TimeTag.now().format());
             }
             catch (Throwable ex) {
@@ -437,11 +430,10 @@ public class Denizen extends JavaPlugin {
             @Override
             public void run() {
                 if (Settings.canRecordStats()) {
-                    new StatsRecord().start();
+                    StatsRecord.trigger();
                 }
             }
         }.runTaskTimer(this, 100, 20 * 60 * 60);
-        Bukkit.getPluginManager().registerEvents(new PlayerFlagHandler(), this);
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -454,7 +446,7 @@ public class Denizen extends JavaPlugin {
                 if (!StrongWarning.recentWarnings.isEmpty()) {
                     StringBuilder warnText = new StringBuilder();
                     warnText.append(ChatColor.YELLOW).append("[Denizen] ").append(ChatColor.RED).append("Recent strong system warnings, scripters need to address ASAP (check earlier console logs for details):");
-                    for (StrongWarning warning : StrongWarning.recentWarnings) {
+                    for (StrongWarning warning : StrongWarning.recentWarnings.keySet()) {
                         warnText.append("\n- ").append(warning.message);
                     }
                     StrongWarning.recentWarnings.clear();
@@ -467,6 +459,7 @@ public class Denizen extends JavaPlugin {
                 }
             }
         }.runTaskTimer(this, 100, 20 * 60 * 5);
+        Bukkit.getPluginManager().registerEvents(new WorldListChangeTracker(), this);
     }
 
     public boolean hasDisabled = false;
@@ -485,12 +478,12 @@ public class Denizen extends JavaPlugin {
         hasDisabled = true;
         DenizenCore.shutdown();
         ScoreboardHelper._saveScoreboards();
-        InventoryScriptHelper._savePlayerInventories();
+        InventoryScriptHelper.savePlayerInventories();
         triggerRegistry.disableCoreMembers();
         getLogger().log(Level.INFO, " v" + getDescription().getVersion() + " disabled.");
         Bukkit.getServer().getScheduler().cancelTasks(this);
         HandlerList.unregisterAll(this);
-        saveSaves(false);
+        saveSaves(true);
         worldFlags.shutdown();
     }
 
@@ -498,10 +491,10 @@ public class Denizen extends JavaPlugin {
     public void reloadConfig() {
         super.reloadConfig();
         Settings.refillCache();
-        if (!Settings.showDebug()) {
+        SecretTag.load();
+        if (!CoreConfiguration.defaultDebugMode) {
             getLogger().warning("Debug is disabled in the Denizen config. This is almost always a mistake, and should not be done in the majority of cases.");
         }
-        SlowWarning.WARNING_RATE = Settings.warningRate();
     }
 
     private FileConfiguration scoreboardsConfig = null;
@@ -538,11 +531,16 @@ public class Denizen extends JavaPlugin {
         return scoreboardsConfig;
     }
 
-    public void saveSaves(boolean canSleep) {
+    /**
+     * Immediately saves all non-core save data.
+     * @param lockUntilDone 'true' if the system should sleep and lock the thread until saves are complete. 'false' is saves can happen in the future.
+     */
+    public void saveSaves(boolean lockUntilDone) {
         // Save scoreboards to scoreboards.yml
         ScoreboardHelper._saveScoreboards();
         // Save maps to maps.yml
         DenizenMapManager.saveMaps();
+        InventoryScriptHelper.savePlayerInventories();
         // Save server flags
         try {
             scoreboardsConfig.save(scoreboardsConfigFile);
@@ -550,15 +548,22 @@ public class Denizen extends JavaPlugin {
         catch (IOException ex) {
             Logger.getLogger(JavaPlugin.class.getName()).log(Level.SEVERE, "Could not save to " + scoreboardsConfigFile, ex);
         }
-        PlayerFlagHandler.saveAllNow(canSleep);
-        worldFlags.saveAll();
-        RunLaterCommand.saveToFile(canSleep);
+        PlayerFlagHandler.saveAllNow(lockUntilDone);
+        worldFlags.saveAll(lockUntilDone);
+        RunLaterCommand.saveToFile(!lockUntilDone);
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String alias, String[] args) {
         if (cmd.getName().equals("denizenclickable")) {
-            if (args.length != 1 || !(sender instanceof Player)) {
+            if (!(sender instanceof Player)) {
+                return false;
+            }
+            if (args.length >= 2 && CoreUtilities.equalsIgnoreCase(args[0], "chat")) {
+                ChatTrigger.instance.chatTriggerInternal(new PlayerChatEvent((Player) sender, Arrays.stream(args).skip(1).collect(Collectors.joining(" "))));
+                return true;
+            }
+            if (args.length != 1) {
                 return false;
             }
             UUID id;
@@ -578,7 +583,14 @@ public class Denizen extends JavaPlugin {
 
         Object[] methodArgs = {sender};
         return commandManager.executeSafe(cmd, args, sender, methodArgs);
+    }
 
+    @Override
+    public List<String> onTabComplete(CommandSender commandSender, Command command, String alias, String[] strings) {
+        if (alias.equals("denizen")) {
+            return commandManager.onTabComplete(commandSender, command, alias, strings);
+        }
+        return null;
     }
 
     private boolean suggestClosestModifier(CommandSender sender, String command, String modifier) {
@@ -593,9 +605,10 @@ public class Denizen extends JavaPlugin {
 
     @Override
     public ChunkGenerator getDefaultWorldGenerator(String worldName, String id) {
-        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_16) && CoreUtilities.toLowerCase(id).equals("void")) {
-            return new VoidGenerator();
-        }
-        return null;
+        return switch (CoreUtilities.toLowerCase(id)) {
+            case "void" -> new VoidGenerator(true);
+            case "void_biomes" -> new VoidGenerator(false);
+            default -> null;
+        };
     }
 }

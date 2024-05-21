@@ -1,9 +1,10 @@
 package com.denizenscript.denizen.objects.properties.entity;
 
+import com.denizenscript.denizen.objects.properties.bukkit.BukkitColorExtensions;
 import com.denizenscript.denizen.utilities.entity.AreaEffectCloudHelper;
 import com.denizenscript.denizencore.objects.*;
-import com.denizenscript.denizen.objects.ColorTag;
 import com.denizenscript.denizen.objects.EntityTag;
+import com.denizenscript.denizencore.objects.core.ColorTag;
 import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
@@ -19,6 +20,7 @@ import org.bukkit.projectiles.ProjectileSource;
 
 import java.util.List;
 
+// TODO: 1.20.6: PotionData API
 public class EntityAreaEffectCloud implements Property {
 
     public static boolean describes(ObjectTag entity) {
@@ -46,7 +48,7 @@ public class EntityAreaEffectCloud implements Property {
             "radius_per_tick", "reapplication_delay", "source", "wait_time"
     };
 
-    private EntityAreaEffectCloud(EntityTag ent) {
+    public EntityAreaEffectCloud(EntityTag ent) {
         entity = ent;
     }
 
@@ -139,7 +141,7 @@ public class EntityAreaEffectCloud implements Property {
             // Returns the Area Effect Cloud's particle color.
             // -->
             if (attribute.startsWith("color")) {
-                return new ColorTag(getHelper().getColor())
+                return BukkitColorExtensions.fromColor(getHelper().getColor())
                         .getObjectAttribute(attribute.fulfill(1));
             }
             return new ElementTag(getHelper().getParticle())
@@ -233,8 +235,7 @@ public class EntityAreaEffectCloud implements Property {
         // @mechanism EntityTag.wait_time
         // @group properties
         // @description
-        // Returns the duration an entity must be exposed to
-        // the Area Effect Cloud before its effect is applied.
+        // Returns the duration before the Area Effect Cloud starts applying potion effects.
         // -->
         if (attribute.startsWith("wait_time")) {
             return new DurationTag(getHelper().getWaitTime())
@@ -275,7 +276,7 @@ public class EntityAreaEffectCloud implements Property {
         if (attribute.startsWith("source")) {
             ProjectileSource shooter = getHelper().getSource();
             if (shooter instanceof LivingEntity) {
-                return new EntityTag((LivingEntity) shooter)
+                return new EntityTag((LivingEntity) shooter).getDenizenObject()
                         .getObjectAttribute(attribute.fulfill(1));
             }
         }
@@ -463,7 +464,7 @@ public class EntityAreaEffectCloud implements Property {
         // <EntityTag.particle.color>
         // -->
         if (mechanism.matches("particle_color") && mechanism.requireObject(ColorTag.class)) {
-            getHelper().setColor(mechanism.valueAsType(ColorTag.class).getColor());
+            getHelper().setColor(BukkitColorExtensions.getColor(mechanism.valueAsType(ColorTag.class)));
         }
 
         // <--[mechanism]
@@ -489,8 +490,8 @@ public class EntityAreaEffectCloud implements Property {
             else {
                 try {
                     PotionType type = PotionType.valueOf(data.get(0));
-                    boolean extended = type.isExtendable() && CoreUtilities.equalsIgnoreCase(data.get(1), "true");
-                    boolean upgraded = type.isUpgradeable() && CoreUtilities.equalsIgnoreCase(data.get(2), "true");
+                    boolean upgraded = type.isUpgradeable() && CoreUtilities.equalsIgnoreCase(data.get(1), "true");
+                    boolean extended = type.isExtendable() && CoreUtilities.equalsIgnoreCase(data.get(2), "true");
                     if (extended && upgraded) {
                         mechanism.echoError("Potion cannot be both upgraded and extended");
                     }
@@ -617,8 +618,7 @@ public class EntityAreaEffectCloud implements Property {
         // @name wait_time
         // @input DurationTag
         // @description
-        // Sets the duration an entity must be exposed to
-        // the Area Effect Cloud before its effect is applied.
+        // Sets the duration before the Area Effect Cloud starts applying potion effects.
         // @tags
         // <EntityTag.wait_time>
         // -->

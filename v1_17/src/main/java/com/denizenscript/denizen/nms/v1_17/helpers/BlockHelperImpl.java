@@ -1,49 +1,46 @@
 package com.denizenscript.denizen.nms.v1_17.helpers;
 
+import com.denizenscript.denizen.nms.interfaces.BlockHelper;
+import com.denizenscript.denizen.nms.util.PlayerProfile;
+import com.denizenscript.denizen.nms.util.jnbt.CompoundTag;
 import com.denizenscript.denizen.nms.util.jnbt.CompoundTagBuilder;
 import com.denizenscript.denizen.nms.v1_17.ReflectionMappingsInfo;
 import com.denizenscript.denizen.nms.v1_17.impl.jnbt.CompoundTagImpl;
+import com.denizenscript.denizencore.utilities.ReflectionHelper;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.google.common.collect.Iterables;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
-import com.denizenscript.denizen.nms.interfaces.BlockHelper;
-import com.denizenscript.denizen.nms.util.PlayerProfile;
-import com.denizenscript.denizencore.utilities.ReflectionHelper;
-import com.denizenscript.denizen.nms.util.jnbt.CompoundTag;
-import com.denizenscript.denizencore.utilities.debugging.Debug;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BellBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.properties.NoteBlockInstrument;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.material.PushReaction;
+import org.bukkit.Color;
 import org.bukkit.Instrument;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.block.Bell;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Skull;
-import org.bukkit.block.data.BlockData;
 import org.bukkit.craftbukkit.v1_17_R1.CraftChunk;
 import org.bukkit.craftbukkit.v1_17_R1.CraftWorld;
+import org.bukkit.craftbukkit.v1_17_R1.block.CraftBlock;
 import org.bukkit.craftbukkit.v1_17_R1.block.CraftBlockEntityState;
-import org.bukkit.craftbukkit.v1_17_R1.block.CraftBlockState;
 import org.bukkit.craftbukkit.v1_17_R1.block.CraftSkull;
 import org.bukkit.craftbukkit.v1_17_R1.block.data.CraftBlockData;
 import org.bukkit.craftbukkit.v1_17_R1.inventory.CraftItemStack;
 import org.bukkit.craftbukkit.v1_17_R1.util.CraftMagicNumbers;
-import org.bukkit.event.world.PortalCreateEvent;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 
@@ -67,20 +64,6 @@ public class BlockHelperImpl implements BlockHelper {
     public void applyPhysics(Location location) {
         BlockPos pos = new BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ());
         ((CraftWorld) location.getWorld()).getHandle().updateNeighborsAt(pos, CraftMagicNumbers.getBlock(location.getBlock().getType()));
-    }
-
-    @Override
-    public BlockData parseBlockData(Material material, String otherData) {
-        return CraftBlockData.newData(material, otherData);
-    }
-
-    @Override
-    public List<Location> getBlocksList(PortalCreateEvent event) {
-        List<Location> blocks = new ArrayList<>();
-        for (org.bukkit.block.BlockState block : event.getBlocks()) {
-            blocks.add(block.getLocation());
-        }
-        return blocks;
     }
 
     public static <T extends BlockEntity> T getTE(CraftBlockEntityState<T> cbs) {
@@ -144,29 +127,9 @@ public class BlockHelperImpl implements BlockHelper {
         te.load(((CompoundTagImpl) ctag).toNMSTag());
     }
 
-    private static net.minecraft.world.level.block.Block getBlockFrom(Material material) {
-        if (material == Material.FLOWER_POT) {
-            return Blocks.FLOWER_POT;
-        }
-        ItemStack is = CraftItemStack.asNMSCopy(new org.bukkit.inventory.ItemStack(material));
-        if (is == null) {
-            return null;
-        }
-        Item item = is.getItem();
-        if (!(item instanceof BlockItem)) {
-            return null;
-        }
-        return ((BlockItem) item).getBlock();
-    }
-
-    @Override
-    public boolean hasBlock(Material material) {
-        return getBlockFrom(material) != null;
-    }
-
     @Override
     public boolean setBlockResistance(Material material, float resistance) {
-        net.minecraft.world.level.block.Block block = getBlockFrom(material);
+        net.minecraft.world.level.block.Block block = getMaterialBlock(material);
         if (block == null) {
             return false;
         }
@@ -176,27 +139,12 @@ public class BlockHelperImpl implements BlockHelper {
 
     @Override
     public float getBlockResistance(Material material) {
-        net.minecraft.world.level.block.Block block = getBlockFrom(material);
+        net.minecraft.world.level.block.Block block = getMaterialBlock(material);
         if (block == null) {
             return 0;
         }
         return ReflectionHelper.getFieldValue(net.minecraft.world.level.block.state.BlockBehaviour.class, ReflectionMappingsInfo.BlockBehaviour_explosionResistance, block);
     }
-
-    @Override
-    public org.bukkit.block.BlockState generateBlockState(Block block, Material mat) {
-        try {
-            CraftBlockState state = (CraftBlockState) CRAFTBLOCKSTATE_CONSTRUCTOR.invoke(block);
-            state.setData(CraftMagicNumbers.getBlock(mat).defaultBlockState());
-            return state;
-        }
-        catch (Throwable ex) {
-            Debug.echoError(ex);
-            return null;
-        }
-    }
-
-    public static final MethodHandle CRAFTBLOCKSTATE_CONSTRUCTOR = ReflectionHelper.getConstructor(CraftBlockState.class, Block.class);
 
     public static final Field BLOCK_MATERIAL = ReflectionHelper.getFields(net.minecraft.world.level.block.state.BlockBehaviour.class).getFirstOfType(net.minecraft.world.level.material.Material.class);
 
@@ -205,6 +153,9 @@ public class BlockHelperImpl implements BlockHelper {
     public static final MethodHandle BLOCK_STRENGTH_SETTER = ReflectionHelper.getFinalSetterForFirstOfType(net.minecraft.world.level.block.state.BlockBehaviour.BlockStateBase.class, float.class); // destroySpeed
 
     public net.minecraft.world.level.block.Block getMaterialBlock(Material bukkitMaterial) {
+        if (!bukkitMaterial.isBlock()) {
+            return null;
+        }
         return ((CraftBlockData) bukkitMaterial.createBlockData()).getState().getBlock();
     }
 
@@ -219,14 +170,14 @@ public class BlockHelperImpl implements BlockHelper {
     }
 
     @Override
-    public String getPushReaction(Material mat) {
-        return getInternalMaterial(mat).getPushReaction().name();
+    public PistonPushReaction getPushReaction(Material mat) {
+        return PistonPushReaction.VALUES[getInternalMaterial(mat).getPushReaction().ordinal()];
     }
 
     @Override
-    public void setPushReaction(Material mat, String reaction) {
+    public void setPushReaction(Material mat, PistonPushReaction reaction) {
         try {
-            MATERIAL_PUSH_REACTION_SETTER.invoke(getInternalMaterial(mat), PushReaction.valueOf(reaction));
+            MATERIAL_PUSH_REACTION_SETTER.invoke(getInternalMaterial(mat), PushReaction.values()[reaction.ordinal()]);
         }
         catch (Throwable ex) {
             Debug.echoError(ex);
@@ -234,7 +185,7 @@ public class BlockHelperImpl implements BlockHelper {
     }
 
     @Override
-    public float getBlockStength(Material mat) {
+    public float getBlockStrength(Material mat) {
         return getMaterialBlock(mat).defaultBlockState().destroySpeed;
     }
 
@@ -283,8 +234,48 @@ public class BlockHelperImpl implements BlockHelper {
 
     @Override
     public Instrument getInstrumentFor(Material mat) {
-        net.minecraft.world.level.block.Block blockType = getBlockFrom(mat);
+        net.minecraft.world.level.block.Block blockType = getMaterialBlock(mat);
         NoteBlockInstrument nmsInstrument = NoteBlockInstrument.byState(blockType.defaultBlockState());
         return Instrument.values()[(nmsInstrument.ordinal())];
     }
+
+    @Override
+    public void ringBell(Bell bell) {
+        org.bukkit.block.data.type.Bell bellData = (org.bukkit.block.data.type.Bell) bell.getBlockData();
+        Direction face = CraftBlock.blockFaceToNotch(bellData.getFacing());
+        Direction dir = Direction.NORTH;
+        switch (bellData.getAttachment()) {
+            case DOUBLE_WALL:
+            case SINGLE_WALL:
+                switch (face) {
+                    case NORTH:
+                    case SOUTH:
+                        dir = Direction.EAST;
+                        break;
+                }
+                break;
+            case FLOOR:
+                dir = face;
+                break;
+        }
+        CraftBlock craftBlock = (CraftBlock) bell.getBlock();
+        ((BellBlock) Blocks.BELL).attemptToRing(craftBlock.getCraftWorld().getHandle(), craftBlock.getPosition(), dir);
+    }
+
+    @Override
+    public int getExpDrop(Block block, org.bukkit.inventory.ItemStack item) {
+        net.minecraft.world.level.block.Block blockType = getMaterialBlock(block.getType());
+        if (blockType == null) {
+            return 0;
+        }
+        return blockType.getExpDrop(((CraftBlock) block).getNMS(), ((CraftBlock) block).getCraftWorld().getHandle(), ((CraftBlock) block).getPosition(),
+                item == null ? null : CraftItemStack.asNMSCopy(item));
+    }
+
+    @Override
+    public Color getMapColor(Block block) {
+        CraftBlock craftBlock = (CraftBlock) block;
+        return Color.fromRGB(craftBlock.getNMS().getMapColor(craftBlock.getHandle(), craftBlock.getPosition()).col);
+    }
+
 }

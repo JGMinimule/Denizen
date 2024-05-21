@@ -3,7 +3,6 @@ package com.denizenscript.denizen.npc.traits;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.objects.core.ElementTag;
 import net.citizensnpcs.api.event.NPCTraitCommandAttachEvent;
 import net.citizensnpcs.api.trait.Trait;
 import org.bukkit.ChatColor;
@@ -127,7 +126,7 @@ public class MobproxTrait extends Trait {
         if (range == null) {
             return 10;
         }
-        return new ElementTag(range.toString()).asInt();
+        return range.asElement().asInt();
     }
 
     public int getTimer() {
@@ -135,7 +134,7 @@ public class MobproxTrait extends Trait {
         if (range == null) {
             return 4;
         }
-        return new ElementTag(range.toString()).asInt();
+        return range.asElement().asInt();
     }
 
     public boolean acceptNpcs() {
@@ -143,7 +142,7 @@ public class MobproxTrait extends Trait {
         if (range == null) {
             return false;
         }
-        return new ElementTag(range.toString()).asBoolean();
+        return range.asElement().asBoolean();
     }
 
     @Override

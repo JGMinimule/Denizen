@@ -5,7 +5,7 @@ import com.denizenscript.denizen.events.bukkit.ScriptReloadEvent;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.scripts.containers.core.AssignmentScriptContainer;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.Settings;
 import com.denizenscript.denizencore.scripts.ScriptRegistry;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
@@ -15,6 +15,7 @@ import net.citizensnpcs.api.util.DataKey;
 import org.bukkit.event.EventHandler;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class AssignmentTrait extends Trait {
 
@@ -36,7 +37,7 @@ public class AssignmentTrait extends Trait {
     @Override
     public void load(DataKey key) {
         if (legacyAssignment != null && !legacyAssignment.isEmpty()) {
-            assignments.add(legacyAssignment);
+            assignments.add(CoreUtilities.toLowerCase(legacyAssignment));
             legacyAssignment = "";
         }
         buildCache();
@@ -45,13 +46,17 @@ public class AssignmentTrait extends Trait {
             npc.removeTrait(AssignmentTrait.class);
             return;
         }
+        // Fix legacy assignments that might not be lowercased
+        List<String> fixedAssignments = assignments.stream().map(CoreUtilities::toLowerCase).collect(Collectors.toList());
+        assignments.clear();
+        assignments.addAll(fixedAssignments);
         npc.getOrAddTrait(ConstantsTrait.class).rebuildAssignmentConstants();
     }
 
     public void buildCache() {
         containerCache.clear();
         for (String assignment : assignments) {
-            AssignmentScriptContainer container = ScriptRegistry.getScriptContainerAs(assignment, AssignmentScriptContainer.class);
+            AssignmentScriptContainer container = ScriptRegistry.getScriptContainer(assignment);
             containerCache.add(container);
             if (container == null) {
                 Debug.echoError("NPC " + npc.getId() + " has assignment '" + assignment + "' which does not exist.");

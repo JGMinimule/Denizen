@@ -1,18 +1,17 @@
 package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.objects.properties.bukkit.BukkitColorExtensions;
 import com.denizenscript.denizen.utilities.Conversion;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
-import com.denizenscript.denizen.objects.ColorTag;
+import com.denizenscript.denizencore.objects.core.ColorTag;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
-import com.denizenscript.denizencore.objects.notable.Notable;
-import com.denizenscript.denizencore.objects.notable.NoteManager;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
@@ -24,7 +23,6 @@ import org.bukkit.inventory.meta.FireworkMeta;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class FireworkCommand extends AbstractCommand {
 
@@ -88,10 +86,8 @@ public class FireworkCommand extends AbstractCommand {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Notable note : NoteManager.notesByType.get(LocationTag.class)) {
-            addOne.accept(NoteManager.getSavedId(note));
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addNotesOfType(LocationTag.class);
     }
 
     @Override
@@ -103,10 +99,10 @@ public class FireworkCommand extends AbstractCommand {
             }
             else if (!scriptEntry.hasObject("type")
                     && arg.matches("random")) {
-                scriptEntry.addObject("type", new ElementTag(FireworkEffect.Type.values()[CoreUtilities.getRandom().nextInt(FireworkEffect.Type.values().length)].name()));
+                scriptEntry.addObject("type", new ElementTag(FireworkEffect.Type.values()[CoreUtilities.getRandom().nextInt(FireworkEffect.Type.values().length)]));
             }
             else if (!scriptEntry.hasObject("type")
-                    && arg.matchesEnum(FireworkEffect.Type.values())) {
+                    && arg.matchesEnum(FireworkEffect.Type.class)) {
                 scriptEntry.addObject("type", arg.asElement());
             }
             else {
@@ -126,7 +122,7 @@ public class FireworkCommand extends AbstractCommand {
         ElementTag type = scriptEntry.getElement("type");
         List<ColorTag> primary = scriptEntry.argForPrefixList("primary", ColorTag.class, true);
         if (primary == null) {
-            primary = Collections.singletonList(new ColorTag(Color.YELLOW));
+            primary = Collections.singletonList(BukkitColorExtensions.fromColor(Color.YELLOW));
         }
         List<ColorTag> fade = scriptEntry.argForPrefixList("fade", ColorTag.class, true);
         boolean flicker = scriptEntry.argAsBoolean("flicker");
@@ -154,8 +150,8 @@ public class FireworkCommand extends AbstractCommand {
         fireworkMeta.addEffects(fireworkBuilder.build());
         firework.setFireworkMeta(fireworkMeta);
         if (life != null) {
-            NMSHandler.getEntityHelper().setFireworkLifetime(firework, life.getTicksAsInt());
+            NMSHandler.entityHelper.setFireworkLifetime(firework, life.getTicksAsInt());
         }
-        scriptEntry.addObject("launched_firework", new EntityTag(firework));
+        scriptEntry.saveObject("launched_firework", new EntityTag(firework));
     }
 }

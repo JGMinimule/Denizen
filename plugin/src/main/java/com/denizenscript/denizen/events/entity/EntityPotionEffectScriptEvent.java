@@ -34,12 +34,12 @@ public class EntityPotionEffectScriptEvent extends BukkitScriptEvent implements 
     // <context.cause> returns the cause of the effect change, based on <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/event/entity/EntityPotionEffectEvent.Cause.html>
     // <context.action> returns the action of the effect changed, which can be 'added', 'changed', 'cleared', or 'removed'
     // <context.override> returns whether the new potion effect will override the old.
-    // <context.new_effect> returns the new potion effect (in the same format as <@link tag EntityTag.list_effects>) (if any).
-    // <context.old_effect> returns the old potion effect (in the same format as <@link tag EntityTag.list_effects>) (if any).
+    // <context.new_effect_data> returns the new potion effect (in the same format as <@link tag EntityTag.effects_data>) (if any).
+    // <context.old_effect_data> returns the old potion effect (in the same format as <@link tag EntityTag.effects_data>) (if any).
     // <context.effect_type> returns the name of the modified potion effect type.
     //
     // @Determine
-    // "OVERRIDE:" + ElementTag(Boolean) to set whether the new potion effect should override.
+    // "OVERRIDE:<ElementTag(Boolean)>" to set whether the new potion effect should override.
     //
     // @Player when the entity that has changed is a player.
     //
@@ -48,13 +48,11 @@ public class EntityPotionEffectScriptEvent extends BukkitScriptEvent implements 
     // -->
 
     public EntityPotionEffectScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> potion effects modified");
         registerCouldMatcher("<entity> potion effects <'change_action'>");
         registerSwitches("cause", "effect");
     }
 
-    public static EntityPotionEffectScriptEvent instance;
     public EntityTag entity;
     public EntityPotionEffectEvent event;
 
@@ -78,7 +76,7 @@ public class EntityPotionEffectScriptEvent extends BukkitScriptEvent implements 
         if (!change.equals("modified") && !runGenericCheck(change, CoreUtilities.toLowerCase(event.getAction().name()))) {
             return false;
         }
-        if (!tryEntity(entity, target)) {
+        if (!entity.tryAdvancedMatcher(target)) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation())) {
@@ -91,11 +89,6 @@ public class EntityPotionEffectScriptEvent extends BukkitScriptEvent implements 
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PotionEffectsModified";
     }
 
     @Override
@@ -117,28 +110,18 @@ public class EntityPotionEffectScriptEvent extends BukkitScriptEvent implements 
 
     @Override
     public ObjectTag getContext(String name) {
-        if (name.equals("entity")) {
-            return entity.getDenizenObject();
-        }
-        else if (name.equals("cause")) {
-            return new ElementTag(event.getCause().name());
-        }
-        else if (name.equals("action")) {
-            return new ElementTag(event.getAction().name());
-        }
-        else if (name.equals("effect_type")) {
-            return new ElementTag(event.getModifiedType().getName());
-        }
-        else if (name.equals("override")) {
-            return new ElementTag(event.isOverride());
-        }
-        else if (name.equals("new_effect") && event.getNewEffect() != null) {
-            return new ElementTag(ItemPotion.stringifyEffect(event.getNewEffect()));
-        }
-        else if (name.equals("old_effect") && event.getOldEffect() != null) {
-            return new ElementTag(ItemPotion.stringifyEffect(event.getOldEffect()));
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "entity" -> entity.getDenizenObject();
+            case "cause" -> new ElementTag(event.getCause());
+            case "action" -> new ElementTag(event.getAction());
+            case "effect_type" -> new ElementTag(event.getModifiedType().getName());
+            case "override" -> new ElementTag(event.isOverride());
+            case "new_effect" -> event.getNewEffect() == null ? null : new ElementTag(ItemPotion.effectToLegacyString(event.getNewEffect(), null));
+            case "old_effect" -> event.getOldEffect() == null ? null : new ElementTag(ItemPotion.effectToLegacyString(event.getOldEffect(), null));
+            case "new_effect_data" -> event.getNewEffect() == null ? null : ItemPotion.effectToMap(event.getNewEffect());
+            case "old_effect_data" -> event.getOldEffect() == null ? null : ItemPotion.effectToMap(event.getOldEffect());
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler

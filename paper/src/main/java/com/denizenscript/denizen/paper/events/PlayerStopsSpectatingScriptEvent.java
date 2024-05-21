@@ -33,27 +33,20 @@ public class PlayerStopsSpectatingScriptEvent extends BukkitScriptEvent implemen
     // -->
 
     public PlayerStopsSpectatingScriptEvent() {
-        instance = this;
         registerCouldMatcher("player stops spectating (<entity>)");
     }
 
-    public static PlayerStopsSpectatingScriptEvent instance;
     public PlayerStopSpectatingEntityEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (path.eventArgLowerAt(3).length() > 0 && !tryEntity(new EntityTag(event.getSpectatorTarget()), path.eventArgLowerAt(3))) {
+        if (path.eventArgLowerAt(3).length() > 0 && !path.tryArgObject(3, new EntityTag(event.getSpectatorTarget()))) {
             return false;
         }
         if (!runInCheck(path, event.getPlayer().getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerStopsSpectating";
     }
 
     @Override
@@ -64,7 +57,7 @@ public class PlayerStopsSpectatingScriptEvent extends BukkitScriptEvent implemen
     @Override
     public ObjectTag getContext(String name) {
         if (name.equals("entity")) {
-            return new EntityTag(event.getSpectatorTarget());
+            return new EntityTag(event.getSpectatorTarget()).getDenizenObject();
         }
         return super.getContext(name);
     }

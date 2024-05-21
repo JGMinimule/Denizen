@@ -28,7 +28,7 @@ public class EntityPatrolTarget implements Property {
             "patrol_target"
     };
 
-    private EntityPatrolTarget(EntityTag entity) {
+    public EntityPatrolTarget(EntityTag entity) {
         this.entity = entity;
     }
 
@@ -48,7 +48,7 @@ public class EntityPatrolTarget implements Property {
         return "patrol_target";
     }
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <EntityTag.patrol_target>
@@ -58,7 +58,7 @@ public class EntityPatrolTarget implements Property {
         // @description
         // If the entity is raider mob (like a pillager), returns whether the entity is allowed to join active raids.
         // -->
-        PropertyParser.<EntityPatrolTarget, LocationTag>registerTag(LocationTag.class, "patrol_target", (attribute, object) -> {
+        PropertyParser.registerTag(EntityPatrolTarget.class, LocationTag.class, "patrol_target", (attribute, object) -> {
             Block target = ((Raider) object.entity.getBukkitEntity()).getPatrolTarget();
             if (target == null) {
                 return null;

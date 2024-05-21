@@ -8,7 +8,7 @@ import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 
 import java.util.List;
 
@@ -36,7 +36,7 @@ public class EntityHealth implements Property {
             "max_health", "health_data", "health"
     };
 
-    private EntityHealth(EntityTag ent) {
+    public EntityHealth(EntityTag ent) {
         entity = ent;
     }
 
@@ -93,7 +93,7 @@ public class EntityHealth implements Property {
             return getHealthFormatted(entity, attribute.hasParam() ? attribute.getDoubleParam() : null);
         }
         if (attribute.startsWith("health.formatted")) {
-            Deprecations.entityHealthTags.warn(attribute.context);
+            BukkitImplDeprecations.entityHealthTags.warn(attribute.context);
             return getHealthFormatted(entity, attribute.hasContext(2) ? attribute.getDoubleContext(2) : null);
         }
 
@@ -110,7 +110,7 @@ public class EntityHealth implements Property {
                     .getObjectAttribute(attribute.fulfill(1));
         }
         if (attribute.startsWith("health.max")) {
-            Deprecations.entityHealthTags.warn(attribute.context);
+            BukkitImplDeprecations.entityHealthTags.warn(attribute.context);
             return new ElementTag(entity.getLivingEntity().getMaxHealth())
                     .getObjectAttribute(attribute.fulfill(2));
         }
@@ -132,7 +132,7 @@ public class EntityHealth implements Property {
                     .getObjectAttribute(attribute.fulfill(1));
         }
         if (attribute.startsWith("health.percentage")) {
-            Deprecations.entityHealthTags.warn(attribute.context);
+            BukkitImplDeprecations.entityHealthTags.warn(attribute.context);
             double maxHealth = entity.getLivingEntity().getMaxHealth();
             if (attribute.hasContext(2)) {
                 maxHealth = attribute.getIntContext(2);
@@ -217,8 +217,8 @@ public class EntityHealth implements Property {
         if (mechanism.matches("health_data")) {
             if (entity.isLivingEntity()) {
                 List<String> values = CoreUtilities.split(mechanism.getValue().asString(), '/');
-                entity.getLivingEntity().setMaxHealth(Double.valueOf(values.get(1)));
-                entity.getLivingEntity().setHealth(Double.valueOf(values.get(0)));
+                entity.getLivingEntity().setMaxHealth(Double.parseDouble(values.get(1)));
+                entity.getLivingEntity().setHealth(Double.parseDouble(values.get(0)));
             }
             else {
                 mechanism.echoError("Entity is not alive!");

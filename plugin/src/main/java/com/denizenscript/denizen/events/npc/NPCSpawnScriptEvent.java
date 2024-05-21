@@ -5,6 +5,7 @@ import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
 import net.citizensnpcs.api.event.NPCSpawnEvent;
 import org.bukkit.event.EventHandler;
@@ -16,8 +17,6 @@ public class NPCSpawnScriptEvent extends BukkitScriptEvent implements Listener {
     // @Events
     // npc spawns
     //
-    // @Regex ^on npc spawns$
-    //
     // @Group NPC
     //
     // @Location true
@@ -26,42 +25,38 @@ public class NPCSpawnScriptEvent extends BukkitScriptEvent implements Listener {
     //
     // @Triggers when an NPC spawns.
     //
+    // @Switch npc:<npc> to only process the event if the spawned NPC matches.
+    // @Switch reason:<reason> to only process the event if the NPC's spawn reason matches. See <@link url https://jd.citizensnpcs.co/net/citizensnpcs/api/event/SpawnReason.html> for a list of reasons.
+    //
     // @Context
     // <context.location> returns the location the entity will spawn at.
+    // <context.reason> returns the reason of the spawn.
     //
     // @NPC Always.
     //
     // -->
 
     public NPCSpawnScriptEvent() {
-        instance = this;
+        registerCouldMatcher("npc spawns");
+        registerSwitches("npc", "reason");
     }
 
-    public static NPCSpawnScriptEvent instance;
     public NPCTag npc;
     public LocationTag location;
     public NPCSpawnEvent event;
 
     @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventLower.startsWith("npc spawns")) {
+    public boolean matches(ScriptPath path) {
+        if (!path.tryObjectSwitch("npc", npc)) {
             return false;
         }
-        return true;
-    }
-
-    @Override
-    public boolean matches(ScriptPath path) {
+        if (!path.tryObjectSwitch("reason", new ElementTag(event.getReason()))) {
+            return false;
+        }
         if (!runInCheck(path, location)) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "NPCSpawn";
     }
 
     @Override
@@ -71,10 +66,11 @@ public class NPCSpawnScriptEvent extends BukkitScriptEvent implements Listener {
 
     @Override
     public ObjectTag getContext(String name) {
-        if (name.equals("location")) {
-            return location;
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "location" -> location;
+            case "reason" -> new ElementTag(event.getReason());
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler
@@ -84,5 +80,4 @@ public class NPCSpawnScriptEvent extends BukkitScriptEvent implements Listener {
         this.event = event;
         fire(event);
     }
-
 }

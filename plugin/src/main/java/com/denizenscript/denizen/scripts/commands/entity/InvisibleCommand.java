@@ -1,152 +1,125 @@
 package com.denizenscript.denizen.scripts.commands.entity;
 
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.npc.traits.InvisibleTrait;
 import com.denizenscript.denizen.objects.EntityTag;
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
-import com.denizenscript.denizencore.objects.Argument;
-import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizen.objects.NPCTag;
+import com.denizenscript.denizen.objects.PlayerTag;
+import com.denizenscript.denizen.utilities.entity.EntityMetadataCommandHelper;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-import net.citizensnpcs.api.npc.NPC;
+import com.denizenscript.denizencore.scripts.commands.generator.*;
 import org.bukkit.entity.ArmorStand;
-import org.bukkit.potion.PotionEffect;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.ItemFrame;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.potion.PotionEffectType;
+
+import java.util.List;
 
 public class InvisibleCommand extends AbstractCommand {
 
+    public static final EntityMetadataCommandHelper helper = new EntityMetadataCommandHelper(InvisibleCommand::isInvisible, InvisibleCommand::setInvisible);
+
     public InvisibleCommand() {
         setName("invisible");
-        setSyntax("invisible [<entity>] (state:true/false/toggle)");
-        setRequiredArguments(1, 2);
+        setSyntax("invisible (<entity>|...) ({true}/false/toggle/reset) (for:<player>|...)");
+        setRequiredArguments(0, 3);
         isProcedural = false;
+        autoCompile();
     }
 
     // <--[command]
     // @Name Invisible
-    // @Syntax invisible [<entity>] (state:true/false/toggle)
-    // @Required 1
-    // @Maximum 2
-    // @Short Makes an NPC or entity go invisible
+    // @Syntax invisible (<entity>|...) ({true}/false/toggle/reset) (for:<player>|...)
+    // @Required 0
+    // @Maximum 3
+    // @Short Sets whether an NPC or entity are invisible.
     // @Group entity
     //
     // @Description
-    // For non-armor stand entities, applies a maximum duration invisibility potion.
-    // For armor stands, toggles them invisible.
-    // Applies the 'invisible' trait to NPCs.
+    // Sets whether the specified entities are invisible (equivalent to an invisibility potion), defaults to the linked player/NPC if none were specified.
+    // If an NPC was specified, the 'invisible' trait is applied.
     //
-    // NPCs can't be made invisible if not added to the playerlist.
-    // (The invisible trait adds the NPC to the playerlist when set)
-    // See <@link language invisible trait>)
+    // Optionally specify 'for:' with a list of players to fake the entities' visibility state for these players.
+    // When using 'toggle' with the 'for:' argument, the visibility state will be toggled for each player separately.
+    // If unspecified, will be set globally.
+    // 'for:' players remain tracked even when offline/reconnecting, but are forgotten after server restart.
+    // Note that using the 'for:' argument won't apply the 'invisible' trait to NPCs.
+    //
+    // When not using 'for:', the effect is global / on the real entity, which will persist in that entity's data until changed.
+    //
+    // To reset an entity's fake visibility use the 'reset' state.
+    // A reset is global by default, use the 'for:' argument to reset specific players.
+    //
+    // NPCs can't be made invisible if not added to the playerlist (the invisible trait adds the NPC to the playerlist when set).
+    // See <@link language invisible trait>
     //
     // @Tags
     // None
     //
     // @Usage
-    // Use to makes the player invisible.
-    // - invisible <player> state:true
+    // Use to make the linked player (or NPC, if there isn't one) invisible.
+    // - invisible
     //
     // @Usage
-    // Use to make the attached NPC visible if previously invisible, and invisible if not
-    // - invisible <npc> state:toggle
+    // Use to make the linked NPC visible if previously invisible, and invisible if not.
+    // - invisible <npc> toggle
+    //
+    // @Usage
+    // Use to make an entity visible for specific players, without changing the way other players see it.
+    // - invisible <[entity]> false for:<[player1]>|<[player2]>
+    //
+    // @Usage
+    // Use to reset an entity's fake visibility state for the linked player.
+    // - invisible <[entity]> reset for:<player>
     // -->
 
-    enum Action {TRUE, FALSE, TOGGLE}
-
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
-        for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("state")
-                    && arg.matchesEnum(Action.values())) {
-                scriptEntry.addObject("state", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("target")
-                    && arg.matches("player")
-                    && Utilities.entryHasPlayer(scriptEntry)) {
-                scriptEntry.addObject("target", Utilities.getEntryPlayer(scriptEntry).getDenizenEntity());
-            }
-            else if (!scriptEntry.hasObject("target")
-                    && arg.matches("npc")
-                    && Utilities.entryHasNPC(scriptEntry)) {
-                scriptEntry.addObject("target", Utilities.getEntryNPC(scriptEntry).getDenizenEntity());
-            }
-            else if (!scriptEntry.hasObject("target")
-                    && arg.matchesArgumentType(EntityTag.class)) {
-                scriptEntry.addObject("target", arg.asType(EntityTag.class));
-            }
-            else {
-                arg.reportUnhandled();
-            }
+    public static boolean isInvisible(Entity entity) {
+        if (EntityTag.isCitizensNPC(entity)) {
+            InvisibleTrait invisibleTrait = NPCTag.fromEntity(entity).getCitizen().getTraitNullable(InvisibleTrait.class);
+            return invisibleTrait != null && invisibleTrait.isInvisible();
         }
-        if (!scriptEntry.hasObject("state")) {
-            scriptEntry.addObject("state", new ElementTag("TRUE"));
+        else if (entity instanceof ArmorStand armorStand) {
+            return !armorStand.isVisible();
         }
-        if (!scriptEntry.hasObject("target") || !((EntityTag) scriptEntry.getObjectTag("target")).isValid()) {
-            throw new InvalidArgumentsException("Must specify a valid target!");
+        else if (entity instanceof ItemFrame itemFrame) {
+            return !itemFrame.isVisible();
+        }
+        else if (entity instanceof LivingEntity livingEntity) {
+            return livingEntity.isInvisible() || livingEntity.hasPotionEffect(PotionEffectType.INVISIBILITY);
+        }
+        else {
+            return NMSHandler.entityHelper.isInvisible(entity);
         }
     }
 
-    public void setInvisible(EntityTag entity, boolean visible) {
-        if (entity.getBukkitEntity() instanceof ArmorStand) {
-            ((ArmorStand) entity.getBukkitEntity()).setVisible(visible);
+    public static void setInvisible(EntityTag entity, boolean invisible) {
+        if (entity.isCitizensNPC()) {
+            entity.getDenizenNPC().getCitizen().getOrAddTrait(InvisibleTrait.class).setInvisible(invisible);
         }
-        else if (entity.isLivingEntity() && !entity.isFake) {
-            if (visible) {
-                entity.getLivingEntity().removePotionEffect(PotionEffectType.INVISIBILITY);
-            }
-            else {
-                new PotionEffect(PotionEffectType.INVISIBILITY, Integer.MAX_VALUE, 1).apply(entity.getLivingEntity());
+        else if (entity.getBukkitEntity() instanceof ArmorStand armorStand) {
+            armorStand.setVisible(!invisible);
+        }
+        else if (entity.getBukkitEntity() instanceof ItemFrame itemFrame) {
+            itemFrame.setVisible(!invisible);
+        }
+        else if (!entity.isFake && entity.getBukkitEntity() instanceof LivingEntity livingEntity) {
+            livingEntity.setInvisible(invisible);
+            if (!invisible) {
+                // Remove the invisibility potion effect for compact with old uses (the command used to add it)
+                livingEntity.removePotionEffect(PotionEffectType.INVISIBILITY);
             }
         }
         else {
-            NMSHandler.getEntityHelper().setInvisible(entity.getBukkitEntity(), !visible);
+            NMSHandler.entityHelper.setInvisible(entity.getBukkitEntity(), invisible);
         }
     }
 
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag state = scriptEntry.getElement("state");
-        EntityTag target = scriptEntry.getObjectTag("target");
-        if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), state, target);
-        }
-        if (target.isCitizensNPC()) {
-            NPC npc = target.getDenizenNPC().getCitizen();
-            if (!npc.hasTrait(InvisibleTrait.class)) {
-                npc.addTrait(InvisibleTrait.class);
-            }
-            InvisibleTrait trait = npc.getOrAddTrait(InvisibleTrait.class);
-            switch (Action.valueOf(state.asString().toUpperCase())) {
-                case FALSE:
-                    trait.setInvisible(false);
-                    break;
-                case TRUE:
-                    trait.setInvisible(true);
-                    break;
-                case TOGGLE:
-                    trait.toggle();
-                    break;
-            }
-        }
-        else {
-            switch (Action.valueOf(state.asString().toUpperCase())) {
-                case FALSE:
-                    setInvisible(target, true);
-                    break;
-                case TRUE:
-                    setInvisible(target, false);
-                    break;
-                case TOGGLE:
-                    if (target.getBukkitEntity() instanceof ArmorStand) {
-                        setInvisible(target, !((ArmorStand) target.getBukkitEntity()).isVisible());
-                    }
-                    else {
-                        setInvisible(target, target.getLivingEntity().hasPotionEffect(PotionEffectType.INVISIBILITY));
-                    }
-                    break;
-            }
-        }
+    public static void autoExecute(ScriptEntry scriptEntry,
+                                   @ArgName("target") @ArgLinear @ArgDefaultNull @ArgSubType(EntityTag.class) List<EntityTag> targets,
+                                   @ArgName("state") @ArgDefaultText("true") EntityMetadataCommandHelper.Action action,
+                                   @ArgName("for") @ArgPrefixed @ArgDefaultNull @ArgSubType(PlayerTag.class) List<PlayerTag> forPlayers) {
+        helper.execute(scriptEntry, targets, action, forPlayers);
     }
 }

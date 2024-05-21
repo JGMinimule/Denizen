@@ -43,13 +43,13 @@ public class MaterialHalf implements Property {
             "half"
     };
 
-    private MaterialHalf(MaterialTag _material) {
+    public MaterialHalf(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.half>
@@ -62,7 +62,7 @@ public class MaterialHalf implements Property {
         // Output for beds is "HEAD" or "FOOT".
         // Output for chests is "LEFT" or "RIGHT".
         // -->
-        PropertyParser.<MaterialHalf, ElementTag>registerStaticTag(ElementTag.class, "half", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialHalf.class, ElementTag.class, "half", (attribute, material) -> {
             String halfName = material.getHalfName();
             if (halfName == null) {
                 return null;
@@ -78,7 +78,7 @@ public class MaterialHalf implements Property {
         // @description
         // Returns a vector location of the other block for a bisected material.
         // -->
-        PropertyParser.<MaterialHalf, LocationTag>registerStaticTag(LocationTag.class, "relative_vector", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialHalf.class, LocationTag.class, "relative_vector", (attribute, material) -> {
             Vector vector = material.getRelativeBlockVector();
             if (vector == null) {
                 return null;

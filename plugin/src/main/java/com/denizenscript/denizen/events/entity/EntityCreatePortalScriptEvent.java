@@ -37,28 +37,21 @@ public class EntityCreatePortalScriptEvent extends BukkitScriptEvent implements 
     // -->
 
     public EntityCreatePortalScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> creates portal");
     }
 
-    public static EntityCreatePortalScriptEvent instance;
     public EntityTag entity;
     public EntityCreatePortalEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityCreatesPortal";
     }
 
     @Override

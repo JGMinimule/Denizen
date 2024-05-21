@@ -2,10 +2,12 @@ package com.denizenscript.denizen.events.server;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.denizencore.utilities.ReflectionHelper;
 import org.bukkit.event.*;
@@ -30,21 +32,15 @@ public class InternalEventScriptEvent extends BukkitScriptEvent implements Liste
     //
     // @Cancellable true
     //
-    // @Triggers when the specified internal Bukkit event fires. Useful for testing/debugging, or for interoperation with external plugins that have their own Bukkit events.
-    //
-    // @Context
-    // <context.fields> returns a ListTag of all field names applicable to the event.
-    // <context.field_(name)> returns the value of the event class field of the specified name, auto-converted to the relevant object type where possible. Use with caution.
+    // @Triggers when the specified internal Bukkit event fires. Useful for testing/debugging, or for interoperation with external plugins that have their own Bukkit events. Get the raw event via 'context.reflect_event'.
     //
     // -->
 
     public InternalEventScriptEvent() {
-        instance = this;
         registerCouldMatcher("internal bukkit event");
         registerSwitches("event");
     }
 
-    public static InternalEventScriptEvent instance;
 
     @Override
     public boolean couldMatch(ScriptPath path) {
@@ -66,34 +62,39 @@ public class InternalEventScriptEvent extends BukkitScriptEvent implements Liste
     }
 
     @Override
-    public String getName() {
-        return "InternalBukkitEvent";
-    }
-    @Override
     public ObjectTag getContext(String name) {
-        if (name.equals("fields")) {
-            ListTag result = new ListTag();
-            Class c = currentEvent.getClass();
-            while (c != null && c != Object.class) {
-                for (Map.Entry<String, Field> field : ReflectionHelper.getFields(c).entrySet()) {
-                    if (!Modifier.isStatic(field.getValue().getModifiers())) {
-                        result.addObject(new ElementTag(field.getKey(), true));
-                    }
+        switch (name) {
+            case "fields":
+                if (!CoreConfiguration.allowReflectionFieldReads) {
+                    return null;
                 }
-                c = c.getSuperclass();
-            }
-            return result;
+                BukkitImplDeprecations.internalEventReflectionContext.warn();
+                ListTag result = new ListTag();
+                Class c = currentEvent.getClass();
+                while (c != null && c != Object.class) {
+                    for (Field field : ReflectionHelper.getFields(c).getAllFields()) {
+                        if (!Modifier.isStatic(field.getModifiers())) {
+                            result.addObject(new ElementTag(field.getName(), true));
+                        }
+                    }
+                    c = c.getSuperclass();
+                }
+                return result;
         }
         if (name.startsWith("field_")) {
+            if (!CoreConfiguration.allowReflectionFieldReads) {
+                return null;
+            }
+            BukkitImplDeprecations.internalEventReflectionContext.warn();
             String fName = CoreUtilities.toLowerCase(name.substring("field_".length()));
             Class c = currentEvent.getClass();
             while (c != null && c != Object.class) {
-                ReflectionHelper.CheckingFieldMap fields = ReflectionHelper.getFields(c);
-                for (Map.Entry<String, Field> field : fields.entrySet()) {
-                    if (!Modifier.isStatic(field.getValue().getModifiers()) && CoreUtilities.toLowerCase(field.getKey()).equals(fName)) {
+                ReflectionHelper.FieldCache fields = ReflectionHelper.getFields(c);
+                for (Field field : fields.getAllFields()) {
+                    if (!Modifier.isStatic(field.getModifiers()) && CoreUtilities.toLowerCase(field.getName()).equals(fName)) {
                         Object val = null;
                         try {
-                            val = field.getValue().get(currentEvent);
+                            val = field.get(currentEvent);
                         }
                         catch (Throwable ex) {
                             Debug.echoError(ex);
@@ -124,7 +125,7 @@ public class InternalEventScriptEvent extends BukkitScriptEvent implements Liste
     public void init() {
         registeredHandlers = new ArrayList<>();
         HashSet<String> eventsGrabbed = new HashSet<>();
-        for (ScriptPath path : new ArrayList<>(eventData.eventPaths)) {
+        for (ScriptPath path : new ArrayList<>(eventPaths)) {
             String eventName = path.switches.get("event");
             if (!eventsGrabbed.add(eventName)) {
                 continue;
@@ -147,11 +148,11 @@ public class InternalEventScriptEvent extends BukkitScriptEvent implements Liste
                     }
                 }
                 InternalEventScriptEvent handler = (InternalEventScriptEvent) clone();
-                handler.eventData.eventPaths = new ArrayList<>();
-                handler.eventData.eventPaths.add(path);
+                handler.eventPaths = new ArrayList<>();
+                handler.eventPaths.add(path);
                 handler.registeredHandlers = null;
                 handler.initForPriority(priority, this, (Class<? extends Event>) clazz);
-                eventData.eventPaths.remove(path);
+                eventPaths.remove(path);
             }
             catch (ClassNotFoundException ex) {
                 Debug.echoError("Cannot initialize Internal Bukkit Event for event '" + eventName + "': that event class does not exist.");

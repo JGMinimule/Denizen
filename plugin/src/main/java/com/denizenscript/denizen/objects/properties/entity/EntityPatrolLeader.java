@@ -27,7 +27,7 @@ public class EntityPatrolLeader implements Property {
             "is_patrol_leader"
     };
 
-    private EntityPatrolLeader(EntityTag entity) {
+    public EntityPatrolLeader(EntityTag entity) {
         this.entity = entity;
     }
 
@@ -43,7 +43,7 @@ public class EntityPatrolLeader implements Property {
         return "is_patrol_leader";
     }
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <EntityTag.is_patrol_leader>
@@ -53,7 +53,7 @@ public class EntityPatrolLeader implements Property {
         // @description
         // If the entity is raider mob (like a pillager), returns whether the entity is a patrol leader.
         // -->
-        PropertyParser.<EntityPatrolLeader, ElementTag>registerTag(ElementTag.class, "is_patrol_leader", (attribute, object) -> {
+        PropertyParser.registerTag(EntityPatrolLeader.class, ElementTag.class, "is_patrol_leader", (attribute, object) -> {
             return new ElementTag(((Raider) object.entity.getBukkitEntity()).isPatrolLeader());
         });
     }

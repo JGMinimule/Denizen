@@ -3,7 +3,7 @@ package com.denizenscript.denizen.scripts.commands.server;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.utilities.Utilities;
 import com.denizenscript.denizen.utilities.ScoreboardHelper;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -67,7 +67,7 @@ public class ScoreboardCommand extends AbstractCommand {
     // "Rendertype" can be "INTEGER" or "HEARTS". Defaults to integer.
     //
     // You can set scores manually, or you can use different Minecraft criteria that set and update the scores automatically.
-    // A list of these criteria can be found here: <@link url https://minecraft.fandom.com/wiki/Scoreboard#Objectives>
+    // A list of these criteria can be found here: <@link url https://minecraft.wiki/w/Scoreboard#Objectives>
     // If the object already exists, and you don't specify the criteria, it will use the existing setting.
     //
     // You can use the "remove" argument to remove different parts of scoreboards.
@@ -121,7 +121,7 @@ public class ScoreboardCommand extends AbstractCommand {
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("action")
-                    && arg.matchesEnum(Action.values())) {
+                    && arg.matchesEnum(Action.class)) {
                 scriptEntry.addObject("action", arg.asElement());
             }
             else if (!scriptEntry.hasObject("lines")
@@ -145,7 +145,7 @@ public class ScoreboardCommand extends AbstractCommand {
                 scriptEntry.addObject("score", arg.asElement());
             }
             else if (!scriptEntry.hasObject("displayslot")
-                    && (arg.matchesEnum(DisplaySlot.values()) ||
+                    && (arg.matchesEnum(DisplaySlot.class) ||
                     arg.matches("none"))) {
                 scriptEntry.addObject("displayslot", arg.asElement());
             }
@@ -155,7 +155,7 @@ public class ScoreboardCommand extends AbstractCommand {
             }
             else if (!scriptEntry.hasObject("rendertype")
                     && arg.matchesPrefix("rendertype")
-                    && arg.matchesEnum(RenderType.values())) {
+                    && arg.matchesEnum(RenderType.class)) {
                 scriptEntry.addObject("rendertype", arg.asElement());
             }
             else if (!scriptEntry.hasObject("viewers")
@@ -235,7 +235,7 @@ public class ScoreboardCommand extends AbstractCommand {
         }
         // Don't progress if we ended up with a null board
         if (board == null) {
-            Debug.echoError(scriptEntry.getResidingQueue(), "Scoreboard " + id.asString() + " does not exist!");
+            Debug.echoError(scriptEntry, "Scoreboard " + id.asString() + " does not exist!");
             return;
         }
         Objective obj;
@@ -303,7 +303,7 @@ public class ScoreboardCommand extends AbstractCommand {
                     }
                 }
                 else {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Objective " + objective.asString() +
+                    Debug.echoError(scriptEntry, "Objective " + objective.asString() +
                             " does not exist in scoreboard " + id.asString());
                 }
             }

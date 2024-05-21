@@ -40,10 +40,8 @@ public class PlayersPrepareSmithingTableScriptEvent extends BukkitScriptEvent im
     // -->
 
     public PlayersPrepareSmithingTableScriptEvent() {
-        instance = this;
     }
 
-    public static PlayersPrepareSmithingTableScriptEvent instance;
     public PrepareSmithingEvent event;
     public ItemTag result;
     public PlayerTag player;
@@ -61,16 +59,10 @@ public class PlayersPrepareSmithingTableScriptEvent extends BukkitScriptEvent im
 
     @Override
     public boolean matches(ScriptPath path) {
-        String eItem = path.eventArgLowerAt(3);
-        if (!tryItem(result, eItem)) {
+        if (!path.tryArgObject(3, result)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerPreparesSmithingTable";
     }
 
     @Override
@@ -112,7 +104,6 @@ public class PlayersPrepareSmithingTableScriptEvent extends BukkitScriptEvent im
         this.event = event;
         result = new ItemTag(event.getResult());
         this.player = EntityTag.getPlayerFrom(humanEntity);
-        this.cancelled = false;
         fire(event);
     }
 }

@@ -3,7 +3,9 @@ package com.denizenscript.denizen.scripts.triggers;
 import com.denizenscript.denizen.scripts.triggers.core.ChatTrigger;
 import com.denizenscript.denizen.scripts.triggers.core.DamageTrigger;
 import com.denizenscript.denizen.scripts.triggers.core.ProximityTrigger;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
+import com.denizenscript.denizencore.utilities.CoreUtilities;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.scripts.triggers.core.ClickTrigger;
 import net.citizensnpcs.api.npc.NPC;
@@ -34,7 +36,7 @@ public class TriggerRegistry {
 
     public <T extends AbstractTrigger> T get(Class<T> clazz) {
         if (classes.containsKey(clazz)) {
-            return clazz.cast(instances.get(classes.get(clazz)));
+            return (T) instances.get(classes.get(clazz));
         }
         else {
             return null;
@@ -59,7 +61,12 @@ public class TriggerRegistry {
         new ChatTrigger().activate().as("Chat");
         new DamageTrigger().activate().as("Damage");
         new ProximityTrigger().activate().as("Proximity");
-        Debug.echoApproval("Loaded core triggers: " + instances.keySet().toString());
+        if (CoreConfiguration.debugVerbose) {
+            Debug.echoApproval("Loaded core triggers: " + instances.keySet());
+        }
+        else {
+            Debug.log("Loaded <A>" + instances.size() + "<W> core triggers");
+        }
     }
 
     /////////
@@ -75,7 +82,7 @@ public class TriggerRegistry {
         else if (!playerCooldown.get(player.getName() + "/" + npc.getId()).containsKey(triggerClass.name)) {
             return true;
         }
-        else if (System.currentTimeMillis() > playerCooldown.get(player.getName() + "/" + npc.getId()).get(triggerClass.name)) {
+        else if (CoreUtilities.monotonicMillis() > playerCooldown.get(player.getName() + "/" + npc.getId()).get(triggerClass.name)) {
             return true;
         }
         return false;
@@ -91,7 +98,7 @@ public class TriggerRegistry {
             triggerMap.remove(player.getName() + "/" + npc.getId());
         }
         else {
-            triggerMap.put(triggerClass.name, System.currentTimeMillis() + (long) (seconds * 1000));
+            triggerMap.put(triggerClass.name, CoreUtilities.monotonicMillis() + (long) (seconds * 1000));
         }
         playerCooldown.put(player.getName() + "/" + npc.getId(), triggerMap);
     }

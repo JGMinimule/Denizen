@@ -7,14 +7,17 @@ import com.denizenscript.denizen.utilities.command.manager.CommandContext;
 import com.denizenscript.denizen.utilities.command.manager.Paginator;
 import com.denizenscript.denizen.utilities.command.manager.exceptions.CommandException;
 import com.denizenscript.denizen.utilities.command.manager.messaging.Messaging;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizen.utilities.debugging.DebugConsoleSender;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.objects.notable.NoteManager;
 import com.denizenscript.denizencore.scripts.ScriptHelper;
 import com.denizenscript.denizencore.scripts.ScriptRegistry;
 import com.denizenscript.denizencore.scripts.containers.ScriptContainer;
-import com.denizenscript.denizencore.utilities.debugging.FutureWarning;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
+import com.denizenscript.denizencore.utilities.CoreUtilities;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.DebugSubmitter;
 import org.bukkit.command.CommandSender;
 
 import java.util.Set;
@@ -25,12 +28,12 @@ public class DenizenCommandHandler {
     }
 
     // <--[language]
-    // @name denizen permissions
+    // @name Denizen Permissions
     // @group Console Commands
     // @description
     // The following is a list of all permission nodes Denizen uses within Bukkit.
     //
-    // denizen.clickable     # use the 'denizenclickable' command, which is automatically executed when using <@link command clickable>
+    // denizen.clickable     # use the 'denizenclickable' command, which is automatically executed when using <@link command clickable> and for clickable chat triggers
     // denizen.basic         # use the basics of the /denizen command
     // denizen.ex            # use the /ex command
     // denizen.debug         # use the /denizen debug command
@@ -69,14 +72,17 @@ public class DenizenCommandHandler {
             desc = "Submits recorded logs triggered by /denizen debug -r", modifiers = {"submit"},
             min = 1, max = 3, permission = "denizen.submit")
     public void submit(CommandContext args, final CommandSender sender) throws CommandException {
-        if (!Debug.record) {
+        if (!CoreConfiguration.shouldRecordDebug) {
             Messaging.sendError(sender, "Use /denizen debug -r  to record debug information to be submitted");
             return;
         }
         Messaging.send(sender, "Submitting...");
-        DenizenCore.implementation.submitRecording((s) -> {
+        DebugSubmitter.submitCurrentRecording((s) -> {
             if (s == null) {
                 Messaging.sendError(sender, "Error while submitting.");
+            }
+            else if (s.equals("disabled")) {
+                Messaging.sendError(sender, "Submit failed: not recording.");
             }
             else {
                 Messaging.send(sender, "Successfully submitted to " + s);
@@ -112,8 +118,10 @@ public class DenizenCommandHandler {
     // '-n' enables/disables debug trimming. When enabled, messages longer than 1024 characters will be 'snipped'.
     // '-i' enables/disables source information. When enabled, debug will show where it came from (when possible).
     // '-p' enables/disables packet debug logging. When enabled, all packets sent to players (from anywhere) will be logged to console.
+    // or, '--pfilter (filter)' to enable packet debug logging with a string contain filter.
     // '-f' enables/disables showing of future warnings. When enabled, future warnings (such as upcoming deprecations) will be displayed in console logs.
-    // '-v' enables/disables advanced verbose log output. This will *flood* your console super hard.
+    // '-e' enables/disables extra output. This will spam more information about various internal things.
+    // '-v' enables/disables advanced ultra-verbose log output. This will *flood* your console super hard.
     // '-o' enables/disables 'override' mode. This will display all script debug, even when 'debug: false' is set for scripts.
     // '-l' enables/disables script loading information. When enabled, '/ex reload' will produce a potentially large amount of debug output.
     //
@@ -123,105 +131,97 @@ public class DenizenCommandHandler {
      * DENIZEN DEBUG
      */
     @Command(
-            aliases = {"denizen"}, usage = "debug",
+            aliases = {"denizen"}, usage = "debug (--verbose on) (--ultraverbose on)",
             desc = "Toggles debug mode for Denizen.", modifiers = {"debug", "de", "db", "dbug"},
-            min = 1, max = 5, permission = "denizen.debug", flags = "scbrovnipfl")
+            min = 1, max = 5, permission = "denizen.debug", flags = "scbroevnipfl")
     public void debug(CommandContext args, CommandSender sender) throws CommandException {
+        if (args.getFlags().isEmpty() && args.getValueFlags().isEmpty()) {
+            CoreConfiguration.shouldShowDebug = !CoreConfiguration.shouldShowDebug;
+            Messaging.sendInfo(sender, "Denizen debugger is now: " + (CoreConfiguration.shouldShowDebug ? "<a>ENABLED" : "<c>DISABLED") + "<f>.");
+            return;
+        }
+        CoreConfiguration.shouldShowDebug = true;
         if (args.hasFlag('s')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
-            Debug.showStackTraces = !Debug.showStackTraces;
-            Messaging.sendInfo(sender, (Debug.showStackTraces ? "Denizen debugger is now showing caught " +
-                    "exception stack traces." : "Denizen debugger is now hiding caught stacktraces."));
+            CoreConfiguration.debugStackTraces = !CoreConfiguration.debugStackTraces;
+            Messaging.sendInfo(sender, (CoreConfiguration.debugStackTraces ? "Denizen debugger is now showing caught " +
+                    "exception stack traces." : "Denizen debugger is no longer showing caught stack traces."));
         }
         if (args.hasFlag('c')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
-            Debug.showColor = !Debug.showColor;
-            Messaging.sendInfo(sender, (Debug.showColor ? "Denizen debugger is now showing color."
-                    : "Denizen debugger color has been disabled."));
+            DebugConsoleSender.showColor = !DebugConsoleSender.showColor;
+            Messaging.sendInfo(sender, (DebugConsoleSender.showColor ? "Denizen debugger will now show color."
+                    : "Denizen debugger will no longer show color."));
         }
         if (args.hasFlag('o')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
-            Debug.debugOverride = !Debug.debugOverride;
-            Messaging.sendInfo(sender, (Debug.debugOverride ? "Denizen debugger is now overriding 'debug: false'."
-                    : "Denizen debugger override has been disabled."));
+            CoreConfiguration.debugOverride = !CoreConfiguration.debugOverride;
+            Messaging.sendInfo(sender, (CoreConfiguration.debugOverride ? "Denizen debugger is now overriding 'debug: false'."
+                    : "Denizen debugger will no longer override 'debug: false'."));
         }
         if (args.hasFlag('b')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
-            com.denizenscript.denizencore.utilities.debugging.Debug.showScriptBuilder = !com.denizenscript.denizencore.utilities.debugging.Debug.showScriptBuilder;
-            Messaging.sendInfo(sender, (com.denizenscript.denizencore.utilities.debugging.Debug.showScriptBuilder ? "Denizen debugger is now logging the " +
+            CoreConfiguration.debugScriptBuilder = !CoreConfiguration.debugScriptBuilder;
+            Messaging.sendInfo(sender, (CoreConfiguration.debugScriptBuilder ? "Denizen debugger is now logging the " +
                     "ScriptBuilder." : "Denizen debugger is now hiding ScriptBuilder logging."));
         }
         if (args.hasFlag('r')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
+            if (!CoreConfiguration.debugRecordingAllowed) {
+                Messaging.sendError(sender, "Not allowed to record debug currently.");
+                return;
             }
-            Debug.record = !Debug.record;
-            Debug.recording = new StringBuilder();
-            Messaging.sendInfo(sender, (Debug.record ? "Denizen debugger is now recording. Use /denizen " +
+            CoreConfiguration.shouldRecordDebug = !CoreConfiguration.shouldRecordDebug;
+            Debug.debugRecording = new StringBuilder();
+            Messaging.sendInfo(sender, (CoreConfiguration.shouldRecordDebug ? "Denizen debugger is now recording. Use /denizen " +
                     "submit to finish." : "Denizen debugger recording disabled."));
         }
-        if (args.hasFlag('v')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
-            com.denizenscript.denizencore.utilities.debugging.Debug.verbose = !com.denizenscript.denizencore.utilities.debugging.Debug.verbose;
-            Messaging.sendInfo(sender, (com.denizenscript.denizencore.utilities.debugging.Debug.verbose ? "Denizen debugger is now verbose." :
-                    "Denizen debugger verbosity disabled."));
+        if (args.hasFlag('e')) {
+            CoreConfiguration.debugExtraInfo = !CoreConfiguration.debugExtraInfo;
+            Messaging.sendInfo(sender, (CoreConfiguration.debugExtraInfo ? "Denizen debugger is now showing extra internal information." :
+                    "Denizen debugger is no longer showing extra internal information."));
+        }
+        if (args.hasFlag('v') || args.hasValueFlag("verbose")) {
+            CoreConfiguration.debugVerbose = !CoreConfiguration.debugVerbose;
+            CoreConfiguration.debugUltraVerbose = false;
+            Messaging.sendInfo(sender, (CoreConfiguration.debugVerbose ? "Denizen debugger is now verbose." :
+                    "Denizen debugger is no longer verbose."));
+        }
+        if (args.hasValueFlag("ultraverbose")) {
+            CoreConfiguration.debugUltraVerbose = !CoreConfiguration.debugUltraVerbose;
+            CoreConfiguration.debugVerbose = CoreConfiguration.debugUltraVerbose;
+            Messaging.sendInfo(sender, (CoreConfiguration.debugVerbose ? "Denizen debugger is now ultra-verbose." :
+                    "Denizen debugger is no longer ultra-verbose."));
         }
         if (args.hasFlag('f')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
-            FutureWarning.futureWarningsEnabled = !FutureWarning.futureWarningsEnabled;
-            Messaging.sendInfo(sender, (FutureWarning.futureWarningsEnabled ? "Denizen debugger is now showing future warnings." :
-                    "Denizen debugger future-warnings disabled."));
+            CoreConfiguration.futureWarningsEnabled = !CoreConfiguration.futureWarningsEnabled;
+            Messaging.sendInfo(sender, (CoreConfiguration.futureWarningsEnabled ? "Denizen debugger is now showing future warnings." :
+                    "Denizen debugger will no longer show future warnings."));
         }
         if (args.hasFlag('n')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
-            Debug.shouldTrim = !Debug.shouldTrim;
-            Messaging.sendInfo(sender, (Debug.shouldTrim ? "Denizen debugger is now trimming long messages."
+            CoreConfiguration.debugShouldTrim = !CoreConfiguration.debugShouldTrim;
+            Messaging.sendInfo(sender, (CoreConfiguration.debugShouldTrim ? "Denizen debugger is now trimming long messages."
                     : "Denizen debugger is no longer trimming long messages."));
         }
         if (args.hasFlag('i')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
-            Debug.showSources = !Debug.showSources;
-            Messaging.sendInfo(sender, (Debug.showSources ? "Denizen debugger is now showing source information."
+            CoreConfiguration.debugShowSources = !CoreConfiguration.debugShowSources;
+            Messaging.sendInfo(sender, (CoreConfiguration.debugShowSources ? "Denizen debugger is now showing source information."
                     : "Denizen debugger is no longer showing source information."));
         }
         if (args.hasFlag('p')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
             NetworkInterceptHelper.enable();
             NMSHandler.debugPackets = !NMSHandler.debugPackets;
-            Messaging.sendInfo(sender, (NMSHandler.debugPackets ? "Denizen debugger is now showing packet logs."
+            NMSHandler.debugPacketFilter = "";
+            Messaging.sendInfo(sender, (NMSHandler.debugPackets ? "Denizen debugger is now showing unfiltered packet logs."
                     : "Denizen debugger is no longer showing packet logs."));
         }
+        if (args.hasValueFlag("pfilter")) {
+            NetworkInterceptHelper.enable();
+            NMSHandler.debugPackets = true;
+            NMSHandler.debugPacketFilter = CoreUtilities.toLowerCase(args.getFlag("pfilter"));
+            Messaging.sendInfo(sender, "Denizen debug packet log now enabled and filtered.");
+            return;
+        }
         if (args.hasFlag('l')) {
-            if (!Debug.showDebug) {
-                Debug.toggle();
-            }
-            com.denizenscript.denizencore.utilities.debugging.Debug.showLoading = !com.denizenscript.denizencore.utilities.debugging.Debug.showLoading;
-            Messaging.sendInfo(sender, (com.denizenscript.denizencore.utilities.debugging.Debug.showLoading ? "Denizen debugger is now showing script loading information."
+            CoreConfiguration.debugLoadingInfo = !CoreConfiguration.debugLoadingInfo;
+            Messaging.sendInfo(sender, (CoreConfiguration.debugLoadingInfo ? "Denizen debugger is now showing script loading information."
                     : "Denizen debugger is no longer showing script loading information."));
         }
-        if (args.getFlags().isEmpty()) {
-            Debug.toggle();
-            Messaging.sendInfo(sender, "Denizen debugger is now: " + (Debug.showDebug ? "<a>ENABLED" : "<c>DISABLED"));
-        }
-
     }
 
     /*
@@ -229,7 +229,7 @@ public class DenizenCommandHandler {
      */
     @Command(
             aliases = {"denizen"}, usage = "do_nothing",
-            desc = "Does nothing, for better server command handling", modifiers = {"do_nothing"},
+            desc = "Does nothing, for better server command handling.", modifiers = {"do_nothing"},
             min = 1, max = 3, permission = "denizen.basic")
     public void do_nothing(CommandContext args, CommandSender sender) throws CommandException {
         // Do nothing
@@ -243,11 +243,11 @@ public class DenizenCommandHandler {
             desc = "Shows the currently loaded version of Denizen.", modifiers = {"version"},
             min = 1, max = 3, permission = "denizen.basic")
     public void version(CommandContext args, CommandSender sender) throws CommandException {
-        Messaging.sendInfo(sender, "<2>DENIZEN<7>: scriptable Minecraft!"); // TODO: "It's Scriptable!"?
+        Messaging.sendInfo(sender, "<2>DENIZEN<7>: A high-power scripting engine for Spigot!");
         Messaging.send(sender, "");
         Messaging.send(sender, "<7>by: <f>the DenizenScript team, with help from many skilled contributors!");
-        Messaging.send(sender, "<7>chat with us at: <f> https://discord.gg/Q6pZGSR");
-        Messaging.send(sender, "<7>or learn more at: <f> https://denizenscript.com");
+        Messaging.send(sender, "<7>chat with us at: <f>https://discord.gg/Q6pZGSR");
+        Messaging.send(sender, "<7>or learn more at: <f>https://denizenscript.com");
         Messaging.send(sender, "<7>version: <f>" + Denizen.versionTag + "<7>, core version: <f>" + DenizenCore.VERSION);
     }
 
@@ -256,12 +256,12 @@ public class DenizenCommandHandler {
      */
     @Command(
             aliases = {"denizen"}, usage = "save",
-            desc = "Saves the current state of Denizen/saves.yml.", modifiers = {"save"},
-            min = 1, max = 3, permission = "denizen.basic", flags = "s")
+            desc = "Saves the current Denizen save data to file as needed.", modifiers = {"save"},
+            min = 1, max = 3, permission = "denizen.basic")
     public void save(CommandContext args, CommandSender sender) throws CommandException {
-        DenizenCore.saveAll();
-        Denizen.getInstance().saveSaves(true);
-        Messaging.send(sender, "Denizen save data saved to disk from memory.");
+        DenizenCore.saveAll(false);
+        Denizen.getInstance().saveSaves(false);
+        Messaging.send(sender, "Denizen save data saved to file from memory.");
     }
 
     /*
@@ -272,10 +272,10 @@ public class DenizenCommandHandler {
             min = 1, max = 3, permission = "denizen.basic", flags = "a")
     public void reload(CommandContext args, CommandSender sender) throws CommandException {
         if (args.hasFlag('a')) {
-            Denizen.getInstance().reloadConfig();
-            DenizenCore.reloadScripts();
+            DenizenCore.implementation.reloadConfig();
+            DenizenCore.reloadScripts(false, null);
+            DenizenCore.implementation.reloadSaves();
             NoteManager.reload();
-            Denizen.getInstance().reloadSaves();
             Messaging.send(sender, "Denizen save data, config, and scripts reloaded from disk to memory.");
             if (ScriptHelper.hadError()) {
                 Messaging.sendError(sender, "There was an error loading your scripts, check the console for details!");
@@ -284,7 +284,7 @@ public class DenizenCommandHandler {
         }
         if (args.length() > 2) {
             if (args.getString(1).equalsIgnoreCase("saves")) {
-                Denizen.getInstance().reloadSaves();
+                DenizenCore.implementation.reloadSaves();
                 Messaging.send(sender, "Denizen save data reloaded from disk to memory.");
                 return;
             }
@@ -294,12 +294,12 @@ public class DenizenCommandHandler {
                 return;
             }
             else if (args.getString(1).equalsIgnoreCase("config")) {
-                Denizen.getInstance().reloadConfig();
+                DenizenCore.implementation.reloadConfig();
                 Messaging.send(sender, "Denizen config file reloaded from disk to memory.");
                 return;
             }
             else if (args.getString(1).equalsIgnoreCase("scripts")) {
-                DenizenCore.reloadScripts();
+                DenizenCore.reloadScripts(false, null);
                 Messaging.send(sender, "Denizen/scripts/... reloaded from disk to memory.");
                 if (ScriptHelper.hadError()) {
                     Messaging.sendError(sender, "There was an error loading your scripts, check the console for details!");
@@ -310,8 +310,9 @@ public class DenizenCommandHandler {
         }
         Messaging.send(sender, "");
         Messaging.send(sender, "<f>Specify which parts to reload. Valid options are: SAVES, NOTES, CONFIG, SCRIPTS");
-        Messaging.send(sender, "<b>Example: /denizen reload scripts");
-        Messaging.send(sender, "<f>Use '-a' to reload all parts.");
+        Messaging.send(sender, "<b>Example: /denizen reload saves");
+        Messaging.send(sender, "<f>Use '-a' to reload all parts at once.");
+        Messaging.send(sender, "<f>Note that you shouldn't use this command generally, instead use '/ex reload' - see also the Beginner's Guide at https://guide.denizenscript.com/");
         Messaging.send(sender, "");
     }
 
@@ -320,7 +321,7 @@ public class DenizenCommandHandler {
      */
     @Command(
             aliases = {"denizen"}, usage = "scripts (--type assignment|task|...) (--filter string)",
-            desc = "Lists currently loaded dScripts.", modifiers = {"scripts"},
+            desc = "Lists the currently loaded scripts.", modifiers = {"scripts"},
             min = 1, max = 4, permission = "denizen.basic")
     public void scripts(CommandContext args, CommandSender sender) throws CommandException {
         String type = null;
@@ -358,7 +359,7 @@ public class DenizenCommandHandler {
             }
         }
         if (!paginator.sendPage(sender, args.getInteger(1, 1))) {
-            throw new CommandException("The page " + args.getInteger(1, 1) + " does not exist.");
+            throw new CommandException("The page " + args.getInteger(1, 1) + " does not exist!");
         }
     }
 }

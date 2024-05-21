@@ -6,9 +6,9 @@ import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.tags.BukkitTagContext;
-import com.denizenscript.denizen.utilities.AdvancedTextImpl;
+import com.denizenscript.denizen.utilities.PaperAPITools;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -19,9 +19,7 @@ import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.tags.TagManager;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import net.citizensnpcs.api.event.DespawnReason;
 import net.citizensnpcs.api.npc.NPC;
-import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
@@ -105,7 +103,7 @@ public class RenameCommand extends AbstractCommand {
                 scriptEntry.addObject("list_name_only", new ElementTag(true));
             }
             else if (!scriptEntry.hasObject("name")) {
-                scriptEntry.addObject("name", new ElementTag(arg.getRawValue()));
+                scriptEntry.addObject("name", arg.getRawElement());
             }
             else {
                 arg.reportUnhandled();
@@ -146,13 +144,13 @@ public class RenameCommand extends AbstractCommand {
                         customNames.remove(bukkitEntity.getUniqueId());
                         if (bukkitEntity.isCustomNameVisible()) {
                             if (players == null) {
-                                for (Player player : NMSHandler.getEntityHelper().getPlayersThatSee(bukkitEntity)) {
-                                    NMSHandler.getPacketHelper().sendRename(player, bukkitEntity, bukkitEntity.getCustomName(), false);
+                                for (Player player : NMSHandler.entityHelper.getPlayersThatSee(bukkitEntity)) {
+                                    NMSHandler.packetHelper.sendRename(player, bukkitEntity, bukkitEntity.getCustomName(), false);
                                 }
                             }
                             else {
                                 for (PlayerTag player : players) {
-                                    NMSHandler.getPacketHelper().sendRename(player.getPlayerEntity(), bukkitEntity, bukkitEntity.getCustomName(), false);
+                                    NMSHandler.packetHelper.sendRename(player.getPlayerEntity(), bukkitEntity, bukkitEntity.getCustomName(), false);
                                 }
                             }
                         }
@@ -180,13 +178,13 @@ public class RenameCommand extends AbstractCommand {
                             }
                         }
                         if (players == null) {
-                            for (Player player : NMSHandler.getEntityHelper().getPlayersThatSee(bukkitEntity)) {
-                                NMSHandler.getPacketHelper().sendRename(player, bukkitEntity, "", renamer.listOnly);
+                            for (Player player : NMSHandler.entityHelper.getPlayersThatSee(bukkitEntity)) {
+                                NMSHandler.packetHelper.sendRename(player, bukkitEntity, "", renamer.listOnly);
                             }
                         }
                         else {
                             for (PlayerTag player : players) {
-                                NMSHandler.getPacketHelper().sendRename(player.getPlayerEntity(), bukkitEntity, "", renamer.listOnly);
+                                NMSHandler.packetHelper.sendRename(player.getPlayerEntity(), bukkitEntity, "", renamer.listOnly);
                             }
                         }
                     }
@@ -215,23 +213,15 @@ public class RenameCommand extends AbstractCommand {
             }
             if (entity instanceof NPCTag) {
                 NPC npc = ((NPCTag) entity).getCitizen();
-                if (npc.isSpawned()) {
-                    Location prev = npc.getStoredLocation().clone();
-                    npc.despawn(DespawnReason.PENDING_RESPAWN);
-                    npc.setName(nameString);
-                    npc.spawn(prev);
-                }
-                else {
-                    npc.setName(nameString);
-                }
+                npc.setName(nameString);
             }
             else if (entity instanceof PlayerTag) {
                 if (listNameOnly != null && listNameOnly.asBoolean()) {
-                    AdvancedTextImpl.instance.setPlayerListName(((PlayerTag) entity).getPlayerEntity(), nameString);
+                    PaperAPITools.instance.setPlayerListName(((PlayerTag) entity).getPlayerEntity(), nameString);
                 }
                 else {
                     String limitedName = nameString.length() > 16 ? nameString.substring(0, 16) : nameString;
-                    NMSHandler.getInstance().getProfileEditor().setPlayerName(((PlayerTag) entity).getPlayerEntity(), limitedName);
+                    NMSHandler.instance.getProfileEditor().setPlayerName(((PlayerTag) entity).getPlayerEntity(), limitedName);
                 }
             }
             else {
@@ -261,12 +251,12 @@ public class RenameCommand extends AbstractCommand {
         HashMap<UUID, RenameData> playerToFuncMap = customNames.computeIfAbsent(bukkitEntity.getUniqueId(), k -> new HashMap<>());
         playerToFuncMap.put(forPlayer == null ? null : forPlayer.getUniqueId(), rename);
         if (forPlayer == null) {
-            for (Player player : NMSHandler.getEntityHelper().getPlayersThatSee(bukkitEntity)) {
-                NMSHandler.getPacketHelper().sendRename(player, bukkitEntity, "", rename.listOnly);
+            for (Player player : NMSHandler.entityHelper.getPlayersThatSee(bukkitEntity)) {
+                NMSHandler.packetHelper.sendRename(player, bukkitEntity, "", rename.listOnly);
             }
         }
         else {
-            NMSHandler.getPacketHelper().sendRename(forPlayer, bukkitEntity, "", rename.listOnly);
+            NMSHandler.packetHelper.sendRename(forPlayer, bukkitEntity, "", rename.listOnly);
         }
     }
 

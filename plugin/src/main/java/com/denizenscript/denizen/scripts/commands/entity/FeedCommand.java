@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.entity;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.depends.Depends;
 import com.denizenscript.denizen.npc.traits.HungerTrait;
 import com.denizenscript.denizen.objects.NPCTag;
@@ -130,7 +130,7 @@ public class FeedCommand extends AbstractCommand {
         }
         if (npc != null) {
             if (!npc.getCitizen().hasTrait(HungerTrait.class)) {
-                Debug.echoError(scriptEntry.getResidingQueue(), "This NPC does not have the HungerTrait enabled! Use /trait hunger");
+                Debug.echoError(scriptEntry, "This NPC does not have the HungerTrait enabled! Use /trait hunger");
                 return;
             }
             npc.getCitizen().getOrAddTrait(HungerTrait.class).feed(amount.asInt());

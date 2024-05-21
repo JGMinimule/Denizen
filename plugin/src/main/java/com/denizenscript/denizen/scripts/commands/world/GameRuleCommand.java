@@ -1,12 +1,16 @@
 package com.denizenscript.denizen.scripts.commands.world;
 
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
+import org.bukkit.Bukkit;
+import org.bukkit.generator.WorldInfo;
+
+import java.util.stream.Collectors;
 
 public class GameRuleCommand extends AbstractCommand {
 
@@ -26,7 +30,7 @@ public class GameRuleCommand extends AbstractCommand {
     // @Group world
     //
     // @Description
-    // Sets a gamerule on the world. A list of valid gamerules can be found here: <@link url https://minecraft.fandom.com/wiki/Game_rule>
+    // Sets a gamerule on the world. A list of valid gamerules can be found here: <@link url https://minecraft.wiki/w/Game_rule>
     // Note: Be careful, gamerules are CASE SENSITIVE.
     //
     // @Tags
@@ -40,6 +44,12 @@ public class GameRuleCommand extends AbstractCommand {
     // Use to avoid mobs from destroying blocks (creepers, endermen...) and picking items up (zombies, skeletons...) in world "Adventure".
     // - gamerule Adventure mobGriefing false
     // -->
+
+    @Override
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.add(Bukkit.getWorlds().get(0).getGameRules());
+        tab.add(Bukkit.getWorlds().stream().map(WorldInfo::getName).collect(Collectors.toSet()));
+    }
 
     @Override
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
@@ -75,10 +85,10 @@ public class GameRuleCommand extends AbstractCommand {
         ElementTag gamerule = scriptEntry.getElement("gamerule");
         ElementTag value = scriptEntry.getElement("value");
         if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), world.debug() + gamerule.debug() + value.debug());
+            Debug.report(scriptEntry, getName(), world, gamerule, value);
         }
         if (!world.getWorld().setGameRuleValue(gamerule.asString(), value.asString())) {
-            Debug.echoError(scriptEntry.getResidingQueue(), "Invalid gamerule!");
+            Debug.echoError(scriptEntry, "Invalid gamerule!");
         }
     }
 }

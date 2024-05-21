@@ -1,6 +1,6 @@
 package com.denizenscript.denizen.objects;
 
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
 import com.denizenscript.denizencore.flags.FlaggableObject;
@@ -8,12 +8,16 @@ import com.denizenscript.denizencore.flags.RedirectionFlagTracker;
 import com.denizenscript.denizencore.objects.*;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
+import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
+
+import java.util.List;
+import java.util.Map;
 
 public class PluginTag implements ObjectTag, FlaggableObject {
 
@@ -22,6 +26,8 @@ public class PluginTag implements ObjectTag, FlaggableObject {
     // @prefix pl
     // @base ElementTag
     // @implements FlaggableObject
+    // @ExampleTagBase plugin[Denizen]
+    // @ExampleValues Denizen
     // @format
     // The identity format for plugins is the plugin's registered name.
     // For example, 'pl@Denizen'.
@@ -38,27 +44,12 @@ public class PluginTag implements ObjectTag, FlaggableObject {
     //    Object Fetcher
     ////////////////
 
-    @Deprecated
-    public static PluginTag valueOf(String string) {
-        return valueOf(string, null);
-    }
-
-    /**
-     * Gets a PluginTag from a string format.
-     *
-     * @param string The plugin in string form. (pl@PluginName)
-     * @return The PluginTag value. If the string is incorrectly formatted or
-     * the specified plugin is invalid, this is null.
-     */
     @Fetchable("pl")
     public static PluginTag valueOf(String string, TagContext context) {
-
         if (string == null) {
             return null;
         }
-
         string = CoreUtilities.toLowerCase(string).replace("pl@", "");
-
         try {
             // Attempt to match from plugin list, as PluginManager#getPlugin is case sensitive
             for (Plugin plugin : Bukkit.getServer().getPluginManager().getPlugins()) {
@@ -70,9 +61,7 @@ public class PluginTag implements ObjectTag, FlaggableObject {
         catch (Exception e) {
             Debug.echoError("Invalid plugin name specified, or plugin is not enabled: " + string);
         }
-
         return null;
-
     }
 
     public static boolean matches(String arg) {
@@ -112,11 +101,6 @@ public class PluginTag implements ObjectTag, FlaggableObject {
     private String prefix = "Plugin";
 
     @Override
-    public String getObjectType() {
-        return "Plugin";
-    }
-
-    @Override
     public String getPrefix() {
         return prefix;
     }
@@ -142,6 +126,11 @@ public class PluginTag implements ObjectTag, FlaggableObject {
     }
 
     @Override
+    public Object getJavaObject() {
+        return plugin;
+    }
+
+    @Override
     public PluginTag setPrefix(String prefix) {
         this.prefix = prefix;
         return this;
@@ -157,7 +146,7 @@ public class PluginTag implements ObjectTag, FlaggableObject {
         // Nothing to do.
     }
 
-    public static void registerTags() {
+    public static void register() {
 
         AbstractFlagTracker.registerFlagHandlers(tagProcessor);
 
@@ -219,6 +208,50 @@ public class PluginTag implements ObjectTag, FlaggableObject {
         // -->
         tagProcessor.registerTag(ListTag.class, "soft_depends", (attribute, object) -> {
             return new ListTag(object.plugin.getDescription().getSoftDepend());
+        });
+
+        // <--[tag]
+        // @attribute <PluginTag.commands>
+        // @returns MapTag(MapTag)
+        // @description
+        // Gets a map of commands registered this plugin registers by default.
+        // Note that dynamically registered commands won't show up (for example, command scripts won't be listed under Denizen).
+        // Map key is command name, map value is a sub-mapping with keys:
+        // description (ElementTag), usage (ElementTag), permission (ElementTag), aliases (ListTag)
+        // Not all keys will be present.
+        // For example, <plugin[denizen].commands.get[ex]> will return a MapTag with:
+        // [description=Executes a Denizen script command.;usage=/ex (-q) <Denizen script command> (arguments);permission=denizen.ex]
+        // -->
+        tagProcessor.registerTag(MapTag.class, "commands", (attribute, object) -> {
+            Map<String, Map<String, Object>> commands = object.plugin.getDescription().getCommands();
+            MapTag output = new MapTag();
+            if (commands == null || commands.isEmpty()) {
+                return output;
+            }
+            for (Map.Entry<String, Map<String, Object>> command : commands.entrySet()) {
+                MapTag dataMap = new MapTag();
+                if (command.getValue().containsKey("description")) {
+                    dataMap.putObject("description", new ElementTag(command.getValue().get("description").toString(), true));
+                }
+                if (command.getValue().containsKey("usage")) {
+                    dataMap.putObject("usage", new ElementTag(command.getValue().get("usage").toString(), true));
+                }
+                if (command.getValue().containsKey("permission")) {
+                    dataMap.putObject("permission", new ElementTag(command.getValue().get("permission").toString(), true));
+                }
+                if (command.getValue().containsKey("aliases")) {
+                    Object obj = command.getValue().get("aliases");
+                    if (obj instanceof List) {
+                        ListTag aliases = new ListTag();
+                        for (Object entry : (List) obj) {
+                            aliases.addObject(new ElementTag(String.valueOf(entry), true));
+                        }
+                        dataMap.putObject("aliases", aliases);
+                    }
+                }
+                output.putObject(command.getKey(), dataMap);
+            }
+            return output;
         });
     }
 

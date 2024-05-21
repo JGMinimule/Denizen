@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.containers.core;
 
 import com.denizenscript.denizen.npc.traits.AssignmentTrait;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.scripts.commands.core.CooldownCommand;
@@ -29,7 +29,7 @@ public class InteractScriptHelper {
         for (AssignmentScriptContainer container : trait.containerCache) {
             if (container != null) {
                 InteractScriptContainer interact = container.getInteract();
-                if (interact != null) {
+                if (interact != null && interact.shouldEnable()) {
                     result.add(interact);
                 }
             }
@@ -83,4 +83,3 @@ public class InteractScriptHelper {
         return player.getFlagTracker().getFlagExpirationTime("__interact_step." + scriptName);
     }
 }
-

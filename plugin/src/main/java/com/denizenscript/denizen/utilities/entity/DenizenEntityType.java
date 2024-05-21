@@ -1,20 +1,20 @@
 package com.denizenscript.denizen.utilities.entity;
 
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.Settings;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.nms.enums.CustomEntityType;
 import com.denizenscript.denizen.nms.interfaces.CustomEntity;
-import com.denizenscript.denizen.nms.interfaces.CustomEntityHelper;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
@@ -77,7 +77,7 @@ public class DenizenEntityType {
         this.customEntityType = CustomEntityType.valueOf(name.toUpperCase());
     }
 
-    public Entity spawnNewEntity(Location location, ArrayList<Mechanism> mechanisms, String scriptName) {
+    public Entity spawnNewEntity(Location location, ArrayList<Mechanism> mechanisms, String scriptName, CreatureSpawnEvent.SpawnReason reason) {
         try {
             if (name.equals("DROPPED_ITEM")) {
                 ItemStack itemStack = new ItemStack(Material.STONE);
@@ -90,17 +90,17 @@ public class DenizenEntityType {
                 return location.getWorld().dropItem(location, itemStack);
             }
             else if (!isCustom()) {
-                return SpawnEntityHelper.spawn(location, bukkitEntityType, mechanisms, scriptName);
+                return SpawnEntityHelper.spawn(location, bukkitEntityType, mechanisms, scriptName, reason);
             }
             else {
-                CustomEntityHelper customEntityHelper = NMSHandler.getCustomEntityHelper();
                 switch (customEntityType) {
                     case FAKE_ARROW:
-                        return customEntityHelper.spawnFakeArrow(location);
+                        return NMSHandler.customEntityHelper.spawnFakeArrow(location);
                     case FAKE_PLAYER:
                         if (Settings.packetInterception()) {
                             String name = null;
                             String skin = null;
+                            String blob = null;
                             for (Mechanism mechanism : new ArrayList<>(mechanisms)) {
                                 if (mechanism.matches("name")) {
                                     name = mechanism.getValue().asString();
@@ -110,23 +110,27 @@ public class DenizenEntityType {
                                     skin = mechanism.getValue().asString();
                                     mechanisms.remove(mechanism);
                                 }
-                                if (name != null && skin != null) {
+                                else if (mechanism.matches("skin_blob")) {
+                                    blob = mechanism.getValue().asString();
+                                    mechanisms.remove(mechanism);
+                                }
+                                if (name != null && (skin != null || blob != null)) {
                                     break;
                                 }
                             }
                             NetworkInterceptHelper.enable();
-                            return customEntityHelper.spawnFakePlayer(location, name, skin);
+                            return NMSHandler.customEntityHelper.spawnFakePlayer(location, name, skin, blob, true);
                         }
                         break;
                     case ITEM_PROJECTILE:
-                        Deprecations.itemProjectile.warn();
+                        BukkitImplDeprecations.itemProjectile.warn();
                         ItemStack itemStack = new ItemStack(Material.STONE);
                         for (Mechanism mechanism : mechanisms) {
                             if (mechanism.matches("item") && mechanism.requireObject(ItemTag.class)) {
                                 itemStack = mechanism.valueAsType(ItemTag.class).getItemStack();
                             }
                         }
-                        return customEntityHelper.spawnItemProjectile(location, itemStack);
+                        return NMSHandler.customEntityHelper.spawnItemProjectile(location, itemStack);
                 }
             }
         }

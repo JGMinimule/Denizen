@@ -5,7 +5,6 @@ import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.ItemDespawnEvent;
@@ -14,10 +13,7 @@ public class ItemDespawnsScriptEvent extends BukkitScriptEvent implements Listen
 
     // <--[event]
     // @Events
-    // item despawns
     // <item> despawns
-    //
-    // @Regex ^on [^\s]+ despawns$
     //
     // @Group Item
     //
@@ -35,44 +31,23 @@ public class ItemDespawnsScriptEvent extends BukkitScriptEvent implements Listen
     // -->
 
     public ItemDespawnsScriptEvent() {
-        instance = this;
+        registerCouldMatcher("<item> despawns");
     }
 
-    public static ItemDespawnsScriptEvent instance;
     public ItemTag item;
     public LocationTag location;
     public EntityTag entity;
     public ItemDespawnEvent event;
 
     @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (!path.eventArgLowerAt(1).equals("despawns")) {
-            return false;
-        }
-        if (!couldMatchItem(path.eventArgLowerAt(0))) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
     public boolean matches(ScriptPath path) {
-        String item_test = CoreUtilities.getXthArg(0, path.eventLower);
-
-        if (!tryItem(item, item_test)) {
+        if (!path.tryArgObject(0, item)) {
             return false;
         }
-
         if (!runInCheck(path, location)) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "ItemDespawns";
     }
 
     @Override

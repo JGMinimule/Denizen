@@ -7,8 +7,6 @@ import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
@@ -42,11 +40,9 @@ public class EntityBreaksHangingScriptEvent extends BukkitScriptEvent implements
     // -->
 
     public EntityBreaksHangingScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> breaks <hanging> (because <'cause'>)");
     }
 
-    public static EntityBreaksHangingScriptEvent instance;
     public ElementTag cause;
     public EntityTag breaker;
     public EntityTag hanging;
@@ -70,29 +66,19 @@ public class EntityBreaksHangingScriptEvent extends BukkitScriptEvent implements
     public boolean matches(ScriptPath path) {
         String entName = path.eventArgLowerAt(0);
         String hang = path.eventArgLowerAt(2);
-
-        if (!tryEntity(breaker, entName)) {
+        if (!breaker.tryAdvancedMatcher(entName)) {
             return false;
         }
-
-        if (!hang.equals("hanging") && !tryEntity(hanging, hang)) {
+        if (!hang.equals("hanging") && !hanging.tryAdvancedMatcher(hang)) {
             return false;
         }
-
         if (!runInCheck(path, location)) {
             return false;
         }
-
-        if (path.eventArgLowerAt(3).equals("because") && !path.eventArgLowerAt(4).equals(CoreUtilities.toLowerCase(cause.asString()))) {
+        if (path.eventArgLowerAt(3).equals("because") && !path.eventArgLowerAt(4).equals(cause.asLowerString())) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityBreaksHanging";
     }
 
     @Override
@@ -105,9 +91,6 @@ public class EntityBreaksHangingScriptEvent extends BukkitScriptEvent implements
         switch (name) {
             case "cause":
                 return cause;
-            case "entity":
-                Deprecations.entityBreaksHangingEventContext.warn();
-                return breaker;
             case "breaker":
                 return breaker;
             case "hanging":
@@ -121,7 +104,7 @@ public class EntityBreaksHangingScriptEvent extends BukkitScriptEvent implements
     @EventHandler
     public void onHangingBreaks(HangingBreakByEntityEvent event) {
         hanging = new EntityTag(event.getEntity());
-        cause = new ElementTag(event.getCause().name());
+        cause = new ElementTag(event.getCause());
         location = new LocationTag(hanging.getLocation());
         breaker = new EntityTag(event.getRemover());
         this.event = event;

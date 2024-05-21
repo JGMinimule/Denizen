@@ -7,7 +7,6 @@ import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.DurationTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.LingeringPotionSplashEvent;
@@ -31,25 +30,23 @@ public class LingeringPotionSplashScriptEvent extends BukkitScriptEvent implemen
     // <context.potion> returns an ItemTag of the potion that broke open.
     // <context.location> returns the LocationTag the splash potion broke open at.
     // <context.entity> returns an EntityTag of the splash potion.
+    // <context.cloud> returns the EntityTag of the area of effect cloud.
     // <context.radius> returns the radius of the effect cloud.
     // <context.duration> returns the lingering duration of the effect cloud.
     //
     // -->
 
     public LingeringPotionSplashScriptEvent() {
-        instance = this;
         registerCouldMatcher("lingering <item> splash|splashes");
     }
 
-    public static LingeringPotionSplashScriptEvent instance;
     public LingeringPotionSplashEvent event;
     public LocationTag location;
     public ItemTag item;
 
     @Override
     public boolean matches(ScriptPath path) {
-        String iTest = CoreUtilities.getXthArg(1, path.event);
-        if (!tryItem(item, iTest)) {
+        if (!path.tryArgObject(1, item)) {
             return false;
         }
         if (!runInCheck(path, location)) {
@@ -59,25 +56,16 @@ public class LingeringPotionSplashScriptEvent extends BukkitScriptEvent implemen
     }
 
     @Override
-    public String getName() {
-        return "LingeringPotionSplash";
-    }
-
-    @Override
     public ObjectTag getContext(String name) {
-        switch (name) {
-            case "location":
-                return location;
-            case "radius":
-                return new ElementTag(event.getAreaEffectCloud().getRadius());
-            case "duration":
-                return new DurationTag((long) event.getAreaEffectCloud().getDuration());
-            case "potion":
-                return item;
-            case "entity":
-                return new EntityTag(event.getEntity());
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "location" -> location;
+            case "radius" -> new ElementTag(event.getAreaEffectCloud().getRadius());
+            case "duration" -> new DurationTag((long) event.getAreaEffectCloud().getDuration());
+            case "potion" -> item;
+            case "entity" -> new EntityTag(event.getEntity());
+            case "cloud" -> new EntityTag(event.getAreaEffectCloud());
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler

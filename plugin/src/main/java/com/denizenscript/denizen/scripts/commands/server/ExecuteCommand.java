@@ -3,9 +3,8 @@ package com.denizenscript.denizen.scripts.commands.server;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.command.scripted.DenizenCommandSender;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.interfaces.PlayerHelper;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -54,6 +53,7 @@ public class ExecuteCommand extends AbstractCommand {
     // This can be considered the inverse of '/ex' (a Bukkit command that executes Denizen script commands).
     //
     // The 'silent' option can be specified with 'as_server' to hide the output. Note that 'silent' might or might not work with different plugins depending on how they operate.
+    // It can also be used with 'as_player' or 'as_op' to use network interception to silence the command output to player chat.
     //
     // Generally, you should never use this to execute a vanilla command, there is almost always a script command that should be used instead.
     // Usually the 'execute' command should be reserved for interacting with external plugins.
@@ -104,7 +104,7 @@ public class ExecuteCommand extends AbstractCommand {
                 scriptEntry.addObject("type", new ElementTag("AS_SERVER"));
             }
             else if (!scriptEntry.hasObject("command")) {
-                scriptEntry.addObject("command", new ElementTag(arg.getRawValue()));
+                scriptEntry.addObject("command", arg.getRawElement());
             }
             else {
                 arg.reportUnhandled();
@@ -146,8 +146,8 @@ public class ExecuteCommand extends AbstractCommand {
                     }
                 }
                 catch (Throwable e) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Exception while executing command as player.");
-                    Debug.echoError(scriptEntry.getResidingQueue(), e);
+                    Debug.echoError(scriptEntry, "Exception while executing command as player.");
+                    Debug.echoError(scriptEntry, e);
                 }
                 break;
             case AS_OP:
@@ -156,10 +156,9 @@ public class ExecuteCommand extends AbstractCommand {
                     return;
                 }
                 Player player = Utilities.getEntryPlayer(scriptEntry).getPlayerEntity();
-                PlayerHelper playerHelper = NMSHandler.getPlayerHelper();
                 boolean isOp = player.isOp();
                 if (!isOp) {
-                    playerHelper.setTemporaryOp(player, true);
+                    NMSHandler.playerHelper.setTemporaryOp(player, true);
                 }
                 try {
                     PlayerCommandPreprocessEvent pcpe = new PlayerCommandPreprocessEvent(player, "/" + command);
@@ -177,20 +176,20 @@ public class ExecuteCommand extends AbstractCommand {
                     }
                 }
                 catch (Throwable e) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Exception while executing command as OP.");
-                    Debug.echoError(scriptEntry.getResidingQueue(), e);
+                    Debug.echoError(scriptEntry, "Exception while executing command as OP.");
+                    Debug.echoError(scriptEntry, e);
                 }
                 if (!isOp) {
-                    playerHelper.setTemporaryOp(player, false);
+                    NMSHandler.playerHelper.setTemporaryOp(player, false);
                 }
                 break;
             case AS_NPC:
                 if (!Utilities.getEntryNPC(scriptEntry).isSpawned()) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Cannot EXECUTE AS_NPC unless the NPC is Spawned.");
+                    Debug.echoError(scriptEntry, "Cannot EXECUTE AS_NPC unless the NPC is Spawned.");
                     return;
                 }
                 if (Utilities.getEntryNPC(scriptEntry).getEntity().getType() != EntityType.PLAYER) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Cannot EXECUTE AS_NPC unless the NPC is Player-Type.");
+                    Debug.echoError(scriptEntry, "Cannot EXECUTE AS_NPC unless the NPC is Player-Type.");
                     return;
                 }
                 Utilities.getEntryNPC(scriptEntry).getEntity().setOp(true);
@@ -198,8 +197,8 @@ public class ExecuteCommand extends AbstractCommand {
                     ((Player) Utilities.getEntryNPC(scriptEntry).getEntity()).performCommand(command);
                 }
                 catch (Throwable e) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "Exception while executing command as NPC-OP.");
-                    Debug.echoError(scriptEntry.getResidingQueue(), e);
+                    Debug.echoError(scriptEntry, "Exception while executing command as NPC-OP.");
+                    Debug.echoError(scriptEntry, e);
                 }
                 Utilities.getEntryNPC(scriptEntry).getEntity().setOp(false);
                 break;
@@ -209,7 +208,7 @@ public class ExecuteCommand extends AbstractCommand {
                 ServerCommandEvent sce = new ServerCommandEvent(dcs, command);
                 Bukkit.getPluginManager().callEvent(sce);
                 Denizen.getInstance().getServer().dispatchCommand(dcs, sce.getCommand());
-                scriptEntry.addObject("output", new ListTag(dcs.getOutput()));
+                scriptEntry.saveObject("output", new ListTag(dcs.getOutput()));
                 break;
         }
     }

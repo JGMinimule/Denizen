@@ -1,8 +1,8 @@
 package com.denizenscript.denizen.scripts.commands.world;
 
-import com.denizenscript.denizen.scripts.containers.core.ItemScriptHelper;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizen.utilities.command.TabCompleteHelper;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.objects.*;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.ItemTag;
@@ -13,7 +13,7 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import org.bukkit.Material;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.ExperienceOrb;
@@ -21,7 +21,6 @@ import org.bukkit.entity.Item;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class DropCommand extends AbstractCommand {
 
@@ -75,15 +74,8 @@ public class DropCommand extends AbstractCommand {
     enum Action {DROP_ITEM, DROP_EXP, DROP_ENTITY}
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Material material : Material.values()) {
-            if (material.isItem()) {
-                addOne.accept(material.name());
-            }
-        }
-        for (String itemScript : ItemScriptHelper.item_scripts.keySet()) {
-            addOne.accept(itemScript);
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        TabCompleteHelper.tabCompleteItems(tab);
     }
 
     @Override
@@ -106,7 +98,7 @@ public class DropCommand extends AbstractCommand {
                     && arg.matchesInteger()
                     && arg.matchesPrefix("quantity", "q", "qty", "a", "amt", "amount")) {
                 if (arg.matchesPrefix("q", "qty")) {
-                    Deprecations.qtyTags.warn(scriptEntry);
+                    BukkitImplDeprecations.qtyTags.warn(scriptEntry);
                 }
                 scriptEntry.addObject("quantity", arg.asElement().setPrefix("quantity"));
             }
@@ -202,9 +194,9 @@ public class DropCommand extends AbstractCommand {
                 }
                 break;
         }
-        scriptEntry.addObject("dropped_entities", entityList);
+        scriptEntry.saveObject("dropped_entities", entityList);
         if (entityList.size() == 1) {
-            scriptEntry.addObject("dropped_entity", entityList.getObject(0));
+            scriptEntry.saveObject("dropped_entity", entityList.getObject(0));
         }
     }
 }

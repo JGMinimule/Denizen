@@ -14,18 +14,14 @@ public class VehicleDamagedScriptEvent extends BukkitScriptEvent implements List
 
     // <--[event]
     // @Events
-    // vehicle damaged
     // <vehicle> damaged
-    // entity damages vehicle
-    // <entity> damages vehicle
-    // entity damages <vehicle>
     // <entity> damages <vehicle>
     //
     // @Group Vehicle
     //
-    // @Regex ^on [^\s]+ damages [^\s]+$
-    //
     // @Location true
+    //
+    // @Switch type:<vehicle> to only run if the vehicle damaged matches the EntityTag matcher input.
     //
     // @Cancellable true
     //
@@ -43,24 +39,33 @@ public class VehicleDamagedScriptEvent extends BukkitScriptEvent implements List
     //
     // @NPC when the entity that damaged the vehicle is an NPC.
     //
+    // @Example
+    // on vehicle damaged:
+    // - announce "A <context.vehicle.entity_type> took a hit!"
+    //
+    // @Example
+    // # This example disambiguates this event from the "entity damaged" event for specific vehicle entity types.
+    // on vehicle damaged type:minecart:
+    // - announce "<context.vehicle.entity_type> took vehicular damage!"
+    //
+    // @Example
+    // on player damages minecart:
+    // - announce "<player.name> caused damage to a minecart!"
     // -->
 
     public VehicleDamagedScriptEvent() {
-        instance = this;
+        registerCouldMatcher("<vehicle> damaged");
+        registerCouldMatcher("<entity> damages <vehicle>");
+        registerSwitches("type");
     }
 
-    public static VehicleDamagedScriptEvent instance;
     public EntityTag vehicle;
     public EntityTag entity;
     public VehicleDamageEvent event;
 
     @Override
     public boolean couldMatch(ScriptPath path) {
-        String cmd = path.eventArgAt(1);
-        if (!cmd.equals("damaged") && !cmd.equals("damages")) {
-            return false;
-        }
-        if (path.eventArgLowerAt(3).equals("by")) {
+        if (!super.couldMatch(path)) {
             return false;
         }
         if (!exactMatchesVehicle(path.eventArgLowerAt(0)) && !exactMatchesVehicle(path.eventArgLowerAt(2))) {
@@ -77,10 +82,10 @@ public class VehicleDamagedScriptEvent extends BukkitScriptEvent implements List
         String cmd = path.eventArgLowerAt(1);
         String veh = cmd.equals("damaged") ? path.eventArgLowerAt(0) : path.eventArgLowerAt(2);
         String ent = cmd.equals("damages") ? path.eventArgLowerAt(0) : "";
-        if (!tryEntity(vehicle, veh)) {
+        if (!vehicle.tryAdvancedMatcher(veh)) {
             return false;
         }
-        if (!ent.isEmpty() && entity != null && !tryEntity(entity, ent)) {
+        if (!ent.isEmpty() && (entity == null || !entity.tryAdvancedMatcher(ent))) {
             return false;
         }
         if (!runInCheck(path, vehicle.getLocation())) {
@@ -90,14 +95,9 @@ public class VehicleDamagedScriptEvent extends BukkitScriptEvent implements List
     }
 
     @Override
-    public String getName() {
-        return "VehicleDamaged";
-    }
-
-    @Override
     public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag && ((ElementTag) determinationObj).isDouble()) {
-            event.setDamage(((ElementTag) determinationObj).asDouble());
+        if (determinationObj instanceof ElementTag element && element.isDouble()) {
+            event.setDamage(element.asDouble());
             return true;
         }
         return super.applyDetermination(path, determinationObj);

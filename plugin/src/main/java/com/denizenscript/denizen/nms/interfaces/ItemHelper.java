@@ -7,44 +7,32 @@ import com.denizenscript.denizen.nms.util.jnbt.Tag;
 import com.denizenscript.denizen.objects.ItemTag;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.Recipe;
+import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
-import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
+import org.bukkit.map.MapView;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public abstract class ItemHelper {
 
-    public void setMaxStackSize(Material material, int size) {
-        throw new UnsupportedOperationException();
-    }
+    public abstract void setMaxStackSize(Material material, int size);
 
     public abstract Integer burnTime(Material material);
 
-    public abstract Recipe getRecipeById(NamespacedKey key);
+    public abstract void registerStonecuttingRecipe(String keyName, String group, ItemStack result, ItemStack[] ingredient, boolean exact);
 
-    public abstract void removeRecipe(NamespacedKey key);
+    public abstract void registerFurnaceRecipe(String keyName, String group, ItemStack result, ItemStack[] ingredient, float exp, int time, String type, boolean exact, String category);
 
-    public abstract void clearDenizenRecipes();
-
-    public void registerStonecuttingRecipe(String keyName, String group, ItemStack result, ItemStack[] ingredient, boolean exact) {
-        throw new UnsupportedOperationException();
-    }
-
-    public abstract void registerFurnaceRecipe(String keyName, String group, ItemStack result, ItemStack[] ingredient, float exp, int time, String type, boolean exact);
-
-    public abstract void registerShapelessRecipe(String keyName, String group, ItemStack result, List<ItemStack[]> ingredients, boolean[] exact);
+    public abstract void registerShapelessRecipe(String keyName, String group, ItemStack result, List<ItemStack[]> ingredients, boolean[] exact, String category);
 
     public abstract void setShapedRecipeIngredient(ShapedRecipe recipe, char c, ItemStack[] item, boolean exact);
-
-    public abstract String getInternalNameFromMaterial(Material material);
-
-    public abstract Material getMaterialFromInternalName(String internalName);
 
     public abstract String getJsonString(ItemStack itemStack);
 
@@ -60,51 +48,63 @@ public abstract class ItemHelper {
 
     public abstract ItemStack setNbtData(ItemStack itemStack, CompoundTag compoundTag);
 
-    public abstract PotionEffect getPotionEffect(PotionEffectType type, int duration, int amplifier, boolean ambient, boolean particles, boolean icon);
-
-    public void registerSmithingRecipe(String keyName, ItemStack result, ItemStack[] baseItem, boolean baseExact, ItemStack[] upgradeItem, boolean upgradeExact) {
-        throw new UnsupportedOperationException();
+    public CompoundTag getEntityData(ItemStack item) { // TODO: once 1.20 is the minimum supported version, remove default impl
+        CompoundTag nbt = getNbtData(item);
+        return nbt != null && nbt.getValue().get("EntityTag") instanceof CompoundTag entityNbt ? entityNbt : null;
     }
 
-    public void setInventoryItem(Inventory inventory, ItemStack item, int slot) {
-        inventory.setItem(slot, item);
-    }
-
-    public IntArrayTag convertUuidToNbt(UUID id) {
-        throw new UnsupportedOperationException();
-    }
-
-    public UUID convertNbtToUuid(IntArrayTag id) {
-        throw new UnsupportedOperationException();
-    }
-
-    public String getDisplayName(ItemTag item) {
-        if (!item.getItemMeta().hasDisplayName()) {
-            return null;
+    public ItemStack setEntityData(ItemStack item, CompoundTag entityNbt, EntityType entityType) { // TODO: once 1.20 is the minimum supported version, remove default impl
+        boolean shouldRemove = entityNbt == null || entityNbt.isEmpty();
+        CompoundTag nbt = getNbtData(item);
+        if (shouldRemove && !nbt.containsKey("EntityTag")) {
+            return item;
         }
-        return item.getItemMeta().getDisplayName();
-    }
-
-    public List<String> getLore(ItemTag item) {
-        if (!item.getItemMeta().hasLore()) {
-            return null;
+        if (shouldRemove) {
+            nbt = nbt.createBuilder().remove("EntityTag").build();
         }
-        return item.getItemMeta().getLore();
+        else {
+            nbt = nbt.createBuilder().put("EntityTag", entityNbt).build();
+        }
+        return setNbtData(item, nbt);
     }
 
-    public void setDisplayName(ItemTag item, String name) {
-        ItemMeta meta = item.getItemMeta();
-        meta.setDisplayName(name);
-        item.setItemMeta(meta);
-    }
+    public abstract void registerSmithingRecipe(String keyName, ItemStack result, ItemStack[] baseItem, boolean baseExact, ItemStack[] upgradeItem, boolean upgradeExact, ItemStack[] templateItem, boolean templateExact);
 
-    public void setLore(ItemTag item, List<String> lore) {
-        ItemMeta meta = item.getItemMeta();
-        meta.setLore(lore);
-        item.setItemMeta(meta);
-    }
+    public abstract void setInventoryItem(Inventory inventory, ItemStack item, int slot);
+
+    public abstract IntArrayTag convertUuidToNbt(UUID id);
+
+    public abstract UUID convertNbtToUuid(IntArrayTag id);
+
+    public abstract String getDisplayName(ItemTag item);
+
+    public abstract List<String> getLore(ItemTag item);
+
+    public abstract void setDisplayName(ItemTag item, String name);
+
+    public abstract void setLore(ItemTag item, List<String> lore);
 
     public boolean renderEntireMap(int mapId, int xMin, int zMin, int xMax, int zMax) {
+        throw new UnsupportedOperationException();
+    }
+
+    public BlockData getPlacedBlock(Material material) {
+        throw new UnsupportedOperationException();
+    }
+
+    public abstract boolean isValidMix(ItemStack input, ItemStack ingredient);
+
+    public record BrewingRecipe(RecipeChoice input, RecipeChoice ingredient, ItemStack result) {}
+
+    public Map<NamespacedKey, BrewingRecipe> getCustomBrewingRecipes() {
+        throw new UnsupportedOperationException();
+    }
+
+    public byte[] renderMap(MapView mapView, Player player) {
+        throw new UnsupportedOperationException();
+    }
+
+    public int getFoodPoints(Material itemType) {
         throw new UnsupportedOperationException();
     }
 }

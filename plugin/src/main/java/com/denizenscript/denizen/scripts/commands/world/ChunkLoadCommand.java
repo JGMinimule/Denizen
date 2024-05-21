@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.utilities.blocks.ChunkCoordinate;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.depends.Depends;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.objects.ChunkTag;
@@ -13,6 +13,8 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
+import com.denizenscript.denizencore.utilities.CoreUtilities;
+import net.citizensnpcs.api.event.DespawnReason;
 import net.citizensnpcs.api.event.NPCDespawnEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -82,7 +84,7 @@ public class ChunkLoadCommand extends AbstractCommand implements Listener {
     @Override
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
-            if (arg.matchesEnum(Action.values())
+            if (arg.matchesEnum(Action.class)
                     && !scriptEntry.hasObject("action")) {
                 scriptEntry.addObject("action", new ElementTag(arg.getValue().toUpperCase()));
                 if (arg.getValue().equalsIgnoreCase("removeall")) {
@@ -122,10 +124,7 @@ public class ChunkLoadCommand extends AbstractCommand implements Listener {
         ListTag chunklocs = scriptEntry.getObjectTag("location");
         DurationTag length = scriptEntry.getObjectTag("duration");
         if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(),
-                    action.debug()
-                            + chunklocs.debug()
-                            + length.debug());
+            Debug.report(scriptEntry, getName(), action, chunklocs, length);
         }
         for (String chunkText : chunklocs) {
             Chunk chunk;
@@ -143,7 +142,7 @@ public class ChunkLoadCommand extends AbstractCommand implements Listener {
             switch (Action.valueOf(action.asString())) {
                 case ADD:
                     if (length.getSeconds() != 0) {
-                        chunkDelays.put(coord, System.currentTimeMillis() + length.getMillis());
+                        chunkDelays.put(coord, CoreUtilities.monotonicMillis() + length.getMillis());
                     }
                     else {
                         chunkDelays.put(coord, (long) 0);
@@ -152,11 +151,11 @@ public class ChunkLoadCommand extends AbstractCommand implements Listener {
                     if (!chunk.isLoaded()) {
                         chunk.load();
                     }
-                    chunk.setForceLoaded(true);
+                    chunk.addPluginChunkTicket(Denizen.getInstance());
                     if (length.getSeconds() > 0) {
                         Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.getInstance(), () -> {
-                            if (chunkDelays.containsKey(coord) && chunkDelays.get(coord) <= System.currentTimeMillis()) {
-                                chunk.setForceLoaded(false);
+                            if (chunkDelays.containsKey(coord) && chunkDelays.get(coord) <= CoreUtilities.monotonicMillis()) {
+                                chunk.removePluginChunkTicket(Denizen.getInstance());
                                 chunkDelays.remove(coord);
                             }
                         }, length.getTicks() + 20);
@@ -165,17 +164,17 @@ public class ChunkLoadCommand extends AbstractCommand implements Listener {
                 case REMOVE:
                     if (chunkDelays.containsKey(coord)) {
                         chunkDelays.remove(coord);
-                        chunk.setForceLoaded(false);
+                        chunk.removePluginChunkTicket(Denizen.getInstance());
                         Debug.echoDebug(scriptEntry, "...allowing unloading of chunk " + chunk.getX() + ", " + chunk.getZ());
                     }
                     else {
-                        Debug.echoError("Chunk '" + coord + "' was not on the load list!");
+                        Debug.echoDebug(scriptEntry, "Chunk '" + coord + "' was not on the load list, ignoring.");
                     }
                     break;
                 case REMOVEALL:
                     Debug.echoDebug(scriptEntry, "...allowing unloading of all stored chunks");
                     for (ChunkCoordinate loopCoord : chunkDelays.keySet()) {
-                        loopCoord.getChunk().getChunk().setForceLoaded(false);
+                        loopCoord.getChunk().getChunk().removePluginChunkTicket(Denizen.getInstance());
                     }
                     chunkDelays.clear();
                     break;
@@ -189,7 +188,7 @@ public class ChunkLoadCommand extends AbstractCommand implements Listener {
     public class ChunkLoadCommandNPCEvents implements Listener {
         @EventHandler
         public void stopDespawn(NPCDespawnEvent e) {
-            if (e.getNPC() == null || !e.getNPC().isSpawned()) {
+            if (e.getNPC() == null || !e.getNPC().isSpawned() || e.getReason() != DespawnReason.CHUNK_UNLOAD) {
                 return;
             }
             Chunk chnk = e.getNPC().getEntity().getLocation().getChunk();
@@ -198,7 +197,7 @@ public class ChunkLoadCommand extends AbstractCommand implements Listener {
                 if (chunkDelays.get(coord) == 0) {
                     e.setCancelled(true);
                 }
-                else if (System.currentTimeMillis() < chunkDelays.get(coord)) {
+                else if (CoreUtilities.monotonicMillis() < chunkDelays.get(coord)) {
                     e.setCancelled(true);
                 }
                 else {

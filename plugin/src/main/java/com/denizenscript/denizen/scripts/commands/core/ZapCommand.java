@@ -7,7 +7,7 @@ import com.denizenscript.denizen.scripts.containers.core.AssignmentScriptContain
 import com.denizenscript.denizen.scripts.containers.core.InteractScriptContainer;
 import com.denizenscript.denizen.scripts.containers.core.InteractScriptHelper;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.*;
 import com.denizenscript.denizencore.objects.core.DurationTag;
@@ -15,14 +15,9 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ScriptTag;
 import com.denizenscript.denizencore.objects.core.TimeTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
-import com.denizenscript.denizencore.scripts.ScriptRegistry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-import com.denizenscript.denizencore.scripts.containers.ScriptContainer;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import org.bukkit.event.Listener;
-
-import java.util.function.Consumer;
 
 public class ZapCommand extends AbstractCommand implements Listener {
 
@@ -79,12 +74,8 @@ public class ZapCommand extends AbstractCommand implements Listener {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (ScriptContainer script : ScriptRegistry.scriptContainers.values()) {
-            if (script instanceof InteractScriptContainer) {
-                addOne.accept(script.getName());
-            }
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addScriptsOfType(InteractScriptContainer.class);
     }
 
     @Override
@@ -94,7 +85,7 @@ public class ZapCommand extends AbstractCommand implements Listener {
                     && !scriptEntry.hasObject("step")
                     && arg.hasPrefix()
                     && arg.getPrefix().matchesArgumentType(ScriptTag.class)) {
-                Deprecations.zapPrefix.warn(scriptEntry);
+                BukkitImplDeprecations.zapPrefix.warn(scriptEntry);
                 scriptEntry.addObject("script", arg.getPrefix().asType(ScriptTag.class));
                 scriptEntry.addObject("step", arg.asElement());
             }
@@ -179,7 +170,7 @@ public class ZapCommand extends AbstractCommand implements Listener {
             step = ((InteractScriptContainer) script.getContainer()).getDefaultStepName();
         }
         if (step.equalsIgnoreCase(currentStep)) {
-            Debug.echoError(scriptEntry.getResidingQueue(), "Zapping to own current step!");
+            Debug.echoError(scriptEntry, "Zapping to own current step!");
             return;
         }
         TimeTag expiration = null;

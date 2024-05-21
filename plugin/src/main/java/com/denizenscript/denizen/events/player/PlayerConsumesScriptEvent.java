@@ -1,14 +1,17 @@
 package com.denizenscript.denizen.events.player;
 
+import com.denizenscript.denizen.events.BukkitScriptEvent;
+import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.NMSVersion;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.tags.BukkitTagContext;
-import com.denizenscript.denizen.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
-import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ScriptTag;
 import com.denizenscript.denizencore.scripts.ScriptEntryData;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
@@ -32,19 +35,18 @@ public class PlayerConsumesScriptEvent extends BukkitScriptEvent implements List
     //
     // @Context
     // <context.item> returns the ItemTag.
+    // <context.hand> returns an ElementTag of the hand being used to consume the item. Can be either HAND or OFF_HAND. Requires a 1.19+ server.
     //
     // @Determine
-    // ItemTag to change the item being consumed.
+    // ItemTag to change the item being consumed. Use with caution, if the player is eating a stack of items, this will replace the entire stack.
     //
     // @Player Always.
     //
     // -->
 
     public PlayerConsumesScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerConsumesScriptEvent instance;
 
     public ItemTag item;
     public PlayerItemConsumeEvent event;
@@ -62,19 +64,13 @@ public class PlayerConsumesScriptEvent extends BukkitScriptEvent implements List
 
     @Override
     public boolean matches(ScriptPath path) {
-        String iCheck = path.eventArgLowerAt(2);
-        if (!tryItem(item, iCheck)) {
+        if (!path.tryArgObject(2, item)) {
             return false;
         }
         if (!runInCheck(path, event.getPlayer().getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerConsumes";
     }
 
     @Override
@@ -103,10 +99,11 @@ public class PlayerConsumesScriptEvent extends BukkitScriptEvent implements List
 
     @Override
     public ObjectTag getContext(String name) {
-        if (name.equals("item")) {
-            return item;
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "item" -> item;
+            case "hand" -> NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19) ? new ElementTag(event.getHand()) : null;
+            default -> super.getContext(name);
+        };
     }
 
     @EventHandler

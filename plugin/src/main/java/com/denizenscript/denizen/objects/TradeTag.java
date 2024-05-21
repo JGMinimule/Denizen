@@ -1,5 +1,7 @@
 package com.denizenscript.denizen.objects;
 
+import com.denizenscript.denizen.nms.NMSHandler;
+import com.denizenscript.denizen.nms.NMSVersion;
 import com.denizenscript.denizencore.objects.*;
 import com.denizenscript.denizencore.objects.properties.PropertyParser;
 import com.denizenscript.denizencore.tags.Attribute;
@@ -19,6 +21,8 @@ public class TradeTag implements ObjectTag, Adjustable {
     // @prefix trade
     // @base ElementTag
     // @implements PropertyHolderObject
+    // @ExampleTagBase trade[trade[result=diamond;max_uses=10;inputs=stick]]
+    // @ExampleValues trade[result=diamond;max_uses=10;inputs=stick]
     // @format
     // The identity format for trades is just the text 'trade'. All other data is specified through properties.
     //
@@ -56,9 +60,7 @@ public class TradeTag implements ObjectTag, Adjustable {
         }
         string = CoreUtilities.toLowerCase(string).replace("trade@", "");
         if (string.toLowerCase().matches("trade")) {
-            MerchantRecipe recipe = new MerchantRecipe(new ItemStack(Material.AIR), 0);
-            recipe.setIngredients(Collections.singletonList(new ItemStack(Material.AIR)));
-            return new TradeTag(recipe);
+            return new TradeTag(null);
         }
         return null;
     }
@@ -68,13 +70,32 @@ public class TradeTag implements ObjectTag, Adjustable {
     }
 
     public TradeTag(MerchantRecipe recipe) {
+        if (recipe == null) {
+            recipe = new MerchantRecipe(new ItemStack(Material.AIR), 0);
+            recipe.setIngredients(Collections.singletonList(new ItemStack(Material.AIR)));
+        }
         this.recipe = recipe;
+    }
+
+    public static MerchantRecipe duplicateRecipe(MerchantRecipe oldRecipe) {
+        return duplicateRecipe(oldRecipe.getResult(), oldRecipe);
+    }
+
+    public static MerchantRecipe duplicateRecipe(ItemStack result, MerchantRecipe oldRecipe) {
+        MerchantRecipe newRecipe;
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_18)) {
+            newRecipe = new MerchantRecipe(result, oldRecipe.getUses(), oldRecipe.getMaxUses(), oldRecipe.hasExperienceReward(), oldRecipe.getVillagerExperience(), oldRecipe.getPriceMultiplier(), oldRecipe.getDemand(), oldRecipe.getSpecialPrice());
+        }
+        else {
+            newRecipe = new MerchantRecipe(result, oldRecipe.getUses(), oldRecipe.getMaxUses(), oldRecipe.hasExperienceReward(), oldRecipe.getVillagerExperience(), oldRecipe.getPriceMultiplier());
+        }
+        newRecipe.setIngredients(oldRecipe.getIngredients());
+        return newRecipe;
     }
 
     @Override
     public TradeTag duplicate() {
-        MerchantRecipe result = new MerchantRecipe(recipe.getResult(), recipe.getUses(), recipe.getMaxUses(), recipe.hasExperienceReward(), recipe.getVillagerExperience(), recipe.getPriceMultiplier());
-        result.setIngredients(recipe.getIngredients());
+        MerchantRecipe result = duplicateRecipe(recipe);
         return new TradeTag(result);
     }
 
@@ -109,8 +130,8 @@ public class TradeTag implements ObjectTag, Adjustable {
     }
 
     @Override
-    public String getObjectType() {
-        return "Trade";
+    public String debuggable() {
+        return "<LG>trade@trade<Y>" + PropertyParser.getPropertiesDebuggable(this);
     }
 
     @Override
@@ -123,7 +144,12 @@ public class TradeTag implements ObjectTag, Adjustable {
         return identify();
     }
 
-    public static void registerTags() {
+    @Override
+    public Object getJavaObject() {
+        return recipe;
+    }
+
+    public static void register() {
         PropertyParser.registerPropertyTagHandlers(TradeTag.class, tagProcessor);
     }
 
@@ -141,6 +167,6 @@ public class TradeTag implements ObjectTag, Adjustable {
 
     @Override
     public void adjust(Mechanism mechanism) {
-        CoreUtilities.autoPropertyMechanism(this, mechanism);
+        tagProcessor.processMechanism(this, mechanism);
     }
 }

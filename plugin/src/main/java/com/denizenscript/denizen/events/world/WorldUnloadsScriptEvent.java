@@ -25,11 +25,9 @@ public class WorldUnloadsScriptEvent extends BukkitScriptEvent implements Listen
     // -->
 
     public WorldUnloadsScriptEvent() {
-        instance = this;
         registerCouldMatcher("<world> unloads");
     }
 
-    public static WorldUnloadsScriptEvent instance;
     public WorldTag world;
     public WorldUnloadEvent event;
 
@@ -46,15 +44,10 @@ public class WorldUnloadsScriptEvent extends BukkitScriptEvent implements Listen
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryWorld(world, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, world)) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "WorldUnloads";
     }
 
     @Override

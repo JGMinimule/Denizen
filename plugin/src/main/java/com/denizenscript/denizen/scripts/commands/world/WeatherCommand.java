@@ -2,7 +2,7 @@ package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.WorldTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -82,7 +82,7 @@ public class WeatherCommand extends AbstractCommand {
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("type")
-                    && arg.matchesEnum(Type.values())) {
+                    && arg.matchesEnum(Type.class)) {
                 scriptEntry.addObject("type", Type.valueOf(arg.getValue().toUpperCase()));
             }
             else if (!scriptEntry.hasObject("world")
@@ -90,7 +90,7 @@ public class WeatherCommand extends AbstractCommand {
                 scriptEntry.addObject("world", arg.asType(WorldTag.class));
             }
             else if (!scriptEntry.hasObject("value")
-                    && arg.matchesEnum(Value.values())) {
+                    && arg.matchesEnum(Value.class)) {
                 scriptEntry.addObject("value", arg.asElement());
             }
             else if (!scriptEntry.hasObject("reset_after")

@@ -2,17 +2,13 @@ package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ElementTag;
-import com.denizenscript.denizencore.objects.notable.Notable;
-import com.denizenscript.denizencore.objects.notable.NoteManager;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
-
-import java.util.function.Consumer;
 
 public class ExplodeCommand extends AbstractCommand {
 
@@ -68,10 +64,8 @@ public class ExplodeCommand extends AbstractCommand {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Notable note : NoteManager.notesByType.get(LocationTag.class)) {
-            addOne.accept(NoteManager.getSavedId(note));
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addNotesOfType(LocationTag.class);
     }
 
     @Override
@@ -120,12 +114,7 @@ public class ExplodeCommand extends AbstractCommand {
         ElementTag fire = scriptEntry.getElement("fire");
         EntityTag source = scriptEntry.getObjectTag("source");
         if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(),
-                    location.debug() +
-                            (source == null ? "" : source.debug()) +
-                            power.debug() +
-                            breakblocks.debug() +
-                            fire.debug());
+            Debug.report(scriptEntry, getName(), location, source, power, breakblocks, fire);
         }
         location.getWorld().createExplosion(location, power.asFloat(), fire.asBoolean(), breakblocks.asBoolean(), source == null ? null : source.getBukkitEntity());
     }

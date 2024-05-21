@@ -32,11 +32,9 @@ public class SlimeSplitsScriptEvent extends BukkitScriptEvent implements Listene
     // -->
 
     public SlimeSplitsScriptEvent() {
-        instance = this;
         registerCouldMatcher("slime splits (into <'#'>)");
     }
 
-    public static SlimeSplitsScriptEvent instance;
     public EntityTag entity;
     public SlimeSplitEvent event;
 
@@ -63,14 +61,9 @@ public class SlimeSplitsScriptEvent extends BukkitScriptEvent implements Listene
     }
 
     @Override
-    public String getName() {
-        return "SlimeSplits";
-    }
-
-    @Override
     public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj instanceof ElementTag && ((ElementTag) determinationObj).isInt()) {
-            event.setCount(((ElementTag) determinationObj).asInt());
+        if (determinationObj instanceof ElementTag element && element.isInt()) {
+            event.setCount(element.asInt());
             return true;
         }
         return super.applyDetermination(path, determinationObj);
@@ -93,5 +86,4 @@ public class SlimeSplitsScriptEvent extends BukkitScriptEvent implements Listene
         this.event = event;
         fire(event);
     }
-
 }

@@ -4,7 +4,7 @@ import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.npc.traits.SneakingTrait;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.PlayerTag;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.packets.NetworkInterceptHelper;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
@@ -45,10 +45,10 @@ public class SneakCommand extends AbstractCommand {
     // A fake sneak only affects the name plate, not the entity's pose.
     //
     // Note: using this command on a player will only show to other players. You cannot alter a player in their own view.
+    // Note that <@link property EntityTag.is_sneaking> is also available.
     //
     // @Tags
-    // <NPCTag.is_sneaking>
-    // <PlayerTag.is_sneaking>
+    // <EntityTag.is_sneaking>
     //
     // @Usage
     // Make the linked NPC start sneaking.
@@ -148,14 +148,14 @@ public class SneakCommand extends AbstractCommand {
             if (shouldFake || shouldStopFake) {
                 if (forPlayers == null) {
                     updateFakeSneak(entity.getUUID(), null, shouldSneak, shouldFake);
-                    for (Player player : NMSHandler.getEntityHelper().getPlayersThatSee(entity.getBukkitEntity())) {
-                        NMSHandler.getPacketHelper().sendEntityMetadataFlagsUpdate(player, entity.getBukkitEntity());
+                    for (Player player : NMSHandler.entityHelper.getPlayersThatSee(entity.getBukkitEntity())) {
+                        NMSHandler.packetHelper.sendEntityMetadataFlagsUpdate(player, entity.getBukkitEntity());
                     }
                 }
                 else {
                     for (PlayerTag player : forPlayers) {
                         updateFakeSneak(entity.getUUID(), player.getUUID(), shouldSneak, shouldFake);
-                        NMSHandler.getPacketHelper().sendEntityMetadataFlagsUpdate(player.getPlayerEntity(), entity.getBukkitEntity());
+                        NMSHandler.packetHelper.sendEntityMetadataFlagsUpdate(player.getPlayerEntity(), entity.getBukkitEntity());
                     }
                 }
             }
@@ -169,7 +169,7 @@ public class SneakCommand extends AbstractCommand {
                 }
             }
             else if (entity.isSpawned()) {
-                NMSHandler.getEntityHelper().setSneaking(entity.getBukkitEntity(), shouldSneak);
+                NMSHandler.entityHelper.setSneaking(entity.getBukkitEntity(), shouldSneak);
             }
             else {
                 Debug.echoError("Cannot make unspawned entity sneak.");

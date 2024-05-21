@@ -1,7 +1,6 @@
 package com.denizenscript.denizen.events.player;
 
 import com.denizenscript.denizen.objects.ItemTag;
-import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -38,10 +37,8 @@ public class HotbarScrollScriptEvent extends BukkitScriptEvent implements Listen
     // -->
 
     public HotbarScrollScriptEvent() {
-        instance = this;
     }
 
-    public static HotbarScrollScriptEvent instance;
 
     public PlayerItemHeldEvent event;
 
@@ -59,20 +56,15 @@ public class HotbarScrollScriptEvent extends BukkitScriptEvent implements Listen
         if (!runInCheck(path, event.getPlayer().getLocation())) {
             return false;
         }
-        if (path.switches.containsKey("item") && !tryItem(new ItemTag(event.getPlayer().getInventory().getItem(event.getNewSlot())), path.switches.get("item"))) {
+        if (!path.tryObjectSwitch("item", new ItemTag(event.getPlayer().getInventory().getItem(event.getNewSlot())))) {
             return false;
         }
         return super.matches(path);
     }
 
     @Override
-    public String getName() {
-        return "PlayerScrollsItem";
-    }
-
-    @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(PlayerTag.mirrorBukkitPlayer(event.getPlayer()), null);
+        return new BukkitScriptEntryData(event.getPlayer());
     }
 
     @Override

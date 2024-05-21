@@ -7,9 +7,10 @@ import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.tags.Attribute;
-import com.denizenscript.denizencore.tags.core.EscapeTagBase;
+import com.denizenscript.denizencore.tags.core.EscapeTagUtil;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
+import org.bukkit.ChatColor;
 import org.bukkit.inventory.meta.ItemMeta;
 
 public class ItemDisplayname implements Property {
@@ -36,7 +37,7 @@ public class ItemDisplayname implements Property {
             "display", "display_name"
     };
 
-    private ItemDisplayname(ItemTag _item) {
+    public ItemDisplayname(ItemTag _item) {
         item = _item;
     }
 
@@ -57,13 +58,14 @@ public class ItemDisplayname implements Property {
         // @attribute <ItemTag.display>
         // @returns ElementTag
         // @mechanism ItemTag.display
+        // @synonyms ItemTag.display_name
         // @group properties
         // @description
         // Returns the display name of the item, as set by plugin or an anvil.
         // -->
         if (attribute.startsWith("display")) {
             if (hasDisplayName()) {
-                return new ElementTag(NMSHandler.getItemHelper().getDisplayName(item), true)
+                return new ElementTag(NMSHandler.itemHelper.getDisplayName(item), true)
                         .getObjectAttribute(attribute.fulfill(1));
             }
         }
@@ -87,7 +89,11 @@ public class ItemDisplayname implements Property {
     @Override
     public String getPropertyString() {
         if (hasDisplayName()) {
-            return NMSHandler.getItemHelper().getDisplayName(item);
+            String res = NMSHandler.itemHelper.getDisplayName(item);
+            if (res.isEmpty()) { // Special case: persist empty strings as a single empty color code so it's not ignored
+                return ChatColor.WHITE.toString();
+            }
+            return res;
         }
         else {
             return null;
@@ -106,6 +112,7 @@ public class ItemDisplayname implements Property {
         // @object ItemTag
         // @name display
         // @input ElementTag
+        // @synonyms ItemTag.display_name
         // @description
         // Changes the item's display name.
         // Give no input to remove the item's display name.
@@ -119,13 +126,13 @@ public class ItemDisplayname implements Property {
                 item.setItemMeta(meta);
             }
             else {
-                NMSHandler.getItemHelper().setDisplayName(item, mechanism.getValue().asString());
+                NMSHandler.itemHelper.setDisplayName(item, mechanism.getValue().asString());
             }
         }
         else if (mechanism.matches("display_name")) {
-            Deprecations.itemDisplayNameMechanism.warn(mechanism.context);
+            BukkitImplDeprecations.itemDisplayNameMechanism.warn(mechanism.context);
             ItemMeta meta = item.getItemMeta();
-            meta.setDisplayName(mechanism.hasValue() ? CoreUtilities.clearNBSPs(EscapeTagBase.unEscape(mechanism.getValue().asString())) : null);
+            meta.setDisplayName(mechanism.hasValue() ? CoreUtilities.clearNBSPs(EscapeTagUtil.unEscape(mechanism.getValue().asString())) : null);
             item.setItemMeta(meta);
         }
     }

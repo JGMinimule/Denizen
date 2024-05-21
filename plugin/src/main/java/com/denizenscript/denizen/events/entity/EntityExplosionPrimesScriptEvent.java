@@ -31,32 +31,21 @@ public class EntityExplosionPrimesScriptEvent extends BukkitScriptEvent implemen
     // -->
 
     public EntityExplosionPrimesScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> explosion primes");
     }
 
-    public static EntityExplosionPrimesScriptEvent instance;
     public EntityTag entity;
     public ExplosionPrimeEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
-
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
-
         return super.matches(path);
-
-    }
-
-    @Override
-    public String getName() {
-        return "EntityExplosionPrimes";
     }
 
     @Override

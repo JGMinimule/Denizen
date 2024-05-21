@@ -24,7 +24,7 @@ public class EntityFreezeDuration implements Property {
             "freeze_duration"
     };
 
-    private EntityFreezeDuration(EntityTag entity) {
+    public EntityFreezeDuration(EntityTag entity) {
         this.entity = entity;
     }
 
@@ -40,7 +40,7 @@ public class EntityFreezeDuration implements Property {
         return "freeze_duration";
     }
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <EntityTag.max_freeze_duration>
@@ -50,7 +50,7 @@ public class EntityFreezeDuration implements Property {
         // @description
         // Returns the maximum duration an entity can be freezing for (from powdered snow). (When reached, an entity is fully frozen over).
         // -->
-        PropertyParser.<EntityFreezeDuration, DurationTag>registerTag(DurationTag.class, "max_freeze_duration", (attribute, entity) -> {
+        PropertyParser.registerTag(EntityFreezeDuration.class, DurationTag.class, "max_freeze_duration", (attribute, entity) -> {
             return new DurationTag((long) entity.entity.getBukkitEntity().getMaxFreezeTicks());
         });
 
@@ -62,7 +62,7 @@ public class EntityFreezeDuration implements Property {
         // @description
         // Returns the duration an entity has been freezing for (from powdered snow).
         // -->
-        PropertyParser.<EntityFreezeDuration, DurationTag>registerTag(DurationTag.class, "freeze_duration", (attribute, entity) -> {
+        PropertyParser.registerTag(EntityFreezeDuration.class, DurationTag.class, "freeze_duration", (attribute, entity) -> {
             return new DurationTag((long) entity.entity.getBukkitEntity().getFreezeTicks());
         });
     }

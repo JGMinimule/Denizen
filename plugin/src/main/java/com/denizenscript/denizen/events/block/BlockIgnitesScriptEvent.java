@@ -34,12 +34,10 @@ public class BlockIgnitesScriptEvent extends BukkitScriptEvent implements Listen
     // -->
 
     public BlockIgnitesScriptEvent() {
-        instance = this;
         registerCouldMatcher("block ignites");
         registerSwitches("cause");
     }
 
-    public static BlockIgnitesScriptEvent instance;
     public LocationTag location;
     public MaterialTag material;
     public ElementTag cause;
@@ -54,11 +52,6 @@ public class BlockIgnitesScriptEvent extends BukkitScriptEvent implements Listen
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "BlockIgnites";
     }
 
     @Override
@@ -84,7 +77,7 @@ public class BlockIgnitesScriptEvent extends BukkitScriptEvent implements Listen
     @EventHandler
     public void onBlockIgnites(BlockIgniteEvent event) {
         location = new LocationTag(event.getBlock().getLocation());
-        cause = new ElementTag(event.getCause().name());
+        cause = new ElementTag(event.getCause());
         this.event = event;
         fire(event);
     }

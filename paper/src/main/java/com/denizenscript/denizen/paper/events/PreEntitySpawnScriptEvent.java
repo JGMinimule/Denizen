@@ -40,18 +40,16 @@ public class PreEntitySpawnScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public PreEntitySpawnScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> prespawns (because <'cause'>)");
     }
 
-    public static PreEntitySpawnScriptEvent instance;
     public EntityTag entity;
     public LocationTag location;
     public PreCreatureSpawnEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
         if (path.eventArgLowerAt(2).equals("because")
@@ -62,11 +60,6 @@ public class PreEntitySpawnScriptEvent extends BukkitScriptEvent implements List
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PreEntitySpawn";
     }
 
     @Override
@@ -89,7 +82,7 @@ public class PreEntitySpawnScriptEvent extends BukkitScriptEvent implements List
             return location;
         }
         else if (name.equals("reason")) {
-            return new ElementTag(event.getReason().name());
+            return new ElementTag(event.getReason());
         }
         else if (name.equals("spawner_location") && event instanceof PreSpawnerSpawnEvent) {
             return new LocationTag(((PreSpawnerSpawnEvent) event).getSpawnerLocation());

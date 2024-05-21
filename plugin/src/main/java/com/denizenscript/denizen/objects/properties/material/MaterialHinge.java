@@ -29,13 +29,13 @@ public class MaterialHinge implements Property {
             "hinge"
     };
 
-    private MaterialHinge(MaterialTag _material) {
+    public MaterialHinge(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.hinge>
@@ -46,8 +46,8 @@ public class MaterialHinge implements Property {
         // Returns a door's hinge side.
         // Output is LEFT or RIGHT.
         // -->
-        PropertyParser.<MaterialHinge, ElementTag>registerStaticTag(ElementTag.class, "hinge", (attribute, material) -> {
-            return new ElementTag(material.getDoor().getHinge().name());
+        PropertyParser.registerStaticTag(MaterialHinge.class, ElementTag.class, "hinge", (attribute, material) -> {
+            return new ElementTag(material.getDoor().getHinge());
         });
     }
 
@@ -77,7 +77,7 @@ public class MaterialHinge implements Property {
         // @tags
         // <MaterialTag.hinge>
         // -->
-        if (mechanism.matches("hinge") && mechanism.requireEnum(false, Door.Hinge.values())) {
+        if (mechanism.matches("hinge") && mechanism.requireEnum(Door.Hinge.class)) {
             getDoor().setHinge(Door.Hinge.valueOf(mechanism.getValue().asString().toUpperCase()));
         }
     }

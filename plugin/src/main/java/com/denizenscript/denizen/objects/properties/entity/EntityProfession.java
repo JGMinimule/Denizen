@@ -38,13 +38,13 @@ public class EntityProfession implements Property {
             "profession"
     };
 
-    private EntityProfession(EntityTag entity) {
+    public EntityProfession(EntityTag entity) {
         professional = entity;
     }
 
     EntityTag professional;
 
-    private Villager.Profession getProfession() {
+    public Villager.Profession getProfession() {
         if (professional.getBukkitEntityType() == EntityType.ZOMBIE_VILLAGER) {
             return ((ZombieVillager) professional.getBukkitEntity()).getVillagerProfession();
         }
@@ -88,7 +88,7 @@ public class EntityProfession implements Property {
         // For the list of possible professions, refer to <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/Villager.Profession.html>
         // -->
         if (attribute.startsWith("profession")) {
-            return new ElementTag(CoreUtilities.toLowerCase(getProfession().name()))
+            return new ElementTag(getProfession())
                     .getObjectAttribute(attribute.fulfill(1));
         }
 
@@ -109,7 +109,7 @@ public class EntityProfession implements Property {
         // @tags
         // <EntityTag.profession>
         // -->
-        if (mechanism.matches("profession") && mechanism.requireEnum(false, Villager.Profession.values())) {
+        if (mechanism.matches("profession") && mechanism.requireEnum(Villager.Profession.class)) {
             setProfession(Villager.Profession.valueOf(mechanism.getValue().asString().toUpperCase()));
         }
     }

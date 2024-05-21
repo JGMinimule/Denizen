@@ -30,6 +30,7 @@ public class ResourcePackStatusScriptEvent extends BukkitScriptEvent {
     public ResourcePackStatusScriptEvent() {
         instance = this;
         registerCouldMatcher("resource pack status");
+        registerSwitches("status");
     }
 
     public static ResourcePackStatusScriptEvent instance;
@@ -45,22 +46,10 @@ public class ResourcePackStatusScriptEvent extends BukkitScriptEvent {
         return super.matches(path);
     }
 
-    public boolean enabled;
-
     @Override
     public void init() {
         NetworkInterceptHelper.enable();
-        enabled = true;
-    }
-
-    @Override
-    public void destroy() {
-        enabled = false;
-    }
-
-    @Override
-    public String getName() {
-        return "ResourcePackStatus";
+        super.init();
     }
 
     @Override

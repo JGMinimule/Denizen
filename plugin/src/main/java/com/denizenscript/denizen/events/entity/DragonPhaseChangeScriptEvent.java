@@ -28,7 +28,7 @@ public class DragonPhaseChangeScriptEvent extends BukkitScriptEvent implements L
     //
     // @Context
     // <context.entity> returns the EntityTag of the dragon.
-    // <context.new_phase> returns an ElementTag of the dragon's new phase. Phases: <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/event/entity/EnderDragonChangePhaseEvent.html>
+    // <context.new_phase> returns an ElementTag of the dragon's new phase. Phases: <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/EnderDragon.Phase.html>
     // <context.old_phase> returns an ElementTag of the dragon's old phase. Can be any phase or 'null' in some cases.
     //
     // @Determine
@@ -37,41 +37,29 @@ public class DragonPhaseChangeScriptEvent extends BukkitScriptEvent implements L
     // -->
 
     public DragonPhaseChangeScriptEvent() {
-        instance = this;
         registerCouldMatcher("<entity> changes phase");
         registerSwitches("from", "to");
     }
 
-    public static DragonPhaseChangeScriptEvent instance;
     public EntityTag entity;
     public EnderDragonChangePhaseEvent event;
 
     @Override
     public boolean matches(ScriptPath path) {
         String target = path.eventArgLowerAt(0);
-
-        if (!tryEntity(entity, target)) {
+        if (!entity.tryAdvancedMatcher(target)) {
             return false;
         }
-
         if (!runInCheck(path, entity.getLocation())) {
             return false;
         }
-
         if (!runGenericSwitchCheck(path, "from", event.getCurrentPhase() == null ? "null" : event.getCurrentPhase().name())) {
             return false;
         }
-
         if (!runGenericSwitchCheck(path, "to", event.getNewPhase().name())) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "DragonPhaseChanged";
     }
 
     @Override
@@ -92,7 +80,7 @@ public class DragonPhaseChangeScriptEvent extends BukkitScriptEvent implements L
             case "old_phase":
                 return new ElementTag(event.getCurrentPhase() == null ? "null" : event.getCurrentPhase().name());
             case "new_phase":
-                return new ElementTag(event.getNewPhase().name());
+                return new ElementTag(event.getNewPhase());
         }
         return super.getContext(name);
     }

@@ -1,25 +1,25 @@
 package com.denizenscript.denizen.nms.v1_17.helpers;
 
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.v1_17.ReflectionMappingsInfo;
-import com.denizenscript.denizen.nms.v1_17.impl.SidebarImpl;
-import com.denizenscript.denizen.nms.v1_17.impl.network.handlers.DenizenNetworkManagerImpl;
-import com.denizenscript.denizen.objects.ColorTag;
-import com.denizenscript.denizen.objects.LocationTag;
-import com.denizenscript.denizen.objects.MaterialTag;
-import com.denizenscript.denizen.objects.PlayerTag;
-import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.blocks.FakeBlock;
-import com.denizenscript.denizen.utilities.maps.MapImage;
-import com.denizenscript.denizencore.objects.core.DurationTag;
-import com.denizenscript.denizencore.utilities.ReflectionHelper;
-import com.denizenscript.denizen.nms.v1_17.Handler;
-import com.denizenscript.denizen.nms.v1_17.impl.jnbt.CompoundTagImpl;
 import com.denizenscript.denizen.nms.interfaces.PacketHelper;
 import com.denizenscript.denizen.nms.util.jnbt.CompoundTag;
 import com.denizenscript.denizen.nms.util.jnbt.JNBTListTag;
+import com.denizenscript.denizen.nms.v1_17.Handler;
+import com.denizenscript.denizen.nms.v1_17.ReflectionMappingsInfo;
+import com.denizenscript.denizen.nms.v1_17.impl.SidebarImpl;
+import com.denizenscript.denizen.nms.v1_17.impl.jnbt.CompoundTagImpl;
+import com.denizenscript.denizen.nms.v1_17.impl.network.handlers.DenizenNetworkManagerImpl;
+import com.denizenscript.denizen.objects.LocationTag;
+import com.denizenscript.denizen.objects.MaterialTag;
+import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.FormattedTextHelper;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizen.utilities.Utilities;
+import com.denizenscript.denizen.utilities.blocks.FakeBlock;
+import com.denizenscript.denizen.utilities.maps.MapImage;
+import com.denizenscript.denizencore.objects.core.ColorTag;
+import com.denizenscript.denizencore.objects.core.DurationTag;
+import com.denizenscript.denizencore.utilities.ReflectionHelper;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.mojang.datafixers.util.Pair;
 import io.netty.buffer.Unpooled;
 import net.md_5.bungee.api.ChatColor;
@@ -34,7 +34,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.CaveSpider;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.EnderMan;
@@ -48,7 +49,7 @@ import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 import org.bukkit.Bukkit;
-import org.bukkit.DyeColor;
+import org.bukkit.EntityEffect;
 import org.bukkit.Location;
 import org.bukkit.block.banner.Pattern;
 import org.bukkit.craftbukkit.v1_17_R1.CraftEquipmentSlot;
@@ -209,17 +210,17 @@ public class PacketHelperImpl implements PacketHelper {
     }
 
     @Override
-    public void showBannerUpdate(Player player, Location location, DyeColor base, List<Pattern> patterns) {
+    public void showBannerUpdate(Player player, Location location, List<Pattern> patterns) {
         List<CompoundTag> nbtPatterns = new ArrayList<>();
         for (Pattern pattern : patterns) {
-            nbtPatterns.add(NMSHandler.getInstance()
+            nbtPatterns.add(NMSHandler.instance
                     .createCompoundTag(new HashMap<>())
                     .createBuilder()
                     .putInt("Color", pattern.getColor().getDyeData())
                     .putString("Pattern", pattern.getPattern().getIdentifier())
                     .build());
         }
-        CompoundTag compoundTag = NMSHandler.getBlockHelper().getNbtData(location.getBlock())
+        CompoundTag compoundTag = NMSHandler.blockHelper.getNbtData(location.getBlock())
                 .createBuilder()
                 .put("Patterns", new JNBTListTag(CompoundTag.class, nbtPatterns))
                 .build();
@@ -232,11 +233,6 @@ public class PacketHelperImpl implements PacketHelper {
         Component cFooter = Handler.componentToNMS(FormattedTextHelper.parse(footer, ChatColor.WHITE));
         ClientboundTabListPacket packet = new ClientboundTabListPacket(cHeader, cFooter);
         send(player, packet);
-    }
-
-    @Override
-    public void resetTabListHeaderFooter(Player player) {
-        showTabListHeaderFooter(player, "", "");
     }
 
     @Override
@@ -272,8 +268,17 @@ public class PacketHelperImpl implements PacketHelper {
     }
 
     @Override
-    public void openBook(Player player, EquipmentSlot hand) {
-        send(player, new ClientboundOpenBookPacket(hand == EquipmentSlot.OFF_HAND ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND));
+    public void showMobHealth(Player player, LivingEntity mob, double health, double maxHealth) {
+        AttributeInstance attr = new AttributeInstance(Attributes.MAX_HEALTH, (a) -> { });
+        attr.setBaseValue(maxHealth);
+        send(player, new ClientboundUpdateAttributesPacket(mob.getEntityId(), Collections.singletonList(attr)));
+        FriendlyByteBuf healthData = new FriendlyByteBuf(Unpooled.buffer());
+        healthData.writeVarInt(mob.getEntityId());
+        healthData.writeByte(9); // health id
+        healthData.writeVarInt(2); // type = float
+        healthData.writeFloat((float) health);
+        healthData.writeByte(255); // Mark end of packet
+        send(player, new ClientboundSetEntityDataPacket(healthData));
     }
 
     @Override
@@ -287,25 +292,15 @@ public class PacketHelperImpl implements PacketHelper {
     }
 
     @Override
-    public void showExperience(Player player, float experience, int level) {
-        send(player, new ClientboundSetExperiencePacket(experience, 0, level));
-    }
-
-    @Override
-    public void resetExperience(Player player) {
-        showExperience(player, player.getExp(), player.getLevel());
-    }
-
-    @Override
-    public boolean showSignEditor(Player player, Location location) {
+    public void showSignEditor(Player player, Location location) {
         if (location == null) {
             LocationTag fakeSign = new LocationTag(player.getLocation());
             fakeSign.setY(0);
-            FakeBlock.showFakeBlockTo(Collections.singletonList(new PlayerTag(player)), fakeSign, new MaterialTag(org.bukkit.Material.OAK_WALL_SIGN), new DurationTag(1));
+            FakeBlock.showFakeBlockTo(Collections.singletonList(new PlayerTag(player)), fakeSign, new MaterialTag(org.bukkit.Material.OAK_WALL_SIGN), new DurationTag(1), true);
             BlockPos pos = new BlockPos(fakeSign.getX(), 0, fakeSign.getZ());
             ((DenizenNetworkManagerImpl) ((CraftPlayer) player).getHandle().connection.connection).packetListener.fakeSignExpected = pos;
             send(player, new ClientboundOpenSignEditorPacket(pos));
-            return true;
+            return;
         }
         BlockEntity tileEntity = ((CraftWorld) location.getWorld()).getHandle().getTileEntity(new BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ()), true);
         if (tileEntity instanceof SignBlockEntity) {
@@ -315,10 +310,6 @@ public class PacketHelperImpl implements PacketHelper {
             sign.isEditable = true;
             sign.setAllowedPlayerEditor(player.getUniqueId());
             send(player, new ClientboundOpenSignEditorPacket(sign.getBlockPos()));
-            return true;
-        }
-        else {
-            return false;
         }
     }
 
@@ -406,8 +397,8 @@ public class PacketHelperImpl implements PacketHelper {
     }
 
     @Override
-    public void sendEntityEffect(Player player, Entity entity, byte effectId) {
-        send(player, new ClientboundEntityEventPacket(((CraftEntity) entity).getHandle(), effectId));
+    public void sendEntityEffect(Player player, Entity entity, EntityEffect effect) {
+        send(player, new ClientboundEntityEventPacket(((CraftEntity) entity).getHandle(), effect.getData()));
     }
 
     @Override
@@ -459,11 +450,11 @@ public class PacketHelperImpl implements PacketHelper {
     }
 
     @Override
-    public void showDebugTestMarker(Player player, Location location, ColorTag color, int alpha, String name, int time) {
+    public void showDebugTestMarker(Player player, Location location, ColorTag color, String name, int time) {
         ResourceLocation packetKey = new ResourceLocation("minecraft", "debug/game_test_add_marker");
         FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         buf.writeBlockPos(new BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ()));
-        int colorInt = color.getColor().getBlue() | (color.getColor().getGreen() << 8) | (color.getColor().getRed() << 16) | (alpha << 24);
+        int colorInt = color.blue | (color.green << 8) | (color.red << 16) | (color.alpha << 24);
         buf.writeInt(colorInt);
         buf.writeByteArray(name.getBytes(StandardCharsets.UTF_8));
         buf.writeInt(time);

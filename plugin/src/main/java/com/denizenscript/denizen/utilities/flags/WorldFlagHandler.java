@@ -27,17 +27,17 @@ public class WorldFlagHandler implements Listener {
         }
     }
 
-    public void saveAll() {
+    public void saveAll(boolean lockUntilDone) {
         for (Map.Entry<String, SavableMapFlagTracker> flagTracker : worldFlagTrackers.entrySet()) {
             if (flagTracker.getValue().modified) {
-                flagTracker.getValue().saveToFile(flagPathFor(flagTracker.getKey()));
+                flagTracker.getValue().saveToFile(flagPathFor(flagTracker.getKey()), lockUntilDone);
                 flagTracker.getValue().modified = false;
             }
         }
     }
 
     public void shutdown() {
-        saveAll();
+        saveAll(true);
         worldFlagTrackers.clear();
     }
 
@@ -49,7 +49,7 @@ public class WorldFlagHandler implements Listener {
         if (worldFlagTrackers.containsKey(world.getName())) {
             return;
         }
-        worldFlagTrackers.put(world.getName(), SavableMapFlagTracker.loadFlagFile(flagPathFor(world.getName())));
+        worldFlagTrackers.put(world.getName(), SavableMapFlagTracker.loadFlagFile(flagPathFor(world.getName()), true));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -62,7 +62,7 @@ public class WorldFlagHandler implements Listener {
         SavableMapFlagTracker flags = worldFlagTrackers.remove(event.getWorld().getName());
         if (flags != null && flags.modified) {
             flags.modified = false;
-            flags.saveToFile(flagPathFor(event.getWorld().getName()));
+            flags.saveToFile(flagPathFor(event.getWorld().getName()), true);
         }
     }
 }

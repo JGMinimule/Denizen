@@ -30,13 +30,13 @@ public class MaterialInstrument implements Property {
             "instrument"
     };
 
-    private MaterialInstrument(MaterialTag _material) {
+    public MaterialInstrument(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.instrument>
@@ -48,8 +48,8 @@ public class MaterialInstrument implements Property {
         // see list at <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Instrument.html>.
         // For the instrument that a material *would* produce if below a noteblock <@link tag MaterialTag.produced_instrument>.
         // -->
-        PropertyParser.<MaterialInstrument, ElementTag>registerStaticTag(ElementTag.class, "instrument", (attribute, material) -> {
-            return new ElementTag(material.getNoteBlock().getInstrument().name());
+        PropertyParser.registerStaticTag(MaterialInstrument.class, ElementTag.class, "instrument", (attribute, material) -> {
+            return new ElementTag(material.getNoteBlock().getInstrument());
         });
     }
 
@@ -84,7 +84,7 @@ public class MaterialInstrument implements Property {
         // @tags
         // <MaterialTag.instrument>
         // -->
-        if (mechanism.matches("instrument") && mechanism.requireEnum(false, Instrument.values())) {
+        if (mechanism.matches("instrument") && mechanism.requireEnum(Instrument.class)) {
             setInstrument(mechanism.getValue().asString().toUpperCase());
         }
     }

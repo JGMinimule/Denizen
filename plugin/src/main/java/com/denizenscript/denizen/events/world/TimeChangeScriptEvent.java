@@ -2,7 +2,6 @@ package com.denizenscript.denizen.events.world;
 
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizen.objects.WorldTag;
-import com.denizenscript.denizencore.objects.ArgumentHelper;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import org.bukkit.event.Listener;
@@ -38,7 +37,7 @@ public class TimeChangeScriptEvent extends BukkitScriptEvent implements Listener
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (path.eventArgLowerAt(2).equals("in") && !tryWorld(world, path.eventArgLowerAt(3))) {
+        if (path.eventArgLowerAt(2).equals("in") && !path.tryArgObject(3, world)) {
             return false;
         }
         String arg1 = path.eventArgLowerAt(1);
@@ -46,11 +45,6 @@ public class TimeChangeScriptEvent extends BukkitScriptEvent implements Listener
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "TimeChanges";
     }
 
     @Override

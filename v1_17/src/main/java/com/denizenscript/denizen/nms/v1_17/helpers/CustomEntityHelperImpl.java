@@ -4,6 +4,7 @@ import com.denizenscript.denizen.nms.v1_17.impl.entities.CraftFakePlayerImpl;
 import com.denizenscript.denizen.nms.v1_17.impl.entities.EntityFakeArrowImpl;
 import com.denizenscript.denizen.nms.v1_17.impl.entities.EntityFakePlayerImpl;
 import com.denizenscript.denizen.nms.v1_17.impl.entities.EntityItemProjectileImpl;
+import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.denizenscript.denizen.nms.NMSHandler;
@@ -24,9 +25,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.UUID;
 
 public class CustomEntityHelperImpl implements CustomEntityHelper {
@@ -47,8 +46,8 @@ public class CustomEntityHelperImpl implements CustomEntityHelper {
     }
 
     @Override
-    public FakePlayer spawnFakePlayer(Location location, String name, String skin) throws IllegalArgumentException {
-        return spawnFakePlayer(location, name, skin, true);
+    public FakePlayer spawnFakePlayer(Location location, String name, String skin, String blob, boolean doAdd) throws IllegalArgumentException {
+        return spawnFakePlayer(location, name, skin, doAdd);
     }
 
     public static FakePlayer spawnFakePlayer(Location location, String name, String skin, boolean doAdd) throws IllegalArgumentException {
@@ -99,21 +98,15 @@ public class CustomEntityHelperImpl implements CustomEntityHelper {
         ServerLevel worldServer = world.getHandle();
         PlayerProfile playerProfile = new PlayerProfile(name, null);
         if (skin == null && !name.matches(".*[^A-Za-z0-9_].*")) {
-            playerProfile = NMSHandler.getInstance().fillPlayerProfile(playerProfile);
+            playerProfile = NMSHandler.instance.fillPlayerProfile(playerProfile);
         }
         if (skin != null) {
             PlayerProfile skinProfile = new PlayerProfile(skin, null);
-            skinProfile = NMSHandler.getInstance().fillPlayerProfile(skinProfile);
+            skinProfile = NMSHandler.instance.fillPlayerProfile(skinProfile);
             playerProfile.setTexture(skinProfile.getTexture());
             playerProfile.setTextureSignature(skinProfile.getTextureSignature());
         }
         UUID uuid = UUID.randomUUID();
-        if (uuid.version() == 4) {
-            long msb = uuid.getMostSignificantBits();
-            msb &= ~0x0000000000004000L;
-            msb |= 0x0000000000002000L;
-            uuid = new UUID(msb, uuid.getLeastSignificantBits());
-        }
         playerProfile.setUniqueId(uuid);
 
         GameProfile gameProfile = new GameProfile(playerProfile.getUniqueId(), playerProfile.getName());
@@ -131,10 +124,7 @@ public class CustomEntityHelperImpl implements CustomEntityHelper {
             String teamName = "FAKE_PLAYER_TEAM_" + fullName;
             String hash = null;
             try {
-                MessageDigest md = MessageDigest.getInstance("MD5");
-                byte[] bytes = teamName.getBytes(StandardCharsets.UTF_8);
-                md.update(bytes, 0, bytes.length);
-                hash = new BigInteger(1, md.digest()).toString(16).substring(0, 16);
+                hash = CoreUtilities.hash_md5(teamName.getBytes(StandardCharsets.UTF_8)).substring(0, 16);
             }
             catch (Exception e) {
                 Debug.echoError(e);

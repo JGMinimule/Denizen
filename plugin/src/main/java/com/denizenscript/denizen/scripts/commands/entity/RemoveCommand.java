@@ -1,7 +1,7 @@
 package com.denizenscript.denizen.scripts.commands.entity;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.entity.DenizenEntityType;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.WorldTag;
@@ -12,6 +12,7 @@ import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 
 import java.util.List;
 
@@ -58,11 +59,18 @@ public class RemoveCommand extends AbstractCommand {
     // -->
 
     @Override
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.add(EntityType.values());
+    }
+
+    @Override
     public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsException {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("entities")
                     && arg.matchesArgumentList(EntityTag.class)) {
+                EntityTag.allowDespawnedNpcs = true;
                 scriptEntry.addObject("entities", arg.asType(ListTag.class).filter(EntityTag.class, scriptEntry));
+                EntityTag.allowDespawnedNpcs = false;
             }
             else if (!scriptEntry.hasObject("world")
                     && arg.matchesArgumentType(WorldTag.class)) {
@@ -98,11 +106,14 @@ public class RemoveCommand extends AbstractCommand {
                 else if (entity.isCitizensNPC()) {
                     entity.getDenizenNPC().getCitizen().destroy();
                 }
-                else if (entity.isSpawned()) {
-                    entity.remove();
-                }
                 else {
-                    Debug.echoError("Tried to remove already-removed entity.");
+                    if (!entity.isSpawned()) {
+                        Debug.echoError("Tried to remove already-removed entity.");
+                        // Still remove() anyway to compensate for Spigot/NMS bugs
+                    }
+                    if (entity.entity != null) {
+                        entity.remove();
+                    }
                 }
             }
             else {

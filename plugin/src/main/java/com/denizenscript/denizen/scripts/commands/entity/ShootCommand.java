@@ -3,8 +3,10 @@ package com.denizenscript.denizen.scripts.commands.entity;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Conversion;
 import com.denizenscript.denizen.utilities.Utilities;
+import com.denizenscript.denizen.utilities.command.TabCompleteHelper;
 import com.denizenscript.denizen.utilities.entity.Velocity;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.entity.Position;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.EntityTag;
@@ -19,7 +21,6 @@ import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.scripts.commands.Holdable;
 import com.denizenscript.denizencore.scripts.containers.core.TaskScriptContainer;
 import com.denizenscript.denizencore.scripts.queues.ScriptQueue;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.denizencore.utilities.ScriptUtilities;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
@@ -79,6 +80,8 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
     // Normally, a list of entities will spawn mounted on top of each other. To have them instead fire separately and spread out,
     // specify the "spread" argument with a decimal number indicating how wide to spread the entities.
     //
+    // Optionally, add "no_rotate" to prevent the shoot command from rotating launched entities.
+    //
     // Use the "script:<name>" argument to run a task script when the projectiles land.
     // When that script runs, the following definitions will be available:
     // <[shot_entities]> for all shot entities (as in, the projectiles),
@@ -86,9 +89,9 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
     // <[location]> for the last known location of the last shot entity, and
     // <[hit_entities]> for a list of any entities that were hit by fired projectiles.
     //
-    // Optionally, add "no_rotate" to prevent the shoot command from rotating launched entities.
-    //
     // The shoot command is ~waitable. Refer to <@link language ~waitable>.
+    //
+    // Note that for ~waiting or the "script" arg, tracking is only accurate for projectile entities (such as arrows). This will be inaccurately estimated for other entity types.
     //
     // @Tags
     // <entry[saveName].shot_entity> returns the single entity that was shot (as in, the projectile) (if you only shot one).
@@ -104,6 +107,11 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
     // Use to shoot an arrow out of the player with a given speed.
     // - shoot arrow origin:<player> speed:2
     // -->
+
+    @Override
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        TabCompleteHelper.tabCompleteEntityTypes(tab);
+    }
 
     Map<UUID, EntityTag> arrows = new HashMap<>();
 
@@ -242,7 +250,7 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
         }
         final ListTag entityList = new ListTag();
         if (!no_rotate) {
-            originLocation = new LocationTag(NMSHandler.getEntityHelper().faceLocation(originLocation, destination));
+            originLocation = new LocationTag(NMSHandler.entityHelper.faceLocation(originLocation, destination));
         }
         for (EntityTag entity : entities) {
             if (!entity.isSpawned() || !no_rotate) {
@@ -253,14 +261,14 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
                 if (shooter != null || originEntity != null) {
                     entity.setShooter(shooter != null ? shooter : originEntity);
                 }
-                if (script != null) {
+                if (script != null || scriptEntry.shouldWaitFor()) {
                     arrows.put(entity.getUUID(), null);
                 }
             }
         }
-        scriptEntry.addObject("shot_entities", entityList);
+        scriptEntry.saveObject("shot_entities", entityList);
         if (entityList.size() == 1) {
-            scriptEntry.addObject("shot_entity", entityList.getObject(0));
+            scriptEntry.saveObject("shot_entity", entityList.getObject(0));
         }
         if (spread == null) {
             Position.mount(Conversion.convertEntities(entities));
@@ -300,11 +308,9 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
         }
         if (spread != null) {
             Vector base = lastEntity.getVelocity().clone();
-            float sf = spread.asFloat();
+            double spreadDouble = spread.asDouble();
             for (EntityTag entity : entities) {
-                Vector newvel = Velocity.spread(base, (CoreUtilities.getRandom().nextDouble() > 0.5f ? 1 : -1) * Math.toRadians(CoreUtilities.getRandom().nextDouble() * sf),
-                        (CoreUtilities.getRandom().nextDouble() > 0.5f ? 1 : -1) * Math.toRadians(CoreUtilities.getRandom().nextDouble() * sf));
-                entity.setVelocity(newvel);
+                entity.setVelocity(Velocity.randomSpread(base, spreadDouble));
             }
         }
         final LocationTag start = new LocationTag(lastEntity.getLocation());
@@ -317,6 +323,9 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
             public void run() {
                 // If the entity is no longer spawned, stop the task
                 if (!lastEntity.isSpawned()) {
+                    if (CoreConfiguration.debugVerbose) {
+                        Debug.log("Shoot ended because entity not spawned");
+                    }
                     flying = false;
                 }
                 // Otherwise, if the entity is no longer traveling through
@@ -325,10 +334,17 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
                     if (lastLocation.getWorld() != lastEntity.getBukkitEntity().getWorld()
                             || (lastLocation.distanceSquared(lastEntity.getBukkitEntity().getLocation()) < 0.1
                             && lastVelocity.distanceSquared(lastEntity.getBukkitEntity().getVelocity()) < 0.1)) {
+                        if (CoreConfiguration.debugVerbose) {
+                            Debug.log("Shoot ended because distances short - locations: " + (lastLocation.distanceSquared(lastEntity.getBukkitEntity().getLocation()))
+                                    + ", velocity: " + (lastVelocity.distanceSquared(lastEntity.getBukkitEntity().getVelocity()) < 0.1));
+                        }
                         flying = false;
                     }
                 }
                 if (!arrows.containsKey(lastEntity.getUUID()) || arrows.get(lastEntity.getUUID()) != null) {
+                    if (CoreConfiguration.debugVerbose) {
+                        Debug.log("Shoot ended because uuid was updated (hit entity?)");
+                    }
                     flying = false;
                 }
                 // Stop the task and run the script if conditions
@@ -341,15 +357,15 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
                             EntityTag hit = arrows.get(entity.getUUID());
                             arrows.remove(entity.getUUID());
                             if (hit != null) {
-                                hitEntities.addObject(hit);
+                                hitEntities.addObject(hit.getDenizenObject());
                             }
                         }
                     }
                     if (lastLocation == null) {
                         lastLocation = start;
                     }
-                    scriptEntry.addObject("location", new LocationTag(lastLocation));
-                    scriptEntry.addObject("hit_entities", hitEntities);
+                    scriptEntry.saveObject("location", new LocationTag(lastLocation));
+                    scriptEntry.saveObject("hit_entities", hitEntities);
                     if (script != null) {
                         Consumer<ScriptQueue> configure = (queue) -> {
                             queue.addDefinition("location", new LocationTag(lastLocation));
@@ -378,6 +394,9 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
         if (!arrows.containsKey(event.getEntity().getUniqueId())) {
             return;
         }
+        if (CoreConfiguration.debugVerbose) {
+            Debug.log("Shoot ending because hit");
+        }
         if (event.getHitEntity() != null) {
             arrows.put(event.getEntity().getUniqueId(), new EntityTag(event.getHitEntity()));
         }
@@ -394,6 +413,9 @@ public class ShootCommand extends AbstractCommand implements Listener, Holdable 
         }
         if (!arrows.containsKey(arrow.getUniqueId())) {
             return;
+        }
+        if (CoreConfiguration.debugVerbose) {
+            Debug.log("Shoot ending because damage");
         }
         arrows.put(arrow.getUniqueId(), new EntityTag(event.getEntity()));
     }

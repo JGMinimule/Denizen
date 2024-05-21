@@ -26,19 +26,22 @@ public abstract class ProfileEditor {
 
     public void setPlayerName(Player player, String name) {
         NetworkInterceptHelper.enable();
-        PlayerProfile profile = getFakeProfile(player);
+        PlayerProfile profile = getFakeProfile(player, true);
         profile.setName(name);
         updatePlayer(player, false);
     }
 
     public String getPlayerName(Player player) {
-        return getFakeProfile(player).getName();
+        return getFakeProfile(player, false).getName();
     }
 
     public void setPlayerSkin(Player player, String name) {
         NetworkInterceptHelper.enable();
-        PlayerProfile profile = getFakeProfile(player);
-        PlayerProfile skinProfile = NMSHandler.getInstance().fillPlayerProfile(new PlayerProfile(name, null));
+        PlayerProfile profile = getFakeProfile(player, true);
+        PlayerProfile skinProfile = NMSHandler.instance.fillPlayerProfile(new PlayerProfile(name, null));
+        if (skinProfile == null) {
+            return;
+        }
         if (skinProfile.getTexture() != null) {
             profile.setTexture(skinProfile.getTexture());
             profile.setTextureSignature(skinProfile.getTextureSignature());
@@ -83,7 +86,7 @@ public abstract class ProfileEditor {
 
     public void setPlayerSkinBlob(Player player, String blob) {
         NetworkInterceptHelper.enable();
-        PlayerProfile profile = getFakeProfile(player);
+        PlayerProfile profile = getFakeProfile(player, true);
         String[] split = blob.split(";");
         profile.setTexture(split[0]);
         profile.setTextureSignature(split.length > 1 ? split[1] : null);
@@ -91,20 +94,22 @@ public abstract class ProfileEditor {
     }
 
     public String getPlayerSkinBlob(Player player) {
-        PlayerProfile prof = getFakeProfile(player);
+        PlayerProfile prof = getFakeProfile(player, false);
         return prof.getTexture() + ";" + prof.getTextureSignature();
     }
 
     protected abstract void updatePlayer(Player player, boolean isSkinChanging);
 
-    private PlayerProfile getFakeProfile(Player player) {
+    private PlayerProfile getFakeProfile(Player player, boolean createCache) {
         UUID uuid = player.getUniqueId();
         if (fakeProfiles.containsKey(uuid)) {
             return fakeProfiles.get(uuid);
         }
         else {
-            PlayerProfile fakeProfile = NMSHandler.getInstance().getPlayerProfile(player);
-            fakeProfiles.put(uuid, fakeProfile);
+            PlayerProfile fakeProfile = NMSHandler.instance.getPlayerProfile(player);
+            if (createCache) {
+                fakeProfiles.put(uuid, fakeProfile);
+            }
             return fakeProfile;
         }
     }

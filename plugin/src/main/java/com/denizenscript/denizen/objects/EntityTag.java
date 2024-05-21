@@ -1,38 +1,45 @@
 package com.denizenscript.denizen.objects;
 
-import com.denizenscript.denizen.events.BukkitScriptEvent;
+import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.nms.NMSVersion;
+import com.denizenscript.denizen.nms.abstracts.ProfileEditor;
 import com.denizenscript.denizen.nms.interfaces.EntityAnimation;
+import com.denizenscript.denizen.nms.interfaces.FakePlayer;
 import com.denizenscript.denizen.nms.interfaces.PlayerHelper;
+import com.denizenscript.denizen.nms.util.jnbt.CompoundTag;
+import com.denizenscript.denizen.npc.traits.MirrorTrait;
 import com.denizenscript.denizen.objects.properties.entity.EntityAge;
 import com.denizenscript.denizen.objects.properties.entity.EntityColor;
 import com.denizenscript.denizen.objects.properties.entity.EntityTame;
+import com.denizenscript.denizen.objects.properties.item.ItemRawNBT;
 import com.denizenscript.denizen.scripts.commands.player.DisguiseCommand;
 import com.denizenscript.denizen.scripts.containers.core.EntityScriptContainer;
 import com.denizenscript.denizen.scripts.containers.core.EntityScriptHelper;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
+import com.denizenscript.denizen.utilities.MultiVersionHelper1_19;
+import com.denizenscript.denizen.utilities.Utilities;
+import com.denizenscript.denizen.utilities.VanillaTagHelper;
 import com.denizenscript.denizen.utilities.depends.Depends;
-import com.denizenscript.denizen.utilities.entity.*;
+import com.denizenscript.denizen.utilities.entity.DenizenEntityType;
+import com.denizenscript.denizen.utilities.entity.EntityAttachmentHelper;
+import com.denizenscript.denizen.utilities.entity.FakeEntity;
+import com.denizenscript.denizen.utilities.entity.HideEntitiesHelper;
 import com.denizenscript.denizen.utilities.flags.DataPersistenceFlagTracker;
-import com.denizenscript.denizen.utilities.nbt.CustomNBT;
 import com.denizenscript.denizencore.DenizenCore;
+import com.denizenscript.denizencore.events.ScriptEvent;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
 import com.denizenscript.denizencore.flags.FlaggableObject;
 import com.denizenscript.denizencore.objects.*;
-import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.abstracts.ProfileEditor;
-import com.denizenscript.denizen.nms.interfaces.EntityHelper;
-import com.denizenscript.denizen.nms.interfaces.FakePlayer;
-import com.denizenscript.denizen.npc.traits.MirrorTrait;
 import com.denizenscript.denizencore.objects.core.*;
-import com.denizenscript.denizencore.tags.ObjectTagProcessor;
-import com.denizenscript.denizencore.tags.TagRunnable;
-import com.denizenscript.denizencore.utilities.Deprecations;
-import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.objects.properties.PropertyParser;
 import com.denizenscript.denizencore.scripts.ScriptRegistry;
 import com.denizenscript.denizencore.tags.Attribute;
+import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
+import com.denizenscript.denizencore.tags.TagRunnable;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.utilities.text.StringHolder;
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.NPC;
@@ -40,17 +47,21 @@ import net.citizensnpcs.npc.ai.NPCHolder;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.ChiseledBookshelf;
 import org.bukkit.entity.*;
+import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.inventory.*;
 import org.bukkit.loot.LootTable;
 import org.bukkit.loot.Lootable;
-import org.bukkit.potion.*;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, FlaggableObject, Cloneable {
 
@@ -59,6 +70,14 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     // @prefix e
     // @base ElementTag
     // @implements FlaggableObject, PropertyHolderObject
+    // @ExampleTagBase player
+    // @ExampleValues <player>,<npc>
+    // @ExampleForReturns
+    // - kill %VALUE%
+    // @ExampleForReturns
+    // - heal %VALUE%
+    // @ExampleForReturns
+    // - remove %VALUE%
     // @format
     // The identity format for entities is a spawned entity's UUID, or an entity type.
     // For example, 'e@abc123' or 'e@zombie'.
@@ -74,6 +93,26 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     // This object type is flaggable.
     // Flags on this object type will be stored in the world chunk files as a part of the entity's NBT.
     //
+    // @Matchable
+    // EntityTag matchers, sometimes identified as "<entity>", "<projectile>", or "<vehicle>":
+    // "entity" plaintext: always matches.
+    // "player" plaintext: matches any real player (not NPCs).
+    // "npc" plaintext: matches any Citizens NPC.
+    // "vehicle" plaintext: matches for any vehicle type (minecarts, boats, horses, etc).
+    // "fish" plaintext: matches for any fish type (cod, pufferfish, etc).
+    // "projectile" plaintext: matches for any projectile type (arrow, trident, fish hook, snowball, etc).
+    // "hanging" plaintext: matches for any hanging type (painting, item_frame, etc).
+    // "monster" plaintext: matches for any monster type (creepers, zombies, etc).
+    // "animal" plaintext: matches for any animal type (pigs, cows, etc).
+    // "mob" plaintext: matches for any mob type (creepers, pigs, etc).
+    // "living" plaintext: matches for any living type (players, pigs, creepers, etc).
+    // "vanilla_tagged:<tag_name>": matches if the given vanilla tag applies to the entity. Allows advanced matchers, for example: "vanilla_tagged:axolotl_*".
+    // "entity_flagged:<flag>": a Flag Matchable for EntityTag flags.
+    // "player_flagged:<flag>": a Flag Matchable for PlayerTag flags (will never match non-players).
+    // "npc_flagged:<flag>": a Flag Matchable for NPCTag flags (will never match non-NPCs).
+    // "npc_<type>": matches if the NPC is the given entity type (like "npc_cow" or "npc_mob" or "npc_player").
+    // Any entity type name: matches if the entity is of the given type, using advanced matchers.
+    //
     // -->
 
     /////////////////////
@@ -84,7 +123,9 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     public static HashSet<String> earlyValidMechanisms = new HashSet<>(Arrays.asList(
             "max_health", "health_data", "health",
             "visible", "armor_pose", "arms", "base_plate", "is_small", "marker",
-            "velocity", "age", "is_using_riptide", "size"
+            "velocity", "age", "is_using_riptide", "size", "item", "scale", "translation",
+            "left_rotation", "right_rotation", "brightness", "display", "pivot",
+            "shadow_radius", "shadow_strength"
     ));
     // Definitely not valid: "item"
 
@@ -102,6 +143,10 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             return;
         }
         rememberedEntities.remove(entity.getUniqueId());
+    }
+
+    public static EntityFormObject mirrorBukkitEntity(Entity entity) {
+        return new EntityTag(entity).getDenizenObject();
     }
 
     public static boolean isNPC(Entity entity) {
@@ -165,17 +210,36 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     //    OBJECT FETCHER
     ////////////////
 
-    @Deprecated
-    public static EntityTag valueOf(String string) {
-        return valueOf(string, null);
-    }
-
     public static boolean allowDespawnedNpcs = false;
 
     @Fetchable("e")
     public static EntityTag valueOf(String string, TagContext context) {
         if (string == null) {
             return null;
+        }
+        UUID id = null;
+        if (string.startsWith("e@") && !string.startsWith("e@fake")) {
+            int slash = string.indexOf('/');
+            if (slash != -1) {
+                try {
+                    id = UUID.fromString(string.substring(2, slash));
+                    string = string.substring(slash + 1);
+                    Entity entity = getEntityForID(id);
+                    if (entity != null) {
+                        EntityTag result = new EntityTag(entity);
+                        if (string.equalsIgnoreCase(result.getEntityScript())
+                                || string.equalsIgnoreCase(result.getBukkitEntityType().name())) {
+                            return result;
+                        }
+                        else if (context == null || context.showErrors()) {
+                            Debug.echoError("Invalid EntityTag! ID '" + id + "' is valid, but '" + string + "' does not match its type data.");
+                        }
+                    }
+                }
+                catch (Exception ex) {
+                    // DO NOTHING
+                }
+            }
         }
         if (ObjectFetcher.isObjectWithProperties(string)) {
             return ObjectFetcher.getObjectFromWithProperties(EntityTag.class, string, context);
@@ -225,7 +289,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 }
             }
             else {
-                if (context == null || context.debug) {
+                if (context == null || context.debug || CoreConfiguration.debugOverride) {
                     Debug.echoError("NPC '" + string + "' does not exist!");
                 }
             }
@@ -240,28 +304,6 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 Debug.echoError("Invalid Player! '" + string + "' could not be found. Has the player logged off?");
             }
         }
-        UUID id = null;
-        int slash = string.indexOf('/');
-        if (slash != -1) {
-            try {
-                id = UUID.fromString(string.substring(0, slash));
-                string = string.substring(slash + 1);
-                Entity entity = getEntityForID(id);
-                if (entity != null) {
-                    EntityTag result = new EntityTag(entity);
-                    if (string.equalsIgnoreCase(result.getEntityScript())
-                        || string.equalsIgnoreCase(result.getBukkitEntityType().name())) {
-                        return result;
-                    }
-                    else if (context == null || context.showErrors()) {
-                        Debug.echoError("Invalid EntityTag! ID '" + id + "' is valid, but '" + string + "' does not match its type data.");
-                    }
-                }
-            }
-            catch (Exception ex) {
-                // DO NOTHING
-            }
-        }
         if (ScriptRegistry.containsScript(string, EntityScriptContainer.class)) {
             // Construct a new custom unspawned entity from script
             EntityTag entity = ScriptRegistry.getScriptContainerAs(string, EntityScriptContainer.class).getEntityFrom();
@@ -270,8 +312,9 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         }
         List<String> data = CoreUtilities.split(string, ',');
         // Handle custom DenizenEntityTypes
-        if (DenizenEntityType.isRegistered(data.get(0))) {
-            EntityTag entity = new EntityTag(DenizenEntityType.getByName(data.get(0)), data.size() > 1 ? data.get(1) : null);
+        DenizenEntityType type = DenizenEntityType.getByName(data.get(0));
+        if (type != null && type.getBukkitEntityType() != EntityType.UNKNOWN) {
+            EntityTag entity = new EntityTag(type, data.size() > 1 ? data.get(1) : null);
             entity.uuid = id;
             return entity;
         }
@@ -296,13 +339,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         if (rememberedEntities.containsKey(id)) {
             return rememberedEntities.get(id);
         }
-        for (World world : Bukkit.getWorlds()) {
-            Entity entity = NMSHandler.getEntityHelper().getEntity(world, id);
-            if (entity != null) {
-                return entity;
-            }
-        }
-        return null;
+        return Bukkit.getEntity(id);
     }
 
     public static boolean matches(String arg) {
@@ -311,7 +348,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             return true;
         }
         // No longer picky about e@.. let's remove it from the arg
-        arg = arg.replace("e@", "").toUpperCase();
+        arg = CoreUtilities.toUpperCase(arg.replace("e@", ""));
         // Allow 'random'
         if (arg.equals("RANDOM")) {
             return true;
@@ -405,7 +442,6 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         }
         if (npc != null) {
             this.npc = npc;
-
             if (npc.isSpawned()) {
                 this.entity = npc.getEntity();
                 this.entity_type = DenizenEntityType.getByName(npc.getEntityType().name());
@@ -415,12 +451,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         else {
             Debug.echoError("NPC referenced is null!");
         }
-
     }
-
-    /////////////////////
-    //   INSTANCE FIELDS/METHODS
-    /////////////////
 
     @Override
     public EntityTag duplicate() {
@@ -468,8 +499,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
     @Override
     public void reapplyTracker(AbstractFlagTracker tracker) {
+        if (CoreConfiguration.skipAllFlagCleanings) {
+            return;
+        }
         if (cleanRateProtect + 60000 > DenizenCore.serverTimeMillis) {
-            ((DataPersistenceFlagTracker) tracker).doTotalClean();
+            tracker.doTotalClean();
             cleanRateProtect = DenizenCore.serverTimeMillis;
         }
     }
@@ -483,7 +517,6 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     public long cleanRateProtect = -60000;
     public DenizenEntityType entity_type = null;
     private String data1 = null;
-    private DespawnedEntity despawned_entity = null;
     private NPCTag npc = null;
     public UUID uuid = null;
     private String entityScript = null;
@@ -555,7 +588,35 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     }
 
     public boolean isLivingEntity() {
-        return (entity instanceof LivingEntity);
+        return entity instanceof LivingEntity;
+    }
+
+    public boolean isLivingEntityType() {
+        if (getBukkitEntity() == null && entity_type != null) {
+            return entity_type.getBukkitEntityType().isAlive();
+        }
+        return entity instanceof LivingEntity;
+    }
+
+    public boolean isMonsterType() {
+        if (getBukkitEntity() == null && entity_type != null) {
+            return Monster.class.isAssignableFrom(entity_type.getBukkitEntityType().getEntityClass());
+        }
+        return getBukkitEntity() instanceof Monster;
+    }
+
+    public boolean isMobType() {
+        if (getBukkitEntity() == null && entity_type != null) {
+            return Mob.class.isAssignableFrom(entity_type.getBukkitEntityType().getEntityClass());
+        }
+        return getBukkitEntity() instanceof Mob;
+    }
+
+    public boolean isAnimalType() {
+        if (getBukkitEntity() == null && entity_type != null) {
+            return Animals.class.isAssignableFrom(entity_type.getBukkitEntityType().getEntityClass());
+        }
+        return getBukkitEntity() instanceof Animals;
     }
 
     public boolean hasInventory() {
@@ -604,6 +665,10 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         return entity instanceof Player && !isNPC();
     }
 
+    public <T extends Entity> T as(Class<T> entityClass) {
+        return (T) getBukkitEntity();
+    }
+
     public Projectile getProjectile() {
         return (Projectile) entity;
     }
@@ -613,23 +678,32 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     }
 
     public EntityTag getShooter() {
-        if (hasShooter()) {
-            return new EntityTag((LivingEntity) getProjectile().getShooter());
+        if (getBukkitEntity() instanceof TNTPrimed) {
+            Entity source = ((TNTPrimed) getBukkitEntity()).getSource();
+            if (source != null) {
+                return new EntityTag(source);
+            }
         }
-        else {
-            return null;
+        else if (isProjectile()) {
+            ProjectileSource shooter = getProjectile().getShooter();
+            if (shooter instanceof Entity) {
+                return new EntityTag((Entity) shooter);
+            }
         }
+        return null;
     }
 
     public void setShooter(EntityTag shooter) {
-        if (isProjectile() && shooter.isLivingEntity()) {
+        if (getBukkitEntity() instanceof TNTPrimed) {
+            ((TNTPrimed) getBukkitEntity()).setSource(shooter.getBukkitEntity());
+        }
+        else if (isProjectile() && shooter.isLivingEntity()) {
             getProjectile().setShooter(shooter.getLivingEntity());
         }
     }
 
     public boolean hasShooter() {
-        return isProjectile() && getProjectile().getShooter() != null && getProjectile().getShooter() instanceof LivingEntity;
-        // TODO: Handle other shooter source thingy types
+        return getShooter() != null;
     }
 
     public Inventory getBukkitInventory() {
@@ -655,7 +729,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         if (entity instanceof Player) {
             return entity.getName();
         }
-        String customName = entity.getCustomName();
+        String customName = entity == null ? null : entity.getCustomName();
         if (customName != null) {
             return customName;
         }
@@ -705,11 +779,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
     public Location getTargetBlockSafe(Set<Material> mats, int range) {
         try {
-            NMSHandler.getChunkHelper().changeChunkServerThread(getWorld());
+            NMSHandler.chunkHelper.changeChunkServerThread(getWorld());
             return getLivingEntity().getTargetBlock(mats, range).getLocation();
         }
         finally {
-            NMSHandler.getChunkHelper().restoreServerThread(getWorld());
+            NMSHandler.chunkHelper.restoreServerThread(getWorld());
         }
     }
 
@@ -738,163 +812,118 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     }
 
     public void spawnAt(Location location) {
+        spawnAt(location, TeleportCause.PLUGIN, CreatureSpawnEvent.SpawnReason.CUSTOM);
+    }
+
+    public void spawnAt(Location location, TeleportCause cause, CreatureSpawnEvent.SpawnReason reason) {
         if (location.getWorld() == null) {
             Debug.echoError("Cannot teleport or spawn entity at location '" + new LocationTag(location) + "' because it is missing a world.");
             return;
         }
         // If the entity is already spawned, teleport it.
-        if (isCitizensNPC()) {
-            if (getDenizenNPC().getCitizen().isSpawned()) {
-                getDenizenNPC().getCitizen().teleport(location, TeleportCause.PLUGIN);
-            }
-            else {
-                getDenizenNPC().getCitizen().spawn(location);
-                entity = getDenizenNPC().getCitizen().getEntity();
-                uuid = getDenizenNPC().getCitizen().getEntity().getUniqueId();
-            }
+        if (isCitizensNPC() || (isUnique() && entity != null)) {
+            teleport(location, cause);
+            return;
         }
-        else if (isUnique() && entity != null) {
-            teleport(location);
+        else if (entity_type == null) {
+            Debug.echoError("Cannot spawn a null EntityTag!");
+            return;
         }
-        else {
-            if (entity_type != null) {
-                if (despawned_entity != null) {
-                    // If entity had a custom_script, use the script to rebuild the base entity.
-                    if (despawned_entity.custom_script != null) {
-                        // TODO: Build entity from custom script
-                    }
-                    // Else, use the entity_type specified/remembered
-                    else {
-                        entity = entity_type.spawnNewEntity(location, mechanisms, entityScript);
-                    }
-                    getLivingEntity().teleport(location);
-                    getLivingEntity().getEquipment().setArmorContents(despawned_entity.equipment);
-                    getLivingEntity().setHealth(despawned_entity.health);
-
-                    despawned_entity = null;
-                }
-                else {
-                    if (entity_type.getBukkitEntityType() == EntityType.PLAYER) {
-                        if (Depends.citizens == null) {
-                            Debug.echoError("Cannot spawn entity of type PLAYER!");
-                            return;
-                        }
-                        else {
-                            NPCTag npc = new NPCTag(net.citizensnpcs.api.CitizensAPI.getNPCRegistry().createNPC(EntityType.PLAYER, data1));
-                            npc.getCitizen().spawn(location);
-                            entity = npc.getEntity();
-                            uuid = entity.getUniqueId();
-                        }
-                    }
-                    else if (entity_type.getBukkitEntityType() == EntityType.FALLING_BLOCK) {
-                        MaterialTag material = null;
-                        if (data1 != null && MaterialTag.matches(data1)) {
-                            material = MaterialTag.valueOf(data1, CoreUtilities.basicContext);
-                            // If we did not get a block with "RANDOM", or we got
-                            // air or portals, keep trying
-                            while (data1.equalsIgnoreCase("RANDOM") &&
-                                    ((!material.getMaterial().isBlock()) ||
-                                            material.getMaterial() == Material.AIR ||
-                                            material.getMaterial() == Material.NETHER_PORTAL ||
-                                            material.getMaterial() == Material.END_PORTAL)) {
-                                material = MaterialTag.valueOf(data1, CoreUtilities.basicContext);
-                            }
-                        }
-                        else {
-                            for (Mechanism mech : mechanisms) {
-                                if (mech.getName().equals("fallingblock_type")) {
-                                    material = mech.valueAsType(MaterialTag.class);
-                                    mechanisms.remove(mech);
-                                    break;
-                                }
-                            }
-                        }
-                        // If material is null or not a block, default to SAND
-                        if (material == null || !material.getMaterial().isBlock() || !material.hasModernData()) {
-                            material = new MaterialTag(Material.SAND);
-                        }
-                        // This is currently the only way to spawn a falling block
-                        entity = location.getWorld().spawnFallingBlock(location, material.getModernData());
-                        uuid = entity.getUniqueId();
-                    }
-                    else if (entity_type.getBukkitEntityType() == EntityType.PAINTING) {
-                        entity = entity_type.spawnNewEntity(location, mechanisms, entityScript);
-                        location = location.clone();
-                        Painting painting = (Painting) entity;
-                        Art art = null;
-                        BlockFace face = null;
-                        try {
-                            for (Mechanism mech : mechanisms) {
-                                if (mech.getName().equals("painting")) {
-                                    art = Art.valueOf(mech.getValue().asString().toUpperCase());
-                                }
-                                else if (mech.getName().equals("rotation")) {
-                                    face = BlockFace.valueOf(mech.getValue().asString().toUpperCase());
-                                }
-                            }
-                        }
-                        catch (Exception ex) {
-                            // ignore
-                        }
-                        if (art != null && face != null) { // Paintings are the worst
-                            if (art.getBlockHeight() % 2 == 0) {
-                                location.subtract(0, 1, 0);
-                            }
-                            if (art.getBlockWidth() % 2 == 0) {
-                                if (face == BlockFace.WEST) {
-                                    location.subtract(0, 0, 1);
-                                }
-                                else if (face == BlockFace.SOUTH) {
-                                    location.subtract(1, 0, 0);
-                                }
-                            }
-                            painting.teleport(location);
-                            painting.setFacingDirection(face, true);
-                            painting.setArt(art, true);
-                        }
-                    }
-                    else {
-                        entity = entity_type.spawnNewEntity(location, mechanisms, entityScript);
-                        if (entity == null) {
-                            if (Debug.verbose) {
-                                Debug.echoError("Failed to spawn entity of type " + entity_type.getName());
-                            }
-                            return;
-                        }
-                        uuid = entity.getUniqueId();
-                        if (entityScript != null) {
-                            EntityScriptHelper.setEntityScript(entity, entityScript);
-                        }
-                    }
-                }
-            }
-            else {
-                Debug.echoError("Cannot spawn a null EntityTag!");
-            }
-            if (!isUnique()) {
-                Debug.echoError("Error spawning entity - bad entity type, blocked by another plugin, or tried to spawn in an unloaded chunk?");
+        if (entity_type.getBukkitEntityType() == EntityType.PLAYER && !entity_type.isCustom()) {
+            if (Depends.citizens == null) {
+                Debug.echoError("Cannot spawn entity of type PLAYER!");
                 return;
             }
-            for (Mechanism mechanism : mechanisms) {
-                safeAdjust(new Mechanism(mechanism.getName(), mechanism.value, mechanism.context));
+            NPCTag npc = new NPCTag(net.citizensnpcs.api.CitizensAPI.getNPCRegistry().createNPC(EntityType.PLAYER, data1));
+            npc.getCitizen().spawn(location);
+            entity = npc.getEntity();
+        }
+        else if (entity_type.getBukkitEntityType() == EntityType.FALLING_BLOCK) {
+            MaterialTag material = null;
+            if (data1 != null && MaterialTag.matches(data1)) {
+                material = MaterialTag.valueOf(data1, CoreUtilities.basicContext);
+                // If we did not get a block with "RANDOM", or we got
+                // air or portals, keep trying
+                while (data1.equalsIgnoreCase("RANDOM") &&
+                        ((!material.getMaterial().isBlock()) ||
+                                material.getMaterial() == Material.AIR ||
+                                material.getMaterial() == Material.NETHER_PORTAL ||
+                                material.getMaterial() == Material.END_PORTAL)) {
+                    material = MaterialTag.valueOf(data1, CoreUtilities.basicContext);
+                }
             }
-            mechanisms.clear();
+            else {
+                for (Mechanism mech : mechanisms) {
+                    if (mech.getName().equals("fallingblock_type")) {
+                        material = mech.valueAsType(MaterialTag.class);
+                        mechanisms.remove(mech);
+                        break;
+                    }
+                }
+            }
+            // If material is null or not a block, default to SAND
+            if (material == null || !material.getMaterial().isBlock() || !material.hasModernData()) {
+                material = new MaterialTag(Material.SAND);
+            }
+            // This is currently the only way to spawn a falling block
+            entity = location.getWorld().spawnFallingBlock(location, material.getModernData());
         }
-    }
-
-    public void despawn() {
-        despawned_entity = new DespawnedEntity(this);
-        getLivingEntity().remove();
-    }
-
-    public void respawn() {
-        if (despawned_entity != null) {
-            spawnAt(despawned_entity.location);
+        else if (entity_type.getBukkitEntityType() == EntityType.PAINTING) {
+            entity = entity_type.spawnNewEntity(location, mechanisms, entityScript, reason);
+            location = location.clone();
+            Painting painting = (Painting) entity;
+            Art art = null;
+            BlockFace face = null;
+            try {
+                for (Mechanism mech : mechanisms) {
+                    if (mech.getName().equals("painting")) {
+                        art = Art.valueOf(mech.getValue().asString().toUpperCase());
+                    }
+                    else if (mech.getName().equals("rotation")) {
+                        face = BlockFace.valueOf(mech.getValue().asString().toUpperCase());
+                    }
+                }
+            }
+            catch (Exception ex) {
+                // ignore
+            }
+            if (art != null && face != null) { // Paintings are the worst
+                if (art.getBlockHeight() % 2 == 0) {
+                    location.subtract(0, 1, 0);
+                }
+                if (art.getBlockWidth() % 2 == 0) {
+                    if (face == BlockFace.WEST) {
+                        location.subtract(0, 0, 1);
+                    }
+                    else if (face == BlockFace.SOUTH) {
+                        location.subtract(1, 0, 0);
+                    }
+                }
+                painting.teleport(location);
+                painting.setFacingDirection(face, true);
+                painting.setArt(art, true);
+            }
         }
-        else if (entity == null) {
-            Debug.echoError("Cannot respawn a null EntityTag!");
+        else {
+            entity = entity_type.spawnNewEntity(location, mechanisms, entityScript, reason);
         }
-
+        if (entity == null) {
+            if (!new LocationTag(location).isChunkLoaded()) {
+                Debug.echoError("Error spawning entity - tried to spawn in an unloaded chunk.");
+            }
+            else {
+                Debug.echoError("Error spawning entity - bad entity type, or blocked by another plugin?");
+            }
+            return;
+        }
+        uuid = entity.getUniqueId();
+        if (entityScript != null) {
+            EntityScriptHelper.setEntityScript(entity, entityScript);
+        }
+        for (Mechanism mechanism : mechanisms) {
+            safeAdjust(new Mechanism(mechanism.getName(), mechanism.value, mechanism.context));
+        }
+        mechanisms.clear();
     }
 
     public boolean isSpawnedOrValidForTag() {
@@ -907,12 +936,12 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             }
             return isValid() || rememberedEntities.containsKey(uuid);
         }
-        NMSHandler.getChunkHelper().changeChunkServerThread(entity.getWorld());
+        NMSHandler.chunkHelper.changeChunkServerThread(entity.getWorld());
         try {
             return isValid() || rememberedEntities.containsKey(entity.getUniqueId());
         }
         finally {
-            NMSHandler.getChunkHelper().restoreServerThread(entity.getWorld());
+            NMSHandler.chunkHelper.restoreServerThread(entity.getWorld());
         }
     }
 
@@ -930,17 +959,41 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     }
 
     public void teleport(Location location) {
+        teleport(location, TeleportCause.PLUGIN);
+    }
+
+    public void teleport(Location location, TeleportCause cause) {
+        if (location.getWorld() == null) {
+            Debug.echoError("Cannot teleport or spawn entity at location '" + new LocationTag(location) + "' because it is missing a world.");
+            return;
+        }
         if (isCitizensNPC()) {
-            getDenizenNPC().getCitizen().teleport(location, TeleportCause.PLUGIN);
+            if (getDenizenNPC().getCitizen().isSpawned()) {
+                getDenizenNPC().getCitizen().teleport(location, cause);
+            }
+            else {
+                if (getDenizenNPC().getCitizen().spawn(location)) {
+                    entity = getDenizenNPC().getCitizen().getEntity();
+                    uuid = getDenizenNPC().getCitizen().getEntity().getUniqueId();
+                }
+                else {
+                    if (new LocationTag(location).isChunkLoaded()) {
+                        Debug.echoError("Error spawning NPC - tried to spawn in an unloaded chunk.");
+                    }
+                    else {
+                        Debug.echoError("Error spawning NPC - blocked by plugin");
+                    }
+                }
+            }
         }
         else if (isFake) {
-            NMSHandler.getEntityHelper().snapPositionTo(entity, location.toVector());
-            NMSHandler.getEntityHelper().look(entity, location.getYaw(), location.getPitch());
+            NMSHandler.entityHelper.snapPositionTo(entity, location.toVector());
+            NMSHandler.entityHelper.look(entity, location.getYaw(), location.getPitch());
         }
         else {
-            getBukkitEntity().teleport(location);
+            getBukkitEntity().teleport(location, cause);
             if (entity.getWorld().equals(location.getWorld())) { // Force the teleport through (for things like mounts)
-                NMSHandler.getEntityHelper().teleport(entity, location);
+                NMSHandler.entityHelper.teleport(entity, location);
             }
         }
     }
@@ -956,8 +1009,8 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         if (!isSpawned()) {
             return;
         }
-        if (entity instanceof Creature) {
-            NMSHandler.getEntityHelper().setTarget((Creature) entity, target);
+        if (entity instanceof Mob) {
+            ((Mob) entity).setTarget(target);
         }
         else if (entity instanceof ShulkerBullet) {
             ((ShulkerBullet) entity).setTarget(target);
@@ -969,28 +1022,6 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
     public void setEntity(Entity entity) {
         this.entity = entity;
-    }
-
-    // Used to store some information about a livingEntity while it's despawned
-    private class DespawnedEntity {
-
-        Double health = null;
-        Location location = null;
-        ItemStack[] equipment = null;
-        String custom_script = null;
-
-        public DespawnedEntity(EntityTag entity) {
-            if (entity != null) {
-                // Save some important info to rebuild the entity
-                health = entity.getLivingEntity().getHealth();
-                location = entity.getLivingEntity().getLocation();
-                equipment = entity.getLivingEntity().getEquipment().getArmorContents();
-
-                if (CustomNBT.hasCustomNBT(entity.getLivingEntity(), "denizen-script-id")) {
-                    custom_script = CustomNBT.getCustomNBT(entity.getLivingEntity(), "denizen-script-id");
-                }
-            }
-        }
     }
 
     public int comparesTo(EntityTag entity) {
@@ -1047,11 +1078,6 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     private String prefix = "Entity";
 
     @Override
-    public String getObjectType() {
-        return "Entity";
-    }
-
-    @Override
     public String getPrefix() {
         return prefix;
     }
@@ -1072,13 +1098,13 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 return getDenizenPlayer().debuggable();
             }
             else if (isFake) {
-                return "e@FAKE: " + getUUID() + "<GR>(FAKE-" + entity.getType().name() + "/" + entity.getName() + ")";
+                return "<LG>e@<Y>FAKE: " + getUUID() + "<GR>(FAKE-" + entity.getType().name() + "/" + entity.getName() + ")";
             }
             else if (isSpawnedOrValidForTag()) {
-                return "e@ " + getUUID() + "<GR>(" + entity.getType().name() + "/" + entity.getName() + ")";
+                return "<LG>e@<Y> " + getUUID() + "<GR>(" + entity.getType().name() + "/" + entity.getName() + ")";
             }
         }
-        return identify();
+        return identify(this::getWaitingMechanismsDebuggable);
     }
 
     @Override
@@ -1099,6 +1125,10 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
 
     @Override
     public String identify() {
+        return identify(this::getWaitingMechanismsString);
+    }
+
+    public String identify(Supplier<String> mechsHandler) {
         if (npc != null) {
             return npc.identify();
         }
@@ -1110,25 +1140,36 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 return getDenizenPlayer().identify();
             }
             if (entityScript != null) {
-                return "e@" + getUUID() + "/" + entityScript + getWaitingMechanismsString();
+                return "e@" + getUUID() + "/" + entityScript;
             }
             if (entity_type != null) {
-                return "e@" + getUUID() + "/" + entity_type.getLowercaseName() + getWaitingMechanismsString();
+                return "e@" + getUUID() + "/" + entity_type.getLowercaseName();
             }
         }
         if (entityScript != null) {
-            return "e@" + entityScript + getWaitingMechanismsString();
+            return "e@" + entityScript + mechsHandler.get();
         }
         if (entity_type != null) {
-            return "e@" + entity_type.getLowercaseName() + getWaitingMechanismsString();
+            return "e@" + entity_type.getLowercaseName() + mechsHandler.get();
         }
         return "null";
+    }
+
+    public String getWaitingMechanismsDebuggable() {
+        StringBuilder properties = new StringBuilder();
+        for (Mechanism mechanism : mechanisms) {
+            properties.append(mechanism.getName()).append(" <LG>=<Y> ").append(mechanism.getValue().asString()).append("<LG>; <Y>");
+        }
+        if (properties.length() > 0) {
+            return "<LG>[<Y>" + properties.substring(0, properties.length() - "; <Y>".length()) + " <LG>]";
+        }
+        return "";
     }
 
     public String getWaitingMechanismsString() {
         StringBuilder properties = new StringBuilder();
         for (Mechanism mechanism : mechanisms) {
-            properties.append(mechanism.getName()).append("=").append(PropertyParser.escapePropertyValue(mechanism.getValue().asString())).append(";");
+            properties.append(PropertyParser.escapePropertyKey(mechanism.getName())).append("=").append(PropertyParser.escapePropertyValue(mechanism.getValue().asString())).append(";");
         }
         if (properties.length() > 0) {
             return "[" + properties.substring(0, properties.length() - 1) + "]";
@@ -1159,13 +1200,18 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
     }
 
     @Override
+    public Object getJavaObject() {
+        return entity == null ? getBukkitEntityType() : entity;
+    }
+
+    @Override
     public boolean isUnique() {
-        return entity != null || uuid != null || isFake;
+        return entity != null || uuid != null || isFake || npc != null;
     }
 
     public LocationTag doLocationTag(Attribute attribute) {
         if (attribute.startsWith("cursor_on", 2)) {
-            Deprecations.entityLocationCursorOnTag.warn(attribute.context);
+            BukkitImplDeprecations.entityLocationCursorOnTag.warn(attribute.context);
             int range = attribute.getIntContext(2);
             if (range < 1) {
                 range = 50;
@@ -1185,14 +1231,14 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         }
 
         if (attribute.startsWith("standing_on", 2)) {
-            Deprecations.entityStandingOn.warn(attribute.context);
+            BukkitImplDeprecations.entityStandingOn.warn(attribute.context);
             attribute.fulfill(1);
             return new LocationTag(getBukkitEntity().getLocation().clone().add(0, -0.5f, 0));
         }
         return new LocationTag(getBukkitEntity().getLocation());
     }
 
-    public static void registerTags() {
+    public static void register() {
 
         AbstractFlagTracker.registerFlagHandlers(tagProcessor);
         PropertyParser.registerPropertyTagHandlers(EntityTag.class, tagProcessor);
@@ -1222,6 +1268,20 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         tagProcessor.registerTag(ElementTag.class, "translated_name", (attribute, object) -> {
             String key = object.getEntityType().getBukkitEntityType().getKey().getKey();
             return new ElementTag(ChatColor.COLOR_CHAR + "[translate=entity.minecraft." + key + "]");
+        });
+
+        // <--[tag]
+        // @attribute <EntityTag.vanilla_tags>
+        // @returns ListTag
+        // @description
+        // Returns a list of vanilla tags that apply to this entity type. See also <@link url https://minecraft.wiki/w/Tag>.
+        // -->
+        tagProcessor.registerTag(ListTag.class, "vanilla_tags", (attribute, object) -> {
+            HashSet<String> tags = VanillaTagHelper.tagsByEntity.get(object.getBukkitEntityType());
+            if (tags == null) {
+                return new ListTag();
+            }
+            return new ListTag(tags);
         });
 
         // <--[tag]
@@ -1269,11 +1329,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (object.entityScript == null) {
                 return null;
             }
-            ScriptTag tag = new ScriptTag(object.entityScript);
-            if (tag.isValid()) {
-                return tag;
-            }
-            return null;
+            return ScriptTag.valueOf(object.entityScript, CoreUtilities.noDebugContext);
         });
 
         // <--[tag]
@@ -1285,7 +1341,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Use ".script.name" instead.
         // -->
         tagProcessor.registerTag(ElementTag.class, "scriptname", (attribute, object) -> {
-            Deprecations.hasScriptTags.warn(attribute.context);
+            BukkitImplDeprecations.hasScriptTags.warn(attribute.context);
             if (object.entityScript == null) {
                 return null;
             }
@@ -1295,16 +1351,6 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         /////////////////////
         //   IDENTIFICATION ATTRIBUTES
         /////////////////
-
-        registerSpawnedOnlyTag(ObjectTag.class, "custom_id", (attribute, object) -> {
-            Deprecations.entityCustomIdTag.warn(attribute.context);
-            if (CustomNBT.hasCustomNBT(object.getLivingEntity(), "denizen-script-id")) {
-                return new ScriptTag(CustomNBT.getCustomNBT(object.getLivingEntity(), "denizen-script-id"));
-            }
-            else {
-                return new ElementTag(object.getBukkitEntity().getType().name());
-            }
-        });
 
         // <--[tag]
         // @attribute <EntityTag.name>
@@ -1317,6 +1363,23 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "name", (attribute, object) -> {
             return new ElementTag(object.getName(), true);
+        });
+
+        // <--[tag]
+        // @attribute <EntityTag.monster_type>
+        // @returns ElementTag
+        // @group data
+        // @description
+        // Returns the entity's monster type, if it is a monster.
+        // This is sometimes called 'mob type' or 'entity category', but it is only applicable to enemy monsters - this is used for enchanted damage bonuses, see <@link tag EnchantmentTag.damage_bonus>.
+        // This can be any of undead/water/illager/arthropod, see <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/EntityCategory.html>.
+        // -->
+        registerSpawnedOnlyTag(ElementTag.class, "monster_type", (attribute, object) -> {
+            EntityCategory category = object.getLivingEntity().getCategory();
+            if (category == EntityCategory.NONE) {
+                return null;
+            }
+            return new ElementTag(category);
         });
 
         /////////////////////
@@ -1334,8 +1397,8 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (object.getLivingEntity() instanceof AbstractHorse) {
                 return new ItemTag(((AbstractHorse) object.getLivingEntity()).getInventory().getSaddle());
             }
-            else if (object.getLivingEntity() instanceof Pig) {
-                return new ItemTag(((Pig) object.getLivingEntity()).hasSaddle() ? Material.SADDLE : Material.AIR);
+            else if (object.getLivingEntity() instanceof Steerable) {
+                return new ItemTag(((Steerable) object.getLivingEntity()).hasSaddle() ? Material.SADDLE : Material.AIR);
             }
             return null;
         });
@@ -1365,8 +1428,8 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (object.getLivingEntity() instanceof AbstractHorse) {
                 return new ElementTag(((AbstractHorse) object.getLivingEntity()).getInventory().getSaddle().getType() == Material.SADDLE);
             }
-            else if (object.getLivingEntity() instanceof Pig) {
-                return new ElementTag(((Pig) object.getLivingEntity()).hasSaddle());
+            else if (object.getLivingEntity() instanceof Steerable) {
+                return new ElementTag(((Steerable) object.getLivingEntity()).hasSaddle());
             }
             return null;
         });
@@ -1402,37 +1465,35 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         /////////////////
 
         // <--[tag]
+        // @attribute <EntityTag.trace_framed_map>
+        // @returns MapTag
+        // @group location
+        // @description
+        // Returns information at the framed item of a filled map that an entity is currently looking at, if any.
+        // The map contains key "x" and "y" as coordinates in the range of 0 to 128. These will automatically correct for rotation, if the framed item is rotated.
+        // The map contains "entity" as the EntityTag of the item frame.
+        // The map also contains "map" as the ID of the targeted map.
+        // Returns null if the entity is not looking at an item_frame holding a filled_map.
+        // -->
+        registerSpawnedOnlyTag(MapTag.class, "trace_framed_map", (attribute, object) -> {
+            return NMSHandler.entityHelper.mapTrace(object.getLivingEntity());
+        });
+
+        // <--[tag]
         // @attribute <EntityTag.map_trace>
         // @returns LocationTag
         // @group location
+        // @deprecated use EntityTag.trace_framed_map
         // @description
-        // Returns a 2D location indicating where on the map the entity's looking at.
-        // Each coordinate is in the range of 0 to 128.
+        // Deprecated in favor of <@link tag EntityTag.trace_framed_map>
         // -->
         registerSpawnedOnlyTag(LocationTag.class, "map_trace", (attribute, object) -> {
-            EntityHelper.MapTraceResult mtr = NMSHandler.getEntityHelper().mapTrace(object.getLivingEntity(), 200);
-            if (mtr != null) {
-                double x = 0;
-                double y;
-                double basex = mtr.hitLocation.getX() - Math.floor(mtr.hitLocation.getX());
-                double basey = mtr.hitLocation.getY() - Math.floor(mtr.hitLocation.getY());
-                double basez = mtr.hitLocation.getZ() - Math.floor(mtr.hitLocation.getZ());
-                if (mtr.angle == BlockFace.NORTH) {
-                    x = 128f - (basex * 128f);
-                }
-                else if (mtr.angle == BlockFace.SOUTH) {
-                    x = basex * 128f;
-                }
-                else if (mtr.angle == BlockFace.WEST) {
-                    x = basez * 128f;
-                }
-                else if (mtr.angle == BlockFace.EAST) {
-                    x = 128f - (basez * 128f);
-                }
-                y = 128f - (basey * 128f);
-                return new LocationTag(null, Math.round(x), Math.round(y));
+            BukkitImplDeprecations.entityMapTraceTag.warn(attribute.context);
+            MapTag result = NMSHandler.entityHelper.mapTrace(object.getLivingEntity());
+            if (result == null) {
+                return null;
             }
-            return null;
+            return new LocationTag(null, result.getElement("x").asDouble(), result.getElement("y").asDouble());
         });
 
         // <--[tag]
@@ -1484,9 +1545,9 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @description
         // Returns the location of the solid block the entity is looking at.
         // Optionally, specify a maximum range to find the location from (defaults to 200).
-        // This uses logic equivalent to <@link tag LocationTag.precise_cursor_on_block[(range)]>.
         // Note that this will return null if there is no solid block in range.
         // This only uses solid blocks, ie it ignores passable blocks like tall-grass. Use <@link tag EntityTag.cursor_on> to include passable blocks.
+        // Equivalent to <EntityTag.eye_location.ray_trace[return=block]>
         // -->
         registerSpawnedOnlyTag(LocationTag.class, "cursor_on_solid", (attribute, object) -> {
             double range = attribute.getDoubleParam();
@@ -1509,7 +1570,8 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Optionally, specify a maximum range to find the location from (defaults to 200).
         // This uses logic equivalent to <@link tag LocationTag.precise_cursor_on_block[(range)]>.
         // Note that this will return null if there is no block in range.
-        // This uses all blocks, ie it includes passable blocks like tall-grass and water. Use <@link tag EntityTag.cursor_on_solid> to include passable blocks.
+        // This uses all blocks, ie it includes passable blocks like tall-grass and water. Use <@link tag EntityTag.cursor_on_solid> to exclude passable blocks.
+        // Equivalent to <EntityTag.eye_location.ray_trace[return=block;fluids=true;nonsolids=true]>
         // -->
         registerSpawnedOnlyTag(LocationTag.class, "cursor_on", (attribute, object) -> {
             double range = attribute.getDoubleParam();
@@ -1548,7 +1610,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (!object.getBukkitEntity().isOnGround()) {
                 return null;
             }
-            Location loc = object.getBukkitEntity().getLocation().clone().subtract(0, 0.05f, 0);
+            Location loc = object.getBukkitEntity().getLocation().clone().subtract(0, 0.05, 0);
             return new LocationTag(loc.getWorld(), loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
         });
 
@@ -1557,10 +1619,10 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @returns ElementTag(Decimal)
         // @group location
         // @description
-        // Returns the entity's body yaw (separate from head yaw).
+        // Returns a living entity's body yaw (separate from head yaw).
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "body_yaw", (attribute, object) -> {
-            return new ElementTag(NMSHandler.getEntityHelper().getBaseYaw(object.getBukkitEntity()));
+            return new ElementTag(NMSHandler.entityHelper.getBaseYaw(object.getLivingEntity()));
         });
 
         // <--[tag]
@@ -1709,7 +1771,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @mechanism EntityTag.shooter
         // @synonyms EntityTag.arrow_firer,EntityTag.fishhook_shooter,EntityTag.snowball_thrower
         // @description
-        // Returns the projectile's shooter, if any.
+        // Returns the projectile's shooter or TNT's priming source, if any.
         // -->
         registerSpawnedOnlyTag(EntityFormObject.class, "shooter", (attribute, object) -> {
             EntityTag shooter = object.getShooter();
@@ -1733,7 +1795,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (!(object.getLivingEntity() instanceof HumanEntity)) {
                 return null;
             }
-            return new EntityTag(((HumanEntity) object.getLivingEntity()).getShoulderEntityLeft()).getDenizenObject();
+            Entity e = ((HumanEntity) object.getLivingEntity()).getShoulderEntityLeft();
+            if (e == null) {
+                return null;
+            }
+            return new EntityTag(e).getDenizenObject();
         });
 
         // <--[tag]
@@ -1750,7 +1816,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (!(object.getLivingEntity() instanceof HumanEntity)) {
                 return null;
             }
-            return new EntityTag(((HumanEntity) object.getLivingEntity()).getShoulderEntityRight()).getDenizenObject();
+            Entity e = ((HumanEntity) object.getLivingEntity()).getShoulderEntityRight();
+            if (e == null) {
+                return null;
+            }
+            return new EntityTag(e).getDenizenObject();
         });
 
         // <--[tag]
@@ -1788,7 +1858,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @mechanism EntityTag.breed
         // @group attributes
         // @description
-        // Returns whether the animal entity is trying to with another of its kind.
+        // Returns whether the animal entity is trying to mate with another of its kind.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "breeding", (attribute, object) -> {
             if (!(object.getLivingEntity() instanceof Animals)) {
@@ -1862,6 +1932,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @group attributes
         // @description
         // Returns whether the entity is supported by a block.
+        // This can be inaccurate for players.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "is_on_ground", (attribute, object) -> {
             return new ElementTag(object.getBukkitEntity().isOnGround());
@@ -1871,12 +1942,33 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @attribute <EntityTag.is_persistent>
         // @returns ElementTag(Boolean)
         // @group attributes
+        // @mechanism EntityTag.persistent
         // @description
-        // Returns whether the entity will not be removed completely when far away from players.
+        // Returns whether the mob-entity will not be removed completely when far away from players.
+        // This is Bukkit's "getRemoveWhenFarAway" which is Mojang's "isPersistenceRequired".
+        // In many cases, <@link tag EntityTag.force_no_persist> may be preferred.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "is_persistent", (attribute, object) -> {
             return new ElementTag(object.isLivingEntity() && !object.getLivingEntity().getRemoveWhenFarAway());
         }, "persistent");
+
+        // <--[tag]
+        // @attribute <EntityTag.force_no_persist>
+        // @returns ElementTag(Boolean)
+        // @group attributes
+        // @mechanism EntityTag.force_no_persist
+        // @description
+        // Returns 'true' if the entity is forced to not save to file when chunks unload.
+        // Returns 'false' if not forced to not-save (ie is allowed to save). May return 'false' even for entities that don't save for other reasons.
+        // This is a custom value added in Bukkit to block saving, which is not the same as Mojang's similar option under <@link tag EntityTag.is_persistent>.
+        // -->
+        registerSpawnedOnlyTag(ElementTag.class, "force_no_persist", (attribute, object) -> {
+            return new ElementTag(!object.getBukkitEntity().isPersistent());
+        });
+        registerSpawnedOnlyTag(ElementTag.class, "forced_no_persist", (attribute, object) -> {
+            BukkitImplDeprecations.forcedNoPersist.warn(attribute.context);
+            return new ElementTag(object.getBukkitEntity().isPersistent());
+        });
 
         // <--[tag]
         // @attribute <EntityTag.is_collidable>
@@ -1889,7 +1981,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "is_collidable", (attribute, object) -> {
             if (object.isCitizensNPC()) {
-                return new ElementTag(object.getDenizenNPC().getCitizen().data().get(NPC.COLLIDABLE_METADATA, true));
+                return new ElementTag(object.getDenizenNPC().getCitizen().data().get(NPC.Metadata.COLLIDABLE, true));
             }
             return new ElementTag(object.getLivingEntity().isCollidable());
         });
@@ -1945,7 +2037,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 if (object.getBukkitEntity().getLastDamageCause() == null) {
                     return null;
                 }
-                return new ElementTag(object.getBukkitEntity().getLastDamageCause().getCause().name());
+                return new ElementTag(object.getBukkitEntity().getLastDamageCause().getCause());
             }
             // <--[tag]
             // @attribute <EntityTag.last_damage.duration>
@@ -1982,7 +2074,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the living entity's absorption health.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "absorption_health", (attribute, object) -> {
-            return new ElementTag(NMSHandler.getEntityHelper().getAbsorption(object.getLivingEntity()));
+            return new ElementTag(object.getLivingEntity().getAbsorptionAmount());
         });
 
         // <--[tag]
@@ -2008,26 +2100,15 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerSpawnedOnlyTag(DurationTag.class, "oxygen", (attribute, object) -> {
             if (attribute.startsWith("max", 2)) {
-                Deprecations.entityMaxOxygenTag.warn(attribute.context);
+                BukkitImplDeprecations.entityMaxOxygenTag.warn(attribute.context);
                 attribute.fulfill(1);
                 return new DurationTag((long) object.getLivingEntity().getMaximumAir());
             }
             return new DurationTag((long) object.getLivingEntity().getRemainingAir());
         });
 
-        // <--[tag]
-        // @attribute <EntityTag.persistent>
-        // @returns ElementTag(Boolean)
-        // @group attributes
-        // @mechanism EntityTag.persistent
-        // @description
-        // Returns whether the entity should be be saved to file when chunks unload (otherwise, the entity is gone entirely if despawned for any reason).
-        // -->
-        registerSpawnedOnlyTag(ElementTag.class, "persistent", (attribute, object) -> {
-            return new ElementTag(!object.getLivingEntity().getRemoveWhenFarAway());
-        });
         registerSpawnedOnlyTag(ElementTag.class, "remove_when_far", (attribute, object) -> {
-            Deprecations.entityRemoveWhenFar.warn(attribute.context);
+            BukkitImplDeprecations.entityRemoveWhenFar.warn(attribute.context);
             return new ElementTag(object.getLivingEntity().getRemoveWhenFarAway());
         });
 
@@ -2079,7 +2160,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (attribute.startsWith("type", 2) && attribute.hasContext(2)) {
                 attribute.fulfill(1);
                 String matcher = attribute.getParam();
-                requirement = (e) -> !e.equals(object.getBukkitEntity()) && BukkitScriptEvent.tryEntity(new EntityTag(e), matcher);
+                requirement = (e) -> !e.equals(object.getBukkitEntity()) && new EntityTag(e).tryAdvancedMatcher(matcher);
             }
             else {
                 requirement = (e) -> !e.equals(object.getBukkitEntity());
@@ -2115,7 +2196,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (attribute.startsWith("type", 2) && attribute.hasContext(2)) {
                 attribute.fulfill(1);
                 String matcher = attribute.getParam();
-                requirement = (e) -> !e.equals(object.getBukkitEntity()) && BukkitScriptEvent.tryEntity(new EntityTag(e), matcher);
+                requirement = (e) -> !e.equals(object.getBukkitEntity()) && new EntityTag(e).tryAdvancedMatcher(matcher);
             }
             else {
                 requirement = (e) -> !e.equals(object.getBukkitEntity());
@@ -2159,13 +2240,10 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @returns ElementTag(Boolean)
         // @group attributes
         // @description
-        // Returns whether or not the arrow/trident entity is in a block.
+        // Returns whether the arrow/trident entity is in a block.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "is_in_block", (attribute, object) -> {
-            if (object.getBukkitEntity() instanceof Arrow) {
-                return new ElementTag(((Arrow) object.getBukkitEntity()).isInBlock());
-            }
-            return null;
+            return object.getBukkitEntity() instanceof AbstractArrow abstractArrow ? new ElementTag(abstractArrow.isInBlock()) : null;
         });
 
         // <--[tag]
@@ -2176,14 +2254,14 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the location of the block that the arrow/trident or hanging entity is attached to.
         // -->
         registerSpawnedOnlyTag(LocationTag.class, "attached_block", (attribute, object) -> {
-            if (object.getBukkitEntity() instanceof Arrow) {
-                Block attachedBlock = ((Arrow) object.getBukkitEntity()).getAttachedBlock();
+            if (object.getBukkitEntity() instanceof AbstractArrow abstractArrow) {
+                Block attachedBlock = abstractArrow.getAttachedBlock();
                 if (attachedBlock != null) {
                     return new LocationTag(attachedBlock.getLocation());
                 }
             }
-            else if (object.getBukkitEntity() instanceof Hanging) {
-                Vector dir = ((Hanging) object.getBukkitEntity()).getAttachedFace().getDirection();
+            else if (object.getBukkitEntity() instanceof Hanging hanging) {
+                Vector dir = hanging.getAttachedFace().getDirection();
                 return new LocationTag(object.getLocation().clone().add(dir.multiply(0.5))).getBlockLocation();
             }
             return null;
@@ -2211,7 +2289,19 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "swimming", (attribute, object) -> {
             return new ElementTag(object.getLivingEntity().isSwimming());
+        });
 
+        // <--[tag]
+        // @attribute <EntityTag.visual_pose>
+        // @returns ElementTag
+        // @mechanism EntityTag.visual_pose
+        // @group attributes
+        // @description
+        // Returns the name of the entity's current visual pose.
+        // See <@link url https://hub.spigotmc.org/javadocs/bukkit/org/bukkit/entity/Pose.html>
+        // -->
+        registerSpawnedOnlyTag(ElementTag.class, "visual_pose", (attribute, object) -> {
+            return new ElementTag(object.getBukkitEntity().getPose());
         });
 
         // <--[tag]
@@ -2239,10 +2329,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Not to be confused with the idea of being alive - see <@link tag EntityTag.is_spawned>.
         // -->
         tagProcessor.registerTag(ElementTag.class, "is_living", (attribute, object) -> {
-            if (object.getBukkitEntity() == null && object.entity_type != null) {
-                return new ElementTag(object.entity_type.getBukkitEntityType().isAlive());
-            }
-            return new ElementTag(object.isLivingEntity());
+            return new ElementTag(object.isLivingEntityType());
         });
 
         // <--[tag]
@@ -2253,10 +2340,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns whether the entity type is a hostile monster.
         // -->
         tagProcessor.registerTag(ElementTag.class, "is_monster", (attribute, object) -> {
-            if (object.getBukkitEntity() == null && object.entity_type != null) {
-                return new ElementTag(Monster.class.isAssignableFrom(object.entity_type.getBukkitEntityType().getEntityClass()));
-            }
-            return new ElementTag(object.getBukkitEntity() instanceof Monster);
+            return new ElementTag(object.isMonsterType());
         });
 
         // <--[tag]
@@ -2267,11 +2351,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns whether the entity type is a mob (Not a player or NPC).
         // -->
         tagProcessor.registerTag(ElementTag.class, "is_mob", (attribute, object) -> {
-            if (object.getBukkitEntity() == null && object.entity_type != null) {
-                EntityType type = object.entity_type.getBukkitEntityType();
-                return new ElementTag(Mob.class.isAssignableFrom(type.getEntityClass()));
-            }
-            return new ElementTag(!object.isNPC() && object.getBukkitEntity() instanceof Mob);
+            return new ElementTag(object.isMobType());
         });
 
         // <--[tag]
@@ -2350,8 +2430,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @group properties
         // @description
         // Returns whether the entity can be colored.
-        // If this returns true, it will enable access to:
-        // <@link mechanism EntityTag.color> and <@link tag EntityTag.color>
+        // If this returns true, it will enable access to <@link property EntityTag.color>.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "colorable", (attribute, object) -> {
             return new ElementTag(EntityColor.describes(object));
@@ -2400,7 +2479,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (!(object.getBukkitEntity() instanceof EnderDragon)) {
                 return null;
             }
-            return new ElementTag(((EnderDragon) object.getLivingEntity()).getPhase().name());
+            return new ElementTag(((EnderDragon) object.getLivingEntity()).getPhase());
         });
 
         // <--[tag]
@@ -2419,7 +2498,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             if (attribute.hasParam()) {
                 target = attribute.paramAsType(EntityTag.class).getBukkitEntity();
             }
-            return new ElementTag(NMSHandler.getEntityHelper().getDamageTo(object.getLivingEntity(), target));
+            return new ElementTag(NMSHandler.entityHelper.getDamageTo(object.getLivingEntity(), target));
         });
 
         // <--[tag]
@@ -2432,7 +2511,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // CAPE, HAT, JACKET, LEFT_PANTS, LEFT_SLEEVE, RIGHT_PANTS, or RIGHT_SLEEVE.
         // -->
         registerSpawnedOnlyTag(ListTag.class, "skin_layers", (attribute, object) -> {
-            byte flags = NMSHandler.getPlayerHelper().getSkinLayers((Player) object.getBukkitEntity());
+            byte flags = NMSHandler.playerHelper.getSkinLayers((Player) object.getBukkitEntity());
             ListTag result = new ListTag();
             for (PlayerHelper.SkinLayer layer : PlayerHelper.SkinLayer.values()) {
                 if ((flags & layer.flag) != 0) {
@@ -2551,25 +2630,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         });
 
         // <--[tag]
-        // @attribute <EntityTag.advanced_matches[<matcher>]>
-        // @returns ElementTag(Boolean)
-        // @group element checking
-        // @description
-        // Returns whether the entity matches some matcher text, using the system behind <@link language Advanced Script Event Matching>.
-        // -->
-        tagProcessor.registerTag(ElementTag.class, "advanced_matches", (attribute, object) -> {
-            if (!attribute.hasParam()) {
-                return null;
-            }
-            return new ElementTag(BukkitScriptEvent.tryEntity(object, attribute.getParam()));
-        });
-
-        // <--[tag]
         // @attribute <EntityTag.has_equipped[<item-matcher>]>
         // @returns ElementTag(Boolean)
         // @group element checking
         // @description
-        // Returns whether the entity has any armor equipment item that matches the given item matcher, using the system behind <@link language Advanced Script Event Matching>.
+        // Returns whether the entity has any armor equipment item that matches the given item matcher, using the system behind <@link language Advanced Object Matching>.
         // For example, has_equipped[diamond_*] will return true if the entity is wearing at least one piece of diamond armor.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "has_equipped", (attribute, object) -> {
@@ -2581,7 +2646,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             }
             String matcher = attribute.getParam();
             for (ItemStack item : object.getLivingEntity().getEquipment().getArmorContents()) {
-                if (BukkitScriptEvent.tryItem(new ItemTag(item), matcher)) {
+                if (new ItemTag(item).tryAdvancedMatcher(matcher)) {
                     return new ElementTag(true);
                 }
             }
@@ -2591,12 +2656,13 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // <--[tag]
         // @attribute <EntityTag.loot_table_id>
         // @returns ElementTag
+        // @mechanism EntityTag.loot_table_id
         // @description
         // Returns an element indicating the minecraft key for the loot-table for the entity (if any).
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "loot_table_id", (attribute, object) -> {
-            if (object.getBukkitEntity() instanceof Lootable) {
-                LootTable table = ((Lootable) object.getBukkitEntity()).getLootTable();
+            if (object.getBukkitEntity() instanceof Lootable lootable) {
+                LootTable table = lootable.getLootTable();
                 if (table != null) {
                     return new ElementTag(table.getKey().toString());
                 }
@@ -2611,11 +2677,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the current state of the fish hook, as any of: UNHOOKED, HOOKED_ENTITY, BOBBING (unhooked means the fishing hook is in the air or on ground).
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "fish_hook_state", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof FishHook)) {
+            if (!(object.getBukkitEntity() instanceof FishHook fishHook)) {
                 attribute.echoError("EntityTag.fish_hook_state is only valid for fish hooks.");
                 return null;
             }
-            return new ElementTag(((FishHook) object.getBukkitEntity()).getState().name());
+            return new ElementTag(fishHook.getState());
         });
 
         // <--[tag]
@@ -2626,11 +2692,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the remaining time before this fish hook will lure a fish.
         // -->
         registerSpawnedOnlyTag(DurationTag.class, "fish_hook_lure_time", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof FishHook)) {
+            if (!(object.getBukkitEntity() instanceof FishHook fishHook)) {
                 attribute.echoError("EntityTag.fish_hook_lure_time is only valid for fish hooks.");
                 return null;
             }
-            return new DurationTag((long) NMSHandler.getFishingHelper().getLureTime((FishHook) object.getBukkitEntity()));
+            return new DurationTag((long) NMSHandler.fishingHelper.getLureTime(fishHook));
         });
 
         // <--[tag]
@@ -2641,11 +2707,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the minimum possible time before this fish hook can lure a fish.
         // -->
         registerSpawnedOnlyTag(DurationTag.class, "fish_hook_min_lure_time", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof FishHook)) {
+            if (!(object.getBukkitEntity() instanceof FishHook fishHook)) {
                 attribute.echoError("EntityTag.fish_hook_min_lure_time is only valid for fish hooks.");
                 return null;
             }
-            return new DurationTag((long) ((FishHook) object.getBukkitEntity()).getMinWaitTime());
+            return new DurationTag((long) fishHook.getMinWaitTime());
         });
 
         // <--[tag]
@@ -2656,11 +2722,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the maximum possible time before this fish hook will lure a fish.
         // -->
         registerSpawnedOnlyTag(DurationTag.class, "fish_hook_max_lure_time", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof FishHook)) {
+            if (!(object.getBukkitEntity() instanceof FishHook fishHook)) {
                 attribute.echoError("EntityTag.fish_hook_max_lure_time is only valid for fish hooks.");
                 return null;
             }
-            return new DurationTag((long) ((FishHook) object.getBukkitEntity()).getMaxWaitTime());
+            return new DurationTag((long) fishHook.getMaxWaitTime());
         });
 
         // <--[tag]
@@ -2671,11 +2737,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the entity this fish hook is attached to.
         // -->
         registerSpawnedOnlyTag(EntityTag.class, "fish_hook_hooked_entity", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof FishHook)) {
+            if (!(object.getBukkitEntity() instanceof FishHook fishHook)) {
                 attribute.echoError("EntityTag.fish_hook_hooked_entity is only valid for fish hooks.");
                 return null;
             }
-            Entity entity = ((FishHook) object.getBukkitEntity()).getHookedEntity();
+            Entity entity = fishHook.getHookedEntity();
             return entity != null ? new EntityTag(entity) : null;
         });
 
@@ -2688,11 +2754,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Every level of lure enchantment reduces lure time by 5 seconds.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "fish_hook_apply_lure", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof FishHook)) {
+            if (!(object.getBukkitEntity() instanceof FishHook fishHook)) {
                 attribute.echoError("EntityTag.fish_hook_apply_lure is only valid for fish hooks.");
                 return null;
             }
-            return new ElementTag(((FishHook) object.getBukkitEntity()).getApplyLure());
+            return new ElementTag(fishHook.getApplyLure());
         });
 
         // <--[tag]
@@ -2700,14 +2766,14 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @returns ElementTag(Boolean)
         // @description
         // Returns whether this fish hook is in open water. Fish hooks in open water can catch treasure.
-        // See <@link url https://minecraft.fandom.com/wiki/Fishing> for more info.
+        // See <@link url https://minecraft.wiki/w/Fishing> for more info.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "fish_hook_in_open_water", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof FishHook)) {
+            if (!(object.getBukkitEntity() instanceof FishHook fishHook)) {
                 attribute.echoError("EntityTag.fish_hook_in_open_water is only valid for fish hooks.");
                 return null;
             }
-            return new ElementTag(((FishHook) object.getBukkitEntity()).isInOpenWater());
+            return new ElementTag(fishHook.isInOpenWater());
         });
 
         // <--[tag]
@@ -2780,11 +2846,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Returns the amount of time that passed since the start of the attack cooldown.
         // -->
         registerSpawnedOnlyTag(DurationTag.class, "attack_cooldown_duration", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof Player)) {
+            if (!(object.getBukkitEntity() instanceof Player player)) {
                 attribute.echoError("Only player-type entities can have attack_cooldowns!");
                 return null;
             }
-            return new DurationTag((long) NMSHandler.getPlayerHelper().ticksPassedDuringCooldown((Player) object.getLivingEntity()));
+            return new DurationTag((long) NMSHandler.playerHelper.ticksPassedDuringCooldown(player));
         });
 
         // <--[tag]
@@ -2798,11 +2864,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // cooldown progress.
         // -->
         registerSpawnedOnlyTag(DurationTag.class, "attack_cooldown_max_duration", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof Player)) {
+            if (!(object.getBukkitEntity() instanceof Player player)) {
                 attribute.echoError("Only player-type entities can have attack_cooldowns!");
                 return null;
             }
-            return new DurationTag((long) NMSHandler.getPlayerHelper().getMaxAttackCooldownTicks((Player) object.getLivingEntity()));
+            return new DurationTag((long) NMSHandler.playerHelper.getMaxAttackCooldownTicks(player));
         });
 
         // <--[tag]
@@ -2815,35 +2881,432 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // NOTE: This may not match exactly with the clientside attack cooldown indicator.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "attack_cooldown_percent", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof Player)) {
+            if (!(object.getBukkitEntity() instanceof Player player)) {
                 attribute.echoError("Only player-type entities can have attack_cooldowns!");
                 return null;
             }
-            return new ElementTag(NMSHandler.getPlayerHelper().getAttackCooldownPercent((Player) object.getLivingEntity()) * 100);
+            return new ElementTag(player.getAttackCooldown() * 100);
         });
 
         // <--[tag]
         // @attribute <EntityTag.is_hand_raised>
         // @returns ElementTag(Boolean)
-        // @mechanism EntityTag.attack_cooldown_percent
         // @description
-        // Returns whether the player's hand is currently raised. Valid for players for player-type NPCs.
+        // Returns whether the player's hand is currently raised. Valid for players and player-type NPCs.
         // A player's hand is raised when they are blocking with a shield, aiming a crossbow, looking through a spyglass, etc.
         // -->
         registerSpawnedOnlyTag(ElementTag.class, "is_hand_raised", (attribute, object) -> {
-            if (!(object.getBukkitEntity() instanceof HumanEntity)) {
+            if (!(object.getBukkitEntity() instanceof HumanEntity humanEntity)) {
                 attribute.echoError("Only player-type entities can have is_hand_raised!");
                 return null;
             }
-            return new ElementTag(((HumanEntity) object.getLivingEntity()).isHandRaised());
+            return new ElementTag(humanEntity.isHandRaised());
         });
+
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19)) {
+
+            // <--[tag]
+            // @attribute <EntityTag.last_attack>
+            // @returns MapTag
+            // @description
+            // Returns an interaction entity's last attack interaction, if any.
+            // The returned map contains:
+            // - 'player' (PlayerTag): the player who interacted
+            // - 'duration' (DurationTag): the amount of time since the interaction. Note that this is a delta time (same limitations as <@link event delta time>), and may become inaccurate if the interaction entity changes worlds.
+            // - 'raw_game_time' (ElementTag(Number)): the raw game time the interaction occurred at, used to calculate the time above.
+            // -->
+            registerSpawnedOnlyTag(MapTag.class, "last_attack", (attribute, object) -> {
+                if (!(object.getBukkitEntity() instanceof Interaction interaction)) {
+                    attribute.echoError("'EntityTag.last_attack' is only valid for interaction entities.");
+                    return null;
+                }
+                return MultiVersionHelper1_19.interactionToMap(interaction.getLastAttack(), interaction.getWorld());
+            });
+
+            // <--[tag]
+            // @attribute <EntityTag.last_interaction>
+            // @returns MapTag
+            // @description
+            // Returns an interaction entity's last right click interaction, if any.
+            // The returned map contains:
+            // - 'player' (PlayerTag): the player who interacted
+            // - 'duration' (DurationTag): the amount of time since the interaction. Note that this is a delta time (same limitations as <@link event delta time>), and may become inaccurate if the interaction entity changes worlds.
+            // - 'raw_game_time' (ElementTag(Number)): the raw game time the interaction occurred at, used to calculate the time above.
+            // -->
+            registerSpawnedOnlyTag(MapTag.class, "last_interaction", (attribute, object) -> {
+                if (!(object.getBukkitEntity() instanceof Interaction interaction)) {
+                    attribute.echoError("'EntityTag.last_interaction' is only valid for interaction entities.");
+                    return null;
+                }
+                return MultiVersionHelper1_19.interactionToMap(interaction.getLastInteraction(), interaction.getWorld());
+            });
+
+            // <--[tag]
+            // @attribute <EntityTag.highest_anger>
+            // @returns ElementTag(Number)
+            // @description
+            // Returns a warden's anger level at its current target, or its highest anger level.
+            // @example
+            // # Use to heal a warden if its highest anger level is above 80.
+            // - if <[warden].highest_anger> > 80:
+            //   - heal <[warden]>
+            // -->
+            tagProcessor.registerTag(ElementTag.class, "highest_anger", (attribute, object) -> {
+                if (!(object.getBukkitEntity() instanceof Warden warden)) {
+                    return null;
+                }
+                return new ElementTag(warden.getAnger());
+            });
+
+            // <--[tag]
+            // @attribute <EntityTag.anger_at[<entity>]>
+            // @returns ElementTag(Number)
+            // @mechanism EntityTag.anger_at
+            // @description
+            // Returns a warden's anger level at a specific entity.
+            // @example
+            // # Use to tell the linked player if a warden's anger at them is above 100.
+            // - if <[warden].anger_at[<player>]> > 100:
+            //   - narrate "The warden is angry!"
+            // -->
+            tagProcessor.registerTag(ElementTag.class, EntityTag.class, "anger_at", (attribute, object, param) -> {
+                if (!(object.getBukkitEntity() instanceof Warden warden)) {
+                    return null;
+                }
+                Entity entity = param.getBukkitEntity();
+                if (entity == null) {
+                    attribute.echoError("Invalid entity '" + param.debuggable() + "<W>' specified: must be spawned.");
+                    return null;
+                }
+                return new ElementTag(warden.getAnger(entity));
+            });
+
+            // <--[tag]
+            // @attribute <EntityTag.anger_level>
+            // @returns ElementTag
+            // @description
+            // Returns a warden's current anger level, which will be any of <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/entity/Warden.AngerLevel.html>.
+            // @example
+            // # Use to get a warden's anger level and narrate it.
+            // - narrate "The warden is <[warden].anger_level.to_lowercase>!"
+            // -->
+            tagProcessor.registerTag(ElementTag.class, "anger_level", (attribute, object) -> {
+                if (!(object.getBukkitEntity() instanceof Warden warden)) {
+                    return null;
+                }
+                return MultiVersionHelper1_19.getWardenAngerLevel(warden);
+            });
+
+            // <--[tag]
+            // @attribute <EntityTag.angry_at>
+            // @returns EntityTag
+            // @description
+            // Returns the entity a warden is the most angry at, if any.
+            // @example
+            // # Use to kill the entity a warden is the most angry at.
+            // - kill <[warden].angry_at>
+            // -->
+            tagProcessor.registerTag(EntityFormObject.class, "angry_at", (attribute, object) -> {
+                if (!(object.getBukkitEntity() instanceof Warden warden)) {
+                    return null;
+                }
+                Entity angryAt = warden.getEntityAngryAt();
+                return angryAt != null ? new EntityTag(angryAt).getDenizenObject() : null;
+            });
+
+            // <--[mechanism]
+            // @object EntityTag
+            // @name clear_anger
+            // @input EntityTag
+            // @description
+            // Clears a warden's anger towards the input entity.
+            // @tags
+            // <EntityTag.anger_at[<entity>]>
+            // @example
+            // # Use to clear a warden's anger towards a specific entity.
+            // - adjust <[warden]> clear_anger:<[entity]>
+            // -->
+            tagProcessor.registerMechanism("clear_anger", false, EntityTag.class, (object, mechanism, input) -> {
+                if (!(object.getBukkitEntity() instanceof Warden warden)) {
+                    mechanism.echoError("Cannot adjust '" + object.debuggable() + "<W>': must be a warden.");
+                    return;
+                }
+                Entity entity = input.getBukkitEntity();
+                if (entity == null) {
+                    mechanism.echoError("Invalid entity '" + input.debuggable() + "<W>' specified: must be spawned.");
+                    return;
+                }
+                warden.clearAnger(entity);
+            });
+
+            // <--[mechanism]
+            // @object EntityTag
+            // @name anger_at
+            // @input MapTag
+            // @description
+            // Sets a warden's anger towards a specific entity.
+            // The input map needs to have the following keys:
+            // - "entity", the entity to set anger for.
+            // - "anger", the amount of anger.
+            // See <@link mechanism EntityTag.clear_anger> for clearing anger.
+            // See <@link mechanism EntityTag.increase_anger> for increasing it.
+            // @tags
+            // <EntityTag.anger_at[<entity>]>
+            // @example
+            // # Use to set a warden's anger at a specific entity to 20.
+            // - adjust <[warden]> anger_at:[entity=<[entity]>;anger=20]
+            // -->
+            tagProcessor.registerMechanism("anger_at", false, MapTag.class, (object, mechanism, input) -> {
+                if (!(object.getBukkitEntity() instanceof Warden warden)) {
+                    mechanism.echoError("Cannot adjust '" + object.debuggable() + "<W>': must be a warden.");
+                    return;
+                }
+                ElementTag anger = input.getElement("anger");
+                EntityTag inputEntity = input.getObjectAs("entity", EntityTag.class, mechanism.context);
+                if (anger == null || inputEntity == null) {
+                    mechanism.echoError("Invalid map input '" + input.debuggable() + "<W>' specified: must have 'anger' and 'entity' keys.");
+                    return;
+                }
+                if (!anger.isInt()) {
+                    mechanism.echoError("Invalid anger '" + anger + "' specified: must be a number.");
+                    return;
+                }
+                Entity entity = inputEntity.getBukkitEntity();
+                if (entity == null) {
+                    mechanism.echoError("Invalid entity '" + inputEntity.debuggable() + "<W>' specified: must be spawned.");
+                    return;
+                }
+                warden.setAnger(entity, anger.asInt());
+            });
+
+            // <--[mechanism]
+            // @object EntityTag
+            // @name increase_anger
+            // @input MapTag
+            // @description
+            // Increases a warden's anger towards a specific entity.
+            // The input map needs to have the following keys:
+            // - "entity", the entity to increase anger for.
+            // - "anger", the amount of anger to add.
+            // See <@link mechanism EntityTag.clear_anger> for clearing anger.
+            // See <@link mechanism EntityTag.anger_at> for setting it.
+            // @tags
+            // <EntityTag.anger_at[<entity>]>
+            // @example
+            // # Use to increase a warden's anger at a specific entity by 20.
+            // - adjust <[warden]> increase_anger:[entity=<[entity]>;anger=20]
+            // -->
+            tagProcessor.registerMechanism("increase_anger", false, MapTag.class, (object, mechanism, input) -> {
+                if (!(object.getBukkitEntity() instanceof Warden warden)) {
+                    mechanism.echoError("Cannot adjust '" + object.debuggable() + "<W>': must be a warden.");
+                    return;
+                }
+                ElementTag anger = input.getElement("anger");
+                EntityTag inputEntity = input.getObjectAs("entity", EntityTag.class, mechanism.context);
+                if (anger == null || inputEntity == null) {
+                    mechanism.echoError("Invalid map input '" + input.debuggable() + "<W>' specified: must have 'anger' and 'entity' keys.");
+                    return;
+                }
+                if (!anger.isInt()) {
+                    mechanism.echoError("Invalid anger '" + anger + "' specified: must be a number.");
+                    return;
+                }
+                Entity entity = inputEntity.getBukkitEntity();
+                if (entity == null) {
+                    mechanism.echoError("Invalid entity '" + inputEntity.debuggable() + "<W>' specified: must be spawned.");
+                    return;
+                }
+                warden.increaseAnger(entity, anger.asInt());
+            });
+
+            // <--[mechanism]
+            // @object EntityTag
+            // @name sense_disturbance
+            // @input LocationTag
+            // @description
+            // Makes a warden sense a disturbance at the input location.
+            // @example
+            // # Use to make a warden sense a disturbance at the linked player's location.
+            // - adjust <[warden]> sense_disturbance:<player.location>
+            // -->
+            registerSpawnedOnlyMechanism("sense_disturbance", false, LocationTag.class, (object, mechanism, input) -> {
+                if (!(object.getBukkitEntity() instanceof Warden warden)) {
+                    mechanism.echoError("Cannot adjust '" + object.debuggable() + "<W>': must be a warden.");
+                    return;
+                }
+                warden.setDisturbanceLocation(input);
+            });
+        }
+
+        // <--[mechanism]
+        // @object EntityTag
+        // @name alter_uuid
+        // @input ElementTag
+        // @description
+        // Alters the entity's UUID, changing it to the new input UUID.
+        // This is very likely to break things and is almost never a good idea.
+        // This sorta-works with players, with significant side effects that will need to be compensated for.
+        // @tags
+        // <EntityTag.uuid>
+        // -->
+        registerSpawnedOnlyMechanism("alter_uuid", false, ElementTag.class, (object, mechanism, new_id) -> {
+            try {
+                UUID id = UUID.fromString(new_id.asString());
+                NMSHandler.entityHelper.setUUID(object.getBukkitEntity(), id);
+            }
+            catch (IllegalArgumentException ex) {
+                mechanism.echoError("Cannot parse UUID input '" + new_id + "': " + ex.getMessage());
+            }
+        });
+
+        // <--[mechanism]
+        // @object EntityTag
+        // @name visual_pose
+        // @input ElementTag
+        // @description
+        // Sets the entity's visual pose, must be one of <@link url https://hub.spigotmc.org/javadocs/bukkit/org/bukkit/entity/Pose.html>.
+        // Note that not all entities support all poses, some are only supported by specific entity types.
+        // @tags
+        // <EntityTag.visual_pose>
+        // -->
+        registerSpawnedOnlyMechanism("visual_pose", false, ElementTag.class, (object, mechanism, input) -> {
+            if (mechanism.requireEnum(Pose.class)) {
+                NMSHandler.entityHelper.setPose(object.getBukkitEntity(), input.asEnum(Pose.class));
+            }
+        });
+
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_20)) {
+
+            // <--[mechanism]
+            // @object EntityTag
+            // @name start_using_hand
+            // @input ElementTag
+            // @description
+            // Forces an entity to start using one of its hands.
+            // Input is either HAND or OFF_HAND, defaults to HAND.
+            // -->
+            tagProcessor.registerMechanism("start_using_hand", false, (object, mechanism) -> {
+                if (!object.isLivingEntity()) {
+                    mechanism.echoError("The 'start_using_hand' mechanism only works for living entities!");
+                    return;
+                }
+                EquipmentSlot hand = mechanism.hasValue() ? mechanism.getValue().asEnum(EquipmentSlot.class) : EquipmentSlot.HAND;
+                if (hand != EquipmentSlot.HAND && hand != EquipmentSlot.OFF_HAND) {
+                    mechanism.echoError("Invalid equipment slot '" + mechanism.getValue() + "' specified: must be HAND or OFF_HAND.");
+                    return;
+                }
+                NMSHandler.entityHelper.startUsingItem(object.getLivingEntity(), hand);
+            });
+
+            // <--[mechanism]
+            // @object EntityTag
+            // @name stop_using_hand
+            // @input None
+            // @description
+            // Forces an entity to stop using either hand.
+            // -->
+            tagProcessor.registerMechanism("stop_using_hand", false, (object, mechanism) -> {
+                if (!object.isLivingEntity()) {
+                    mechanism.echoError("The 'stop_using_hand' mechanism only works for living entities!");
+                    return;
+                }
+                NMSHandler.entityHelper.stopUsingItem(object.getLivingEntity());
+            });
+
+            // <--[mechanism]
+            // @object EntityTag
+            // @name play_hurt_animation
+            // @input ElementTag(Decimal)
+            // @description
+            // Plays a hurt animation that makes the living entity flash red. When the entity is a player, you can change the direction the camera rotates.
+            // Damage direction is relative to the player, where 0 is in front, 90 is to the right, 180 is behind, and 270 is to the left.
+            // For versions 1.19 or below, use <@link command animate>.
+            // @example
+            // # The player's camera will rotate as if the player took damage from the right and the player will flash red.
+            // - adjust <player> play_hurt_animation:90
+            // @example
+            // # This will flash the entity red as if it took damage.
+            // - adjust <[entity]> play_hurt_animation:0
+            // -->
+            registerSpawnedOnlyMechanism("play_hurt_animation", false, ElementTag.class, (object, mechanism, value) -> {
+                if (mechanism.requireFloat()) {
+                    if (!object.isLivingEntity()) {
+                        mechanism.echoError("The 'play_hurt_animation' mechanism only works for living entities!");
+                        return;
+                    }
+                    object.getLivingEntity().playHurtAnimation(value.asFloat());
+                }
+            });
+
+            // <--[mechanism]
+            // @object EntityTag
+            // @name internal_data
+            // @input MapTag
+            // @description
+            // Modifies an entity's internal entity data as a map of data name to value.
+            // You should almost always prefer using the appropriate mechanism/property instead of this, other than very specific special cases.
+            // See <@link language Internal Entity Data> for more information on the input.
+            // -->
+            tagProcessor.registerMechanism("internal_data", false, MapTag.class, (object, mechanism, input) -> {
+                NMSHandler.entityHelper.modifyInternalEntityData(object.getBukkitEntity(), input);
+            });
+
+            // <--[tag]
+            // @attribute <EntityTag.bookshelf_slot>
+            // @returns ElementTag(Number)
+            // @description
+            // Returns the Chiseled Bookshelf slot that the entity is looking at, if any.
+            // See also <@link tag LocationTag.slot>
+            // -->
+            registerSpawnedOnlyTag(ElementTag.class, "bookshelf_slot", (attribute, object) -> {
+                RayTraceResult result = object.getLivingEntity().rayTraceBlocks(4.5);
+                if (result == null || result.getHitBlock().getType() != Material.CHISELED_BOOKSHELF) {
+                    attribute.echoError("'EntityTag.bookshelf_slot' requires the entity to look at a Chiseled Bookshelf block.");
+                    return null;
+                }
+                ChiseledBookshelf bookshelfState = (ChiseledBookshelf) result.getHitBlock().getState();
+                Vector vector = result.getHitPosition().subtract(result.getHitBlock().getLocation().toVector());
+                return new ElementTag(bookshelfState.getSlot(vector) + 1);
+            });
+
+            // <--[tag]
+            // @attribute <EntityTag.all_raw_nbt>
+            // @returns MapTag
+            // @mechanism EntityTag.raw_nbt
+            // @description
+            // Returns the entity's entire raw NBT data as a MapTag.
+            // See <@link language Raw NBT Encoding> for more information.
+            // -->
+            tagProcessor.registerTag(MapTag.class, "all_raw_nbt", (attribute, object) -> {
+                CompoundTag tag = NMSHandler.entityHelper.getRawNBT(object.getBukkitEntity());
+                return (MapTag) ItemRawNBT.jnbtTagToObject(tag);
+            });
+
+            // <--[mechanism]
+            // @object EntityTag
+            // @name raw_nbt
+            // @input MapTag
+            // @description
+            // Modifies an entity's raw NBT data based on the input MapTag.
+            // The input MapTag must be in MapTag NBT format (<@link language Raw NBT Encoding>), and needs to be strictly perfect.
+            // This doesn't override all the entity's data, only the values specified in the input map are set.
+            // @tags
+            // <EntityTag.all_raw_nbt>
+            // -->
+            tagProcessor.registerMechanism("raw_nbt", false, MapTag.class, (object, mechanism, input) -> {
+                CompoundTag tag = (CompoundTag) ItemRawNBT.convertObjectToNbt(input.identify(), mechanism.context, "(entity).");
+                if (tag != null) {
+                    NMSHandler.entityHelper.modifyRawNBT(object.getBukkitEntity(), tag);
+                }
+            });
+        }
     }
 
     public EntityTag describe(TagContext context) {
         ArrayList<Mechanism> waitingMechs;
         if (isSpawnedOrValidForTag()) {
             waitingMechs = new ArrayList<>();
-            for (Map.Entry<StringHolder, ObjectTag> property : PropertyParser.getPropertiesMap(this).map.entrySet()) {
+            for (Map.Entry<StringHolder, ObjectTag> property : PropertyParser.getPropertiesMap(this).entrySet()) {
                 waitingMechs.add(new Mechanism(property.getKey().str, property.getValue(), context));
             }
         }
@@ -2861,12 +3324,22 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         tagProcessor.registerTag(returnType, name, (attribute, object) -> {
             if (!object.isSpawnedOrValidForTag()) {
                 if (!attribute.hasAlternative()) {
-                    com.denizenscript.denizen.utilities.debugging.Debug.echoError("Entity is not spawned, but tag '" + attribute.getAttributeWithoutParam(1) + "' requires the entity be spawned, for entity: " + object.debuggable());
+                    attribute.echoError("Entity is not spawned, but tag '" + name + "' requires the entity be spawned, for entity: " + object.debuggable());
                 }
                 return null;
             }
             return runnable.run(attribute, object);
         }, variants);
+    }
+
+    public static <P extends ObjectTag> void registerSpawnedOnlyMechanism(String name, boolean allowProperty, Class<P> paramType, Mechanism.ObjectInputMechRunnerInterface<EntityTag, P> runner) {
+        tagProcessor.registerMechanism(name, allowProperty, paramType, (entity, mechanism, param) -> {
+            if (!entity.isSpawned()) {
+                mechanism.echoError("Entity is not spawned, but mechanism '" + name + "' requires the entity be spawned, for entity: " + entity.debuggable());
+                return;
+            }
+            runner.run(entity, mechanism, param);
+        });
     }
 
     @Override
@@ -2886,31 +3359,29 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             mechanism.fulfill();
         }
         else {
-            Debug.echoError("Cannot apply properties to an already-spawned entity!");
+            mechanism.echoError("Cannot apply properties to an already-spawned entity!");
         }
     }
 
     @Override
     public void adjust(Mechanism mechanism) {
-
         if (isGeneric()) {
             mechanisms.add(mechanism);
             mechanism.fulfill();
             return;
         }
-
         if (getBukkitEntity() == null) {
             if (isCitizensNPC()) {
-                Debug.echoError("Cannot adjust not-spawned NPC " + getDenizenNPC());
+                mechanism.echoError("Cannot adjust not-spawned NPC " + getDenizenNPC());
             }
             else {
-                Debug.echoError("Cannot adjust entity " + this);
+                mechanism.echoError("Cannot adjust entity " + this);
             }
             return;
         }
 
         if (mechanism.matches("attach_to")) {
-            Deprecations.attachToMech.warn(mechanism.context);
+            BukkitImplDeprecations.attachToMech.warn(mechanism.context);
             if (mechanism.hasValue()) {
                 ListTag list = mechanism.valueAsType(ListTag.class);
                 Vector offset = null;
@@ -2934,7 +3405,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @input EntityTag
         // @synonyms EntityTag.arrow_firer,EntityTag.fishhook_shooter,EntityTag.snowball_thrower
         // @description
-        // Sets the projectile's shooter.
+        // Sets the projectile's shooter or TNT's priming source.
         // @tags
         // <EntityTag.shooter>
         // -->
@@ -3099,13 +3570,16 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @object EntityTag
         // @name time_lived
         // @input DurationTag
+        // @synonyms EntityTag.age_nbt,EntityTag.time_nbt
         // @description
         // Sets the amount of time this entity has lived for.
+        // For entities that automatically despawn such as dropped_items or falling_blocks, it can be useful to set this value to "-2147483648t" (the minimum valid number of ticks) to cause it to persist indefinitely.
+        // For falling_block usage, see also <@link mechanism EntityTag.auto_expire>
         // @tags
         // <EntityTag.time_lived>
         // -->
         if (mechanism.matches("time_lived") && mechanism.requireObject(DurationTag.class)) {
-            NMSHandler.getEntityHelper().setTicksLived(entity, mechanism.valueAsType(DurationTag.class).getTicksAsInt());
+            NMSHandler.entityHelper.setTicksLived(entity, mechanism.valueAsType(DurationTag.class).getTicksAsInt());
         }
 
         // <--[mechanism]
@@ -3118,7 +3592,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // <EntityTag.absorption_health>
         // -->
         if (mechanism.matches("absorption_health") && mechanism.requireFloat()) {
-            NMSHandler.getEntityHelper().setAbsorption(getLivingEntity(), mechanism.getValue().asDouble());
+            getLivingEntity().setAbsorptionAmount(mechanism.getValue().asDouble());
         }
 
         // <--[mechanism]
@@ -3134,11 +3608,6 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         if (mechanism.matches("oxygen") && mechanism.requireObject(DurationTag.class)) {
             getLivingEntity().setRemainingAir(mechanism.valueAsType(DurationTag.class).getTicksAsInt());
-        }
-
-        if (mechanism.matches("remaining_air") && mechanism.requireInteger()) {
-            Deprecations.entityRemainingAir.warn(mechanism.context);
-            getLivingEntity().setRemainingAir(mechanism.getValue().asInt());
         }
 
         // <--[mechanism]
@@ -3254,16 +3723,34 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @name persistent
         // @input ElementTag(Boolean)
         // @description
-        // Sets whether the entity should be be saved to file when chunks unload (otherwise, the entity is gone entirely if despawned for any reason).
-        // The entity must be living.
+        // Sets whether the mob-entity will not be removed completely when far away from players.
+        // This is Bukkit's "setRemoveWhenFarAway" which is Mojang's "isPersistenceRequired".
+        // In many cases, <@link mechanism EntityTag.force_no_persist> may be preferred.
+        // The entity must be a mob-type entity.
         // @tags
-        // <EntityTag.persistent>
+        // <EntityTag.is_persistent>
         // -->
         if (mechanism.matches("persistent") && mechanism.requireBoolean()) {
             getLivingEntity().setRemoveWhenFarAway(!mechanism.getValue().asBoolean());
         }
+
+        // <--[mechanism]
+        // @object EntityTag
+        // @name force_no_persist
+        // @input ElementTag(Boolean)
+        // @description
+        // Set 'true' to indicate the entity should be forced to not save to file when chunks unload.
+        // Set 'false' to not force to not-save. Entities will then either save or not save depending on separate conditions.
+        // This is a custom value added in Bukkit to block saving, which is not the same as Mojang's similar option under <@link mechanism EntityTag.persistent>.
+        // @tags
+        // <EntityTag.force_no_persist>
+        // -->
+        if (mechanism.matches("force_no_persist") && mechanism.requireBoolean()) {
+            getBukkitEntity().setPersistent(!mechanism.getValue().asBoolean());
+        }
+
         if (mechanism.matches("remove_when_far_away") && mechanism.requireBoolean()) {
-            Deprecations.entityRemoveWhenFar.warn(mechanism.context);
+            BukkitImplDeprecations.entityRemoveWhenFar.warn(mechanism.context);
             getLivingEntity().setRemoveWhenFarAway(mechanism.getValue().asBoolean());
         }
 
@@ -3286,14 +3773,15 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // @input ElementTag(Boolean)
         // @description
         // Sets whether the entity is collidable.
+        // For NPCs, Sets the persistent collidable value.
         // NOTE: To disable collision between two entities, set this mechanism to false on both entities.
-        // Sets the persistent collidable value for NPCs.
+        // NOTE: For players, to fully remove collision you need to use <@link command team> and set "option:collision_rule status:never"
         // @tags
         // <EntityTag.is_collidable>
         // -->
         if (mechanism.matches("collidable") && mechanism.requireBoolean()) {
             if (isCitizensNPC()) {
-                getDenizenNPC().getCitizen().data().setPersistent(NPC.COLLIDABLE_METADATA, mechanism.getValue().asBoolean());
+                getDenizenNPC().getCitizen().data().setPersistent(NPC.Metadata.COLLIDABLE, mechanism.getValue().asBoolean());
             }
             else {
                 getLivingEntity().setCollidable(mechanism.getValue().asBoolean());
@@ -3349,7 +3837,52 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Forces an entity to move in the direction of the velocity vector specified.
         // -->
         if (mechanism.matches("move") && mechanism.requireObject(LocationTag.class)) {
-            NMSHandler.getEntityHelper().move(getBukkitEntity(), mechanism.valueAsType(LocationTag.class).toVector());
+            NMSHandler.entityHelper.move(getBukkitEntity(), mechanism.valueAsType(LocationTag.class).toVector());
+        }
+
+        // <--[mechanism]
+        // @object EntityTag
+        // @name fake_move
+        // @input LocationTag
+        // @description
+        // Causes an entity to broadcast a fake movement packet in the direction of the velocity vector specified.
+        // The vector value must be in the range [-8,8] on each of X, Y, and Z.
+        // -->
+        if (mechanism.matches("fake_move") && mechanism.requireObject(LocationTag.class)) {
+            NMSHandler.entityHelper.fakeMove(getBukkitEntity(), mechanism.valueAsType(LocationTag.class).toVector());
+        }
+
+        // <--[mechanism]
+        // @object EntityTag
+        // @name fake_teleport
+        // @input LocationTag
+        // @description
+        // Causes an entity to broadcast a fake teleport packet to the location specified.
+        // -->
+        if (mechanism.matches("fake_teleport") && mechanism.requireObject(LocationTag.class)) {
+            NMSHandler.entityHelper.fakeTeleport(getBukkitEntity(), mechanism.valueAsType(LocationTag.class));
+        }
+
+        // <--[mechanism]
+        // @object EntityTag
+        // @name reset_client_location
+        // @input None
+        // @description
+        // Causes an entity to broadcast a fake teleport packet to its own location, forcibly resetting its location for all players that can see it.
+        // -->
+        if (mechanism.matches("reset_client_location")) {
+            NMSHandler.entityHelper.clientResetLoc(getBukkitEntity());
+        }
+
+        // <--[mechanism]
+        // @object EntityTag
+        // @name send_update_packets
+        // @input None
+        // @description
+        // Causes an entity to broadcast any pending entity update packets to all players that can see it.
+        // -->
+        if (mechanism.matches("send_update_packets")) {
+            NMSHandler.entityHelper.sendAllUpdatePackets(getBukkitEntity());
         }
 
         // <--[mechanism]
@@ -3361,11 +3894,11 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         if (mechanism.matches("interact_with") && mechanism.requireObject(LocationTag.class)) {
             LocationTag interactLocation = mechanism.valueAsType(LocationTag.class);
-            NMSHandler.getEntityHelper().forceInteraction(getPlayer(), interactLocation);
+            NMSHandler.entityHelper.forceInteraction(getPlayer(), interactLocation);
         }
 
         if (mechanism.matches("play_death")) {
-            Deprecations.entityPlayDeath.warn(mechanism.context);
+            BukkitImplDeprecations.entityPlayDeath.warn(mechanism.context);
             getLivingEntity().playEffect(EntityEffect.DEATH);
         }
 
@@ -3408,7 +3941,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         if (mechanism.matches("glowing") && mechanism.requireBoolean()) {
             getBukkitEntity().setGlowing(mechanism.getValue().asBoolean());
             if (Depends.citizens != null && CitizensAPI.getNPCRegistry().isNPC(getLivingEntity())) {
-                CitizensAPI.getNPCRegistry().getNPC(getLivingEntity()).data().setPersistent(NPC.GLOWING_METADATA, mechanism.getValue().asBoolean());
+                CitizensAPI.getNPCRegistry().getNPC(getLivingEntity()).data().setPersistent(NPC.Metadata.GLOWING, mechanism.getValue().asBoolean());
             }
         }
 
@@ -3503,7 +4036,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                     flags |= layer.flag;
                 }
             }
-            NMSHandler.getPlayerHelper().setSkinLayers((Player) getBukkitEntity(), (byte) flags);
+            NMSHandler.playerHelper.setSkinLayers((Player) getBukkitEntity(), (byte) flags);
         }
 
         // <--[mechanism]
@@ -3516,11 +4049,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // -->
         if (mechanism.matches("mirror_player") && mechanism.requireBoolean()) {
             if (isNPC()) {
-                NPC npc = getDenizenNPC().getCitizen();
-                if (!npc.hasTrait(MirrorTrait.class)) {
-                    npc.addTrait(MirrorTrait.class);
-                }
-                MirrorTrait mirror = npc.getOrAddTrait(MirrorTrait.class);
+                MirrorTrait mirror = getDenizenNPC().getCitizen().getOrAddTrait(MirrorTrait.class);
                 if (mechanism.getValue().asBoolean()) {
                     mirror.enableMirror();
                 }
@@ -3595,19 +4124,22 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // This will not rotate the body at all. Most users should prefer <@link command look>.
         // -->
         if (mechanism.matches("head_angle") && mechanism.requireFloat()) {
-            NMSHandler.getEntityHelper().setHeadAngle(getBukkitEntity(), mechanism.getValue().asFloat());
+            NMSHandler.entityHelper.setHeadAngle(getLivingEntity(), mechanism.getValue().asFloat());
         }
 
         // <--[mechanism]
         // @object EntityTag
         // @name skeleton_arms_raised
         // @input ElementTag(Boolean)
+        // @deprecated use 'EntityTag.aggressive'.
         // @description
-        // Sets whether the skeleton entity should raise its arms.
+        // Deprecated in favor of <@link mechanism EntityTag.aggressive>.
         // -->
         if (mechanism.matches("skeleton_arms_raised") && mechanism.requireBoolean()) {
-            EntityAnimation entityAnimation = NMSHandler.getAnimationHelper().getEntityAnimation(mechanism.getValue().asBoolean() ? "SKELETON_START_SWING_ARM" : "SKELETON_STOP_SWING_ARM");
-            entityAnimation.play(entity);
+            BukkitImplDeprecations.entitySkeletonArmsRaised.warn(mechanism.context);
+            if (getBukkitEntityType() == EntityType.SKELETON) {
+                NMSHandler.entityHelper.setAggressive((Mob) getBukkitEntity(), mechanism.getValue().asBoolean());
+            }
         }
 
         // <--[mechanism]
@@ -3618,7 +4150,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Sets whether the polar bear entity should stand up.
         // -->
         if (mechanism.matches("polar_bear_standing") && mechanism.requireBoolean()) {
-            EntityAnimation entityAnimation = NMSHandler.getAnimationHelper().getEntityAnimation(mechanism.getValue().asBoolean() ? "POLAR_BEAR_START_STANDING" : "POLAR_BEAR_STOP_STANDING");
+            EntityAnimation entityAnimation = NMSHandler.animationHelper.getEntityAnimation(mechanism.getValue().asBoolean() ? "POLAR_BEAR_START_STANDING" : "POLAR_BEAR_STOP_STANDING");
             entityAnimation.play(entity);
         }
 
@@ -3630,7 +4162,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Sets whether the ghast entity should show the attacking face.
         // -->
         if (mechanism.matches("ghast_attacking") && mechanism.requireBoolean()) {
-            NMSHandler.getEntityHelper().setGhastAttacking(getBukkitEntity(), mechanism.getValue().asBoolean());
+            NMSHandler.entityHelper.setGhastAttacking((Ghast) getBukkitEntity(), mechanism.getValue().asBoolean());
         }
 
         // <--[mechanism]
@@ -3641,7 +4173,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Sets whether the enderman entity should be screaming angrily.
         // -->
         if (mechanism.matches("enderman_angry") && mechanism.requireBoolean()) {
-            NMSHandler.getEntityHelper().setEndermanAngry(getBukkitEntity(), mechanism.getValue().asBoolean());
+            NMSHandler.entityHelper.setEndermanAngry((Enderman) getBukkitEntity(), mechanism.getValue().asBoolean());
         }
 
         // <--[mechanism]
@@ -3654,13 +4186,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Does not work with passive mobs, non-living entities, etc.
         // -->
         if (mechanism.matches("melee_attack") && mechanism.requireObject(EntityTag.class)) {
-            Entity target = mechanism.valueAsType(EntityTag.class).getBukkitEntity();
-            if (getLivingEntity() instanceof Player && NMSHandler.getVersion().isAtLeast(NMSVersion.v1_17)) {
-                NMSHandler.getPlayerHelper().doAttack((Player) getLivingEntity(), target);
-            }
-            else {
-                getLivingEntity().attack(target);
-            }
+            getLivingEntity().attack(mechanism.valueAsType(EntityTag.class).getBukkitEntity());
         }
 
         // <--[mechanism]
@@ -3673,7 +4199,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
         // Angerable mobs will get angry.
         // -->
         if (mechanism.matches("last_hurt_by") && mechanism.requireObject(EntityTag.class)) {
-            NMSHandler.getEntityHelper().setLastHurtBy(getLivingEntity(), mechanism.valueAsType(EntityTag.class).getLivingEntity());
+            NMSHandler.entityHelper.setLastHurtBy(getLivingEntity(), mechanism.valueAsType(EntityTag.class).getLivingEntity());
         }
 
         // <--[mechanism]
@@ -3689,7 +4215,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 mechanism.echoError("fish_hook_nibble_time is only valid for FishHook entities.");
                 return;
             }
-            NMSHandler.getFishingHelper().setNibble((FishHook) getBukkitEntity(), mechanism.valueAsType(DurationTag.class).getTicksAsInt());
+            NMSHandler.fishingHelper.setNibble((FishHook) getBukkitEntity(), mechanism.valueAsType(DurationTag.class).getTicksAsInt());
         }
 
         // <--[mechanism]
@@ -3705,7 +4231,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 mechanism.echoError("fish_hook_hook_time is only valid for FishHook entities.");
                 return;
             }
-            NMSHandler.getFishingHelper().setHookTime((FishHook) getBukkitEntity(), mechanism.valueAsType(DurationTag.class).getTicksAsInt());
+            NMSHandler.fishingHelper.setHookTime((FishHook) getBukkitEntity(), mechanism.valueAsType(DurationTag.class).getTicksAsInt());
         }
 
         // <--[mechanism]
@@ -3723,7 +4249,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 mechanism.echoError("fish_hook_lure_time is only valid for FishHook entities.");
                 return;
             }
-            NMSHandler.getFishingHelper().setLureTime((FishHook) getBukkitEntity(), mechanism.valueAsType(DurationTag.class).getTicksAsInt());
+            NMSHandler.fishingHelper.setLureTime((FishHook) getBukkitEntity(), mechanism.valueAsType(DurationTag.class).getTicksAsInt());
         }
 
         // <--[mechanism]
@@ -3826,7 +4352,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 mechanism.echoError("Only player-type entities can have attack_cooldowns!");
                 return;
             }
-            NMSHandler.getPlayerHelper().setAttackCooldown((Player) getLivingEntity(), 0);
+            NMSHandler.playerHelper.setAttackCooldown((Player) getLivingEntity(), 0);
         }
 
         // <--[mechanism]
@@ -3847,8 +4373,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 mechanism.echoError("Only player-type entities can have attack_cooldowns!");
                 return;
             }
-            PlayerHelper playerHelper = NMSHandler.getPlayerHelper();
-            playerHelper.setAttackCooldown((Player) getLivingEntity(), Math.round(playerHelper.getMaxAttackCooldownTicks((Player) getLivingEntity())));
+            NMSHandler.playerHelper.setAttackCooldown((Player) getLivingEntity(), Math.round(NMSHandler.playerHelper.getMaxAttackCooldownTicks((Player) getLivingEntity())));
         }
 
         // <--[mechanism]
@@ -3871,11 +4396,10 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
             }
             float percent = mechanism.getValue().asFloat();
             if (percent >= 0 && percent <= 1) {
-                PlayerHelper playerHelper = NMSHandler.getPlayerHelper();
-                playerHelper.setAttackCooldown((Player) getLivingEntity(), Math.round(playerHelper.getMaxAttackCooldownTicks((Player) getLivingEntity()) * mechanism.getValue().asFloat()));
+                NMSHandler.playerHelper.setAttackCooldown((Player) getLivingEntity(), Math.round(NMSHandler.playerHelper.getMaxAttackCooldownTicks((Player) getLivingEntity()) * mechanism.getValue().asFloat()));
             }
             else {
-                com.denizenscript.denizen.utilities.debugging.Debug.echoError("Invalid percentage! \"" + percent + "\" is not between 0 and 1!");
+                Debug.echoError("Invalid percentage! \"" + percent + "\" is not between 0 and 1!");
             }
         }
 
@@ -3897,7 +4421,7 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 mechanism.echoError("Only player-type entities can have attack_cooldowns!");
                 return;
             }
-            NMSHandler.getPlayerHelper().setAttackCooldown((Player) getLivingEntity(), mechanism.getValue().asType(DurationTag.class, mechanism.context).getTicksAsInt());
+            NMSHandler.playerHelper.setAttackCooldown((Player) getLivingEntity(), mechanism.getValue().asType(DurationTag.class, mechanism.context).getTicksAsInt());
         }
 
         // <--[mechanism]
@@ -3914,15 +4438,159 @@ public class EntityTag implements ObjectTag, Adjustable, EntityFormObject, Flagg
                 mechanism.echoError("'fallingblock_type' is only valid for Falling Block entities.");
                 return;
             }
-            NMSHandler.getEntityHelper().setFallingBlockType((FallingBlock) getBukkitEntity(), mechanism.valueAsType(MaterialTag.class).getModernData());
+            NMSHandler.entityHelper.setFallingBlockType((FallingBlock) getBukkitEntity(), mechanism.valueAsType(MaterialTag.class).getModernData());
         }
 
+        // <--[mechanism]
+        // @object EntityTag
+        // @name tracking_range
+        // @input ElementTag(Number)
+        // @description
+        // Sets the range (in blocks) that an entity can be seen at. This is equivalent to the "entity-tracking-range" value in "Spigot.yml".
+        // -->
+        if (mechanism.matches("tracking_range") && mechanism.requireInteger()) {
+            NMSHandler.entityHelper.setTrackingRange(getBukkitEntity(), mechanism.getValue().asInt());
+        }
 
-        CoreUtilities.autoPropertyMechanism(this, mechanism);
+        // <--[mechanism]
+        // @object EntityTag
+        // @name fake_pickup
+        // @input EntityTag
+        // @description
+        // Makes it look like this entity (usually a player) has picked up another entity (item, arrow, or XP orb).
+        // This technically also works with any entity type.
+        // Note that the original entity doesn't actually get picked up, it's still there, just invisible now.
+        // -->
+        if (mechanism.matches("fake_pickup") && mechanism.requireObject(EntityTag.class)) {
+            Entity ent = mechanism.valueAsType(EntityTag.class).getBukkitEntity();
+            int amount = 1;
+            if (ent instanceof Item) {
+                amount = ((Item) ent).getItemStack().getAmount();
+            }
+            for (Player player : NMSHandler.entityHelper.getPlayersThatSee(getBukkitEntity())) {
+                NMSHandler.packetHelper.sendCollectItemEntity(player, getBukkitEntity(), ent, amount);
+            }
+            if (isPlayer()) {
+                NMSHandler.packetHelper.sendCollectItemEntity((Player) getBukkitEntity(), getBukkitEntity(), ent, amount);
+            }
+        }
+
+        // <--[mechanism]
+        // @object EntityTag
+        // @name loot_table_id
+        // @input ElementTag
+        // @description
+        // Sets the loot table of a lootable entity.
+        // This is the namespaced path of the loot table, provided by a datapack or Minecraft's default data.
+        // @tags
+        // <EntityTag.loot_table_id>
+        // @Example
+        // # Sets the nearest zombie's loot table to a phantom's
+        // - adjust <player.location.find_entities[zombie].within[5].first> loot_table_id:entities/phantom
+        // -->
+        if (mechanism.matches("loot_table_id")) {
+            if (!(getBukkitEntity() instanceof Lootable)) {
+                mechanism.echoError("'loot_table_id' is only valid for lootable entities.");
+                return;
+            }
+            LootTable table = Bukkit.getLootTable(Utilities.parseNamespacedKey(mechanism.getValue().asString()));
+            if (table == null) {
+                mechanism.echoError("Invalid loot table ID.");
+                return;
+            }
+            ((Lootable) getBukkitEntity()).setLootTable(table);
+        }
+
+        tagProcessor.processMechanism(this, mechanism);
+    }
+
+    public static HashSet<String> specialEntityMatchables = new HashSet<>(Arrays.asList("entity", "npc", "player", "living", "vehicle", "fish", "projectile", "hanging", "monster", "mob", "animal"));
+
+    public final boolean trySpecialEntityMatcher(String text, boolean isNPC) {
+        if (isNPC) {
+            return text.equals("entity") || text.equals("npc");
+        }
+        switch (text) {
+            case "entity":
+                return true;
+            case "npc":
+                return isCitizensNPC();
+            case "player":
+                return isPlayer();
+            case "living":
+                return isLivingEntityType();
+            case "vehicle":
+                return getBukkitEntity() instanceof Vehicle;
+            case "fish":
+                return getBukkitEntity() instanceof Fish;
+            case "projectile":
+                return getBukkitEntity() instanceof Projectile;
+            case "hanging":
+                return getBukkitEntity() instanceof Hanging;
+            case "monster":
+                return isMonsterType();
+            case "mob":
+                return isMobType();
+            case "animal":
+                return isAnimalType();
+        }
+        return false;
+    }
+
+    public final boolean tryExactMatcher(String text) {
+        if (specialEntityMatchables.contains(text)) {
+            return trySpecialEntityMatcher(text, isCitizensNPC());
+        }
+        if (text.startsWith("npc_") && !text.startsWith("npc_flagged")) {
+            String check = text.substring("npc_".length());
+            if (specialEntityMatchables.contains(check)) {
+                if (check.equals("player")) { // Special case
+                    return npc.getEntityType() == EntityType.PLAYER;
+                }
+                return trySpecialEntityMatcher(check, false);
+            }
+            return check.equals(CoreUtilities.toLowerCase(npc.getEntityType().name()));
+        }
+        if (text.contains(":")) {
+            if (text.startsWith("entity_flagged:")) {
+                return ScriptEvent.coreFlaggedCheck(text.substring("entity_flagged:".length()), getFlagTracker());
+            }
+            else if (text.startsWith("player_flagged:")) {
+                return isPlayer() && ScriptEvent.coreFlaggedCheck(text.substring("player_flagged:".length()), getFlagTracker());
+            }
+            else if (text.startsWith("npc_flagged:")) {
+                return isCitizensNPC() && ScriptEvent.coreFlaggedCheck(text.substring("npc_flagged:".length()), getFlagTracker());
+            }
+            else if (text.startsWith("vanilla_tagged:")) {
+                String tagCheck = text.substring("vanilla_tagged:".length());
+                HashSet<String> tags = VanillaTagHelper.tagsByEntity.get(getBukkitEntityType());
+                if (tags == null) {
+                    return false;
+                }
+                ScriptEvent.MatchHelper matcher = ScriptEvent.createMatcher(tagCheck);
+                for (String tag : tags) {
+                    if (matcher.doesMatch(tag)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+        return false;
     }
 
     @Override
-    public boolean advancedMatches(String matcher) {
-        return BukkitScriptEvent.tryEntity(this, matcher);
+    public boolean advancedMatches(String text) {
+        ScriptEvent.MatchHelper matcher = ScriptEvent.createMatcher(text);
+        if (isCitizensNPC()) {
+            return matcher.doesMatch("npc", this::tryExactMatcher);
+        }
+        if (getEntityScript() != null && matcher.doesMatch(getEntityScript(), this::tryExactMatcher)) {
+            return true;
+        }
+        if (matcher.doesMatch(getEntityType().getLowercaseName(), this::tryExactMatcher)) {
+            return true;
+        }
+        return false;
     }
 }

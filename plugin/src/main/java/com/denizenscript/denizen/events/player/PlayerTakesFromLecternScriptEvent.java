@@ -3,7 +3,6 @@ package com.denizenscript.denizen.events.player;
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.objects.LocationTag;
-import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.events.ScriptEvent;
@@ -39,10 +38,8 @@ public class PlayerTakesFromLecternScriptEvent extends BukkitScriptEvent impleme
     // -->
 
     public PlayerTakesFromLecternScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerTakesFromLecternScriptEvent instance;
     public LocationTag location;
     public ItemTag item;
     public PlayerTakeLecternBookEvent event;
@@ -60,8 +57,7 @@ public class PlayerTakesFromLecternScriptEvent extends BukkitScriptEvent impleme
 
     @Override
     public boolean matches(ScriptEvent.ScriptPath path) {
-        String itemTest = path.eventArgLowerAt(2);
-        if (!tryItem(item, itemTest)) {
+        if (!path.tryArgObject(2, item)) {
             return false;
         }
         if (!runInCheck(path, location)) {
@@ -71,13 +67,8 @@ public class PlayerTakesFromLecternScriptEvent extends BukkitScriptEvent impleme
     }
 
     @Override
-    public String getName() {
-        return "PlayerTakesFromLectern";
-    }
-
-    @Override
     public ScriptEntryData getScriptEntryData() {
-        return new BukkitScriptEntryData(PlayerTag.mirrorBukkitPlayer(event.getPlayer()), null);
+        return new BukkitScriptEntryData(event.getPlayer());
     }
 
     @Override

@@ -3,13 +3,12 @@ package com.denizenscript.denizen.scripts.containers.core;
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.events.world.TimeChangeScriptEvent;
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.NMSVersion;
 import com.denizenscript.denizen.objects.*;
 import com.denizenscript.denizen.utilities.ScoreboardHelper;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.Settings;
 import com.denizenscript.denizen.utilities.flags.DataPersistenceFlagTracker;
-import com.denizenscript.denizencore.flags.MapTagBasedFlagTracker;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
@@ -82,12 +81,11 @@ public class BukkitWorldScriptHelper implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
-    public void onPlayerChat(AsyncPlayerChatEvent event) {
-        final String message = ChatColor.DARK_GREEN + "CHAT: " + event.getPlayer().getName() + ": " + event.getMessage();
-        Bukkit.getScheduler().runTaskLater(Denizen.getInstance(), () -> {
+    public void onPlayerChat(final AsyncPlayerChatEvent event) {
+        Bukkit.getScheduler().runTaskLater(Denizen.instance, () -> {
             // If currently recording debug information, add the chat message to debug output
-            if (Debug.record) {
-                Debug.log(message);
+            if (CoreConfiguration.shouldRecordDebug) {
+                Debug.log(ChatColor.DARK_GREEN + "CHAT: " + event.getPlayer().getName() + ": " + event.getMessage());
             }
         }, 1);
     }
@@ -102,18 +100,12 @@ public class BukkitWorldScriptHelper implements Listener {
 
     @EventHandler
     public void playerQuit(PlayerQuitEvent event) {
-        if (!NMSHandler.getVersion().isAtLeast(NMSVersion.v1_16)) {
-            return;
-        }
-        NMSHandler.getPacketHelper().removeNoCollideTeam(event.getPlayer(), null);
+        NMSHandler.packetHelper.removeNoCollideTeam(event.getPlayer(), null);
     }
 
     @EventHandler
     public void chunkLoadEvent(ChunkLoadEvent event) {
-        if (!NMSHandler.getVersion().isAtLeast(NMSVersion.v1_16)) {
-            return;
-        }
-        if (MapTagBasedFlagTracker.skipAllCleanings) {
+        if (CoreConfiguration.skipAllFlagCleanings || Settings.skipChunkFlagCleaning) {
             return;
         }
         new DataPersistenceFlagTracker(event.getChunk()).doTotalClean();

@@ -1,18 +1,19 @@
 package com.denizenscript.denizen.scripts.containers.core;
 
 import com.denizenscript.denizen.Denizen;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
+import com.denizenscript.denizen.utilities.Settings;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.tags.BukkitTagContext;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ScriptTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.containers.ScriptContainer;
 import com.denizenscript.denizencore.scripts.queues.core.InstantQueue;
 import com.denizenscript.denizencore.tags.TagManager;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.denizenscript.denizencore.utilities.YamlConfiguration;
+import com.denizenscript.denizencore.utilities.*;
 import net.milkbowl.vault.economy.AbstractEconomy;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
@@ -24,6 +25,7 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Future;
 
 public class EconomyScriptContainer extends ScriptContainer {
 
@@ -45,42 +47,44 @@ public class EconomyScriptContainer extends ScriptContainer {
     //
     // ALL SCRIPT KEYS ARE REQUIRED.
     //
+    // Economy scripts can be automatically disabled by adding "enabled: false" as a root key (supports any load-time-parseable tags).
+    //
     // <code>
     // # The script name will be shown to the economy provider as the name of the economy system.
     // Economy_Script_Name:
     //
-    //   type: economy
+    //     type: economy
     //
-    //   # The Bukkit service priority. Priorities are Lowest, Low, Normal, High, Highest.
-    //   priority: normal
-    //   # The name of the currency in the singular (such as "dollar" or "euro").
-    //   name single: scripto
-    //   # The name of the currency in the plural (such as "dollars" or "euros").
-    //   name plural: scriptos
-    //   # How many digits after the decimal to include. For example, '2' means '1.05' is a valid amount, but '1.005' will be rounded.
-    //   digits: 2
-    //   # Format the standard output for the money in human-readable format. Use "<amount>" for the actual amount to display.
-    //   # Fully supports tags.
-    //   format: $<amount>
-    //   # A tag that returns the balance of a linked player. Use a 'proc[]' tag if you need more complex logic.
-    //   # Must return a decimal number.
-    //   balance: <player.flag[money]>
-    //   # A tag that returns a boolean indicating whether the linked player has the amount specified by auto-tag "<amount>".
-    //   # Use a 'proc[]' tag if you need more complex logic.
-    //   # Must return 'true' or 'false'.
-    //   has: <player.flag[money].is[or_more].than[<amount>]>
-    //   # A script that removes the amount of money needed from a player.
-    //   # Note that it's generally up to the systems calling this script to verify that the amount can be safely withdrawn, not this script itself.
-    //   # However you may wish to verify that the player has the amount required within this script.
-    //   # The script may determine a failure message if the withdraw was refused. Determine nothing for no error.
-    //   # Use def 'amount' for the amount to withdraw.
-    //   withdraw:
-    //   - flag <player> money:-:<[amount]>
-    //   # A script that adds the amount of money needed to a player.
-    //   # The script may determine a failure message if the deposit was refused. Determine nothing for no error.
-    //   # Use def 'amount' for the amount to deposit.
-    //   deposit:
-    //   - flag <player> money:+:<[amount]>
+    //     # The Bukkit service priority. Priorities are Lowest, Low, Normal, High, Highest.
+    //     priority: normal
+    //     # The name of the currency in the singular (such as "dollar" or "euro").
+    //     name single: scripto
+    //     # The name of the currency in the plural (such as "dollars" or "euros").
+    //     name plural: scriptos
+    //     # How many digits after the decimal to include. For example, '2' means '1.05' is a valid amount, but '1.005' will be rounded.
+    //     digits: 2
+    //     # Format the standard output for the money in human-readable format. Use "<[amount]>" for the actual amount to display.
+    //     # Fully supports tags.
+    //     format: $<[amount]>
+    //     # A tag that returns the balance of a linked player. Use a 'proc[]' tag if you need more complex logic.
+    //     # Must return a decimal number.
+    //     balance: <player.flag[money]>
+    //     # A tag that returns a boolean indicating whether the linked player has the amount specified by def "<[amount]>".
+    //     # Use a 'proc[]' tag if you need more complex logic.
+    //     # Must return 'true' or 'false'.
+    //     has: <player.flag[money].is[or_more].than[<[amount]>]>
+    //     # A script that removes the amount of money needed from a player.
+    //     # Note that it's generally up to the systems calling this script to verify that the amount can be safely withdrawn, not this script itself.
+    //     # However you may wish to verify that the player has the amount required within this script.
+    //     # The script may determine a failure message if the withdraw was refused. Determine nothing for no error.
+    //     # Use def 'amount' for the amount to withdraw.
+    //     withdraw:
+    //     - flag <player> money:-:<[amount]>
+    //     # A script that adds the amount of money needed to a player.
+    //     # The script may determine a failure message if the deposit was refused. Determine nothing for no error.
+    //     # Use def 'amount' for the amount to deposit.
+    //     deposit:
+    //     - flag <player> money:+:<[amount]>
     //
     // </code>
     //
@@ -100,31 +104,69 @@ public class EconomyScriptContainer extends ScriptContainer {
                 DecimalFormat d = new DecimalFormat("0." + new String(new char[digits]).replace('\0', '0'), CoreUtilities.decimalFormatSymbols);
                 amountText = d.format(amount);
             }
-            return autoTag(value.replace("<amount", "<element[" + amountText + "]"), player);
+            DefinitionProvider defProvider = new SimpleDefinitionProvider();
+            defProvider.addDefinition("amount", new ElementTag(amountText));
+            if (value.contains("<amount")) {
+                BukkitImplDeprecations.pseudoTagBases.warn(backingScript);
+                value = value.replace("<amount", "<element[" + amountText + "]");
+            }
+            return autoTag(value, player, defProvider);
         }
 
-        public void validateThread() {
+        public boolean validateThread() {
             if (!Bukkit.isPrimaryThread()) {
+                if (Settings.allowAsyncPassThrough) {
+                    return false;
+                }
+                Debug.echoError("Warning: economy access from wrong thread, blocked. Inform the developer of whatever plugin tried to read eco data that it is forbidden to do so async."
+                        + " You can use config option 'Scripts.Economy.Pass async to main thread' to enable dangerous access.");
                 try {
                     throw new RuntimeException("Stack reference");
                 }
                 catch (RuntimeException ex) {
-                    Debug.echoError("Warning: economy access from wrong thread, errors will result");
                     Debug.echoError(ex);
                 }
+                return false;
             }
+            return true;
         }
 
-        public String autoTag(String value, OfflinePlayer player) {
+        public String autoTag(String value, OfflinePlayer player, DefinitionProvider defProvider) {
             if (value == null) {
                 return null;
             }
-            validateThread();
-            return TagManager.tag(value, new BukkitTagContext(player == null ? null : new PlayerTag(player), null, new ScriptTag(backingScript)));
+            if (!validateThread()) {
+                if (!Settings.allowAsyncPassThrough) {
+                    return null;
+                }
+                try {
+                    Future<String> future = Bukkit.getScheduler().callSyncMethod(Denizen.instance, () -> autoTag(value, player, defProvider));
+                    return future.get();
+                }
+                catch (Throwable ex) {
+                    Debug.echoError(ex);
+                    return null;
+                }
+            }
+            BukkitTagContext context = new BukkitTagContext(player == null ? null : new PlayerTag(player), null, new ScriptTag(backingScript));
+            context.definitionProvider = defProvider;
+            return TagManager.tag(value, context);
         }
 
         public String runSubScript(String pathName, OfflinePlayer player, double amount) {
-            validateThread();
+            if (!validateThread()) {
+                if (!Settings.allowAsyncPassThrough) {
+                    return null;
+                }
+                try {
+                    Future<String> future = Bukkit.getScheduler().callSyncMethod(Denizen.instance, () -> runSubScript(pathName, player, amount));
+                    return future.get();
+                }
+                catch (Throwable ex) {
+                    Debug.echoError(ex);
+                    return null;
+                }
+            }
             List<ScriptEntry> entries = backingScript.getEntries(new BukkitScriptEntryData(new PlayerTag(player), null), pathName);
             InstantQueue queue = new InstantQueue(backingScript.getName());
             queue.addEntries(entries);
@@ -177,7 +219,13 @@ public class EconomyScriptContainer extends ScriptContainer {
                 Debug.echoError("Economy attempted BALANCE-CHECK to NULL player.");
                 return 0;
             }
-            return Double.parseDouble(autoTag(backingScript.getString("balance"), player));
+            try {
+                return Double.parseDouble(autoTag(backingScript.getString("balance"), player, null));
+            }
+            catch (NumberFormatException ex) {
+                Debug.echoError("Economy script '" + getName() + "' returned invalid balance for player '" + new PlayerTag(player).debuggable() + "': " + ex.getMessage());
+                return 0;
+            }
         }
 
         @Override
@@ -375,6 +423,8 @@ public class EconomyScriptContainer extends ScriptContainer {
 
     public EconomyScriptContainer(YamlConfiguration configurationSection, String scriptContainerName) {
         super(configurationSection, scriptContainerName);
-        providersRegistered.add(register());
+        if (shouldEnable()) {
+            providersRegistered.add(register());
+        }
     }
 }

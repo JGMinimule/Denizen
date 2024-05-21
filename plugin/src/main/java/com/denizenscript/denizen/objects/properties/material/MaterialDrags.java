@@ -6,7 +6,7 @@ import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.objects.properties.PropertyParser;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import org.bukkit.block.data.type.BubbleColumn;
 
 @Deprecated
@@ -31,16 +31,15 @@ public class MaterialDrags implements Property {
             "drags"
     };
 
-    private MaterialDrags(MaterialTag _material) {
+    public MaterialDrags(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
-
-        PropertyParser.<MaterialDrags, ElementTag>registerTag(ElementTag.class, "drags", (attribute, material) -> {
-            Deprecations.materialDrags.warn(attribute.context);
+    public static void register() {
+        PropertyParser.registerTag(MaterialDrags.class, ElementTag.class, "drags", (attribute, material) -> {
+            BukkitImplDeprecations.materialDrags.warn(attribute.context);
             return new ElementTag(material.isDrag());
         });
     }
@@ -55,7 +54,7 @@ public class MaterialDrags implements Property {
 
     @Override
     public String getPropertyString() {
-        return String.valueOf(isDrag());
+        return null;
     }
 
     @Override
@@ -65,9 +64,8 @@ public class MaterialDrags implements Property {
 
     @Override
     public void adjust(Mechanism mechanism) {
-
         if (mechanism.matches("drags") && mechanism.requireBoolean()) {
-            Deprecations.materialDrags.warn(mechanism.context);
+            BukkitImplDeprecations.materialDrags.warn(mechanism.context);
             getBubbleColumn().setDrag(mechanism.getValue().asBoolean());
         }
     }

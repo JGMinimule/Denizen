@@ -1,10 +1,8 @@
 package com.denizenscript.denizen.objects.properties.item;
 
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.NMSVersion;
-import com.denizenscript.denizen.nms.util.jnbt.ByteTag;
 import com.denizenscript.denizen.nms.util.jnbt.CompoundTag;
-import com.denizenscript.denizen.nms.util.jnbt.Tag;
+import com.denizenscript.denizen.nms.util.jnbt.CompoundTagBuilder;
 import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.ObjectTag;
@@ -12,16 +10,14 @@ import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.properties.Property;
 import com.denizenscript.denizencore.tags.Attribute;
 import org.bukkit.Material;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
+import org.bukkit.entity.EntityType;
 
 public class ItemFrameInvisible implements Property {
 
     public static boolean describes(ObjectTag object) {
         return object instanceof ItemTag &&
                 (((ItemTag) object).getBukkitMaterial() == Material.ITEM_FRAME
-                || (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_17) && (((ItemTag) object).getBukkitMaterial().name().equals("GLOW_ITEM_FRAME"))));
+                || ((ItemTag) object).getBukkitMaterial() == Material.GLOW_ITEM_FRAME);
     }
 
     public static ItemFrameInvisible getFrom(ObjectTag object) {
@@ -39,22 +35,18 @@ public class ItemFrameInvisible implements Property {
             "invisible"
     };
 
-    private ItemFrameInvisible(ItemTag item) {
+    public ItemFrameInvisible(ItemTag item) {
         this.item = item;
     }
 
     ItemTag item;
 
     public boolean isInvisible() {
-        CompoundTag compoundTag = NMSHandler.getItemHelper().getNbtData(item.getItemStack());
-        if (compoundTag == null) {
+        CompoundTag entityNbt = NMSHandler.itemHelper.getEntityData(item.getItemStack());
+        if (entityNbt == null) {
             return false;
         }
-        CompoundTag entTag = (CompoundTag) compoundTag.getValue().get("EntityTag");
-        if (entTag == null) {
-            return false;
-        }
-        byte b = entTag.getByte("Invisible");
+        byte b = entityNbt.getByte("Invisible");
         return b == 1;
     }
 
@@ -102,30 +94,19 @@ public class ItemFrameInvisible implements Property {
         // <ItemTag.invisible>
         // -->
         if (mechanism.matches("invisible") && mechanism.requireBoolean()) {
-            CompoundTag compoundTag = NMSHandler.getItemHelper().getNbtData(item.getItemStack());
-            Map<String, Tag> result = new LinkedHashMap<>(compoundTag.getValue());
-            CompoundTag entityTag = (CompoundTag) result.get("EntityTag");
-            Map<String, Tag> entMap;
-            if (entityTag != null) {
-                entMap = new LinkedHashMap<>(entityTag.getValue());
+            CompoundTag entityNbt = NMSHandler.itemHelper.getEntityData(item.getItemStack());
+            boolean invisible = mechanism.getValue().asBoolean();
+            if (!invisible && entityNbt == null) {
+                return;
+            }
+            if (invisible) {
+                CompoundTagBuilder builder = entityNbt != null ? entityNbt.createBuilder() : CompoundTagBuilder.create();
+                entityNbt = builder.putByte("Invisible", (byte) 1).build();
             }
             else {
-                entMap = new LinkedHashMap<>();
+                entityNbt = entityNbt.createBuilder().remove("Invisible").build();
             }
-            if (mechanism.getValue().asBoolean()) {
-                entMap.put("Invisible", new ByteTag((byte) 1));
-            }
-            else {
-                entMap.remove("Invisible");
-            }
-            if (entMap.isEmpty()) {
-                result.remove("EntityTag");
-            }
-            else {
-                result.put("EntityTag", NMSHandler.getInstance().createCompoundTag(entMap));
-            }
-            compoundTag = NMSHandler.getInstance().createCompoundTag(result);
-            item.setItemStack(NMSHandler.getItemHelper().setNbtData(item.getItemStack(), compoundTag));
+            item.setItemStack(NMSHandler.itemHelper.setEntityData(item.getItemStack(), entityNbt, item.getBukkitMaterial() == Material.ITEM_FRAME ? EntityType.ITEM_FRAME : EntityType.GLOW_ITEM_FRAME));
         }
     }
 }

@@ -1,19 +1,15 @@
 package com.denizenscript.denizen.scripts.commands.player;
 
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ElementTag;
-import com.denizenscript.denizencore.objects.notable.Notable;
-import com.denizenscript.denizencore.objects.notable.NoteManager;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
-
-import java.util.function.Consumer;
 
 public class CompassCommand extends AbstractCommand {
 
@@ -38,6 +34,8 @@ public class CompassCommand extends AbstractCommand {
     // This is not the compass item, but the command is controlling the pointer the item should direct at.
     // This means that all item compasses will point the same direction but differently for each player.
     //
+    // To affect an individual compass item, use <@link mechanism ItemTag.lodestone_location>
+    //
     // The y-axis is not used but its fine to be included in the location argument.
     //
     // Reset argument will turn the direction to default (spawn or bed)
@@ -59,10 +57,8 @@ public class CompassCommand extends AbstractCommand {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Notable note : NoteManager.notesByType.get(LocationTag.class)) {
-            addOne.accept(NoteManager.getSavedId(note));
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addNotesOfType(LocationTag.class);
     }
 
     @Override
@@ -104,4 +100,3 @@ public class CompassCommand extends AbstractCommand {
         }
     }
 }
-

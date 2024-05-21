@@ -2,7 +2,7 @@ package com.denizenscript.denizen.scripts.commands.npc;
 
 import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -16,7 +16,6 @@ import net.citizensnpcs.api.trait.TraitInfo;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class TraitCommand extends AbstractCommand {
 
@@ -66,9 +65,9 @@ public class TraitCommand extends AbstractCommand {
     private enum Toggle {TOGGLE, TRUE, FALSE, ON, OFF}
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
         for (TraitInfo trait : CitizensAPI.getTraitFactory().getRegisteredTraits()) {
-            addOne.accept(trait.getTraitName());
+            tab.add(trait.getTraitName());
         }
     }
 
@@ -77,7 +76,7 @@ public class TraitCommand extends AbstractCommand {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("state")
                     && arg.matchesPrefix("state", "s")
-                    && arg.matchesEnum(Toggle.values())) {
+                    && arg.matchesEnum(Toggle.class)) {
                 scriptEntry.addObject("state", new ElementTag(arg.getValue().toUpperCase()));
             }
             else if (!scriptEntry.hasObject("trait")) {
@@ -113,7 +112,7 @@ public class TraitCommand extends AbstractCommand {
         }
         Class<? extends Trait> trait = CitizensAPI.getTraitFactory().getTraitClass(traitName.asString());
         if (trait == null) {
-            Debug.echoError(scriptEntry.getResidingQueue(), "Trait not found: " + traitName.asString());
+            Debug.echoError(scriptEntry, "Trait not found: " + traitName.asString());
             return;
         }
         for (NPCTag npcTag : npcs) {
@@ -122,7 +121,7 @@ public class TraitCommand extends AbstractCommand {
                 case TRUE:
                 case ON:
                     if (npc.hasTrait(trait)) {
-                        Debug.echoError(scriptEntry.getResidingQueue(), "NPC already has trait '" + traitName.asString() + "'");
+                        Debug.echoError(scriptEntry, "NPC already has trait '" + traitName.asString() + "'");
                     }
                     else {
                         npc.addTrait(trait);
@@ -131,7 +130,7 @@ public class TraitCommand extends AbstractCommand {
                 case FALSE:
                 case OFF:
                     if (!npc.hasTrait(trait)) {
-                        Debug.echoError(scriptEntry.getResidingQueue(), "NPC does not have trait '" + traitName.asString() + "'");
+                        Debug.echoError(scriptEntry, "NPC does not have trait '" + traitName.asString() + "'");
                     }
                     else {
                         npc.removeTrait(trait);

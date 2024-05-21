@@ -11,10 +11,23 @@ import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityPortalEvent;
 import org.bukkit.event.entity.EntityTeleportEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
 public class EntityTeleportScriptEvent extends BukkitScriptEvent implements Listener {
+
+    // <--[language]
+    // @name Teleport Cause
+    // @group Useful Lists
+    // @description
+    // Possible player teleport causes: <@link url https://hub.spigotmc.org/javadocs/spigot/org/bukkit/event/player/PlayerTeleportEvent.TeleportCause.html>
+    // These are used in <@link event entity teleports>, <@link tag server.teleport_causes>, <@link command teleport>, ...
+    // Note that these causes will only work for player entities.
+    //
+    // Additionally, Denizen provides two basic teleport causes for non-player entity teleport events: ENTITY_PORTAL and ENTITY_TELEPORT.
+    // These additional causes are only for <@link event entity teleports>, and thus not usable in <@link command teleport>, and will not show in <@link tag server.teleport_causes>.
+    // -->
 
     // <--[event]
     // @Events
@@ -36,12 +49,11 @@ public class EntityTeleportScriptEvent extends BukkitScriptEvent implements List
     // <context.entity> returns the EntityTag.
     // <context.origin> returns the LocationTag the entity teleported from.
     // <context.destination> returns the LocationTag the entity teleported to.
-    // <context.cause> returns an ElementTag of the teleport cause. Can be:
-    // COMMAND, END_PORTAL, ENDER_PEARL, NETHER_PORTAL, PLUGIN, END_GATEWAY, CHORUS_FRUIT, SPECTATE, UNKNOWN, or ENTITY_TELEPORT
+    // <context.cause> returns an ElementTag of the teleport cause - see <@link language teleport cause> for causes.
     //
     // @Determine
-    // "ORIGIN:" + LocationTag to change the location the entity teleported from.
-    // "DESTINATION:" + LocationTag to change the location the entity teleports to.
+    // "ORIGIN:<LocationTag>" to change the location the entity teleported from.
+    // "DESTINATION:<LocationTag>" to change the location the entity teleports to.
     //
     // @Player when the entity being teleported is a player.
     //
@@ -50,10 +62,8 @@ public class EntityTeleportScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public EntityTeleportScriptEvent() {
-        instance = this;
     }
 
-    public static EntityTeleportScriptEvent instance;
     public EntityTag entity;
     public LocationTag from;
     public LocationTag to;
@@ -74,7 +84,7 @@ public class EntityTeleportScriptEvent extends BukkitScriptEvent implements List
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, entity)) {
             return false;
         }
         if (!runGenericSwitchCheck(path, "cause", cause)) {
@@ -84,11 +94,6 @@ public class EntityTeleportScriptEvent extends BukkitScriptEvent implements List
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityTeleports";
     }
 
     @Override
@@ -165,7 +170,7 @@ public class EntityTeleportScriptEvent extends BukkitScriptEvent implements List
         to = new LocationTag(event.getTo());
         from = new LocationTag(event.getFrom());
         entity = new EntityTag(event.getEntity());
-        cause = "ENTITY_TELEPORT";
+        cause = event instanceof EntityPortalEvent ? "ENTITY_PORTAL" : "ENTITY_TELEPORT";
         this.event = event;
         pEvent = null;
         fire(event);

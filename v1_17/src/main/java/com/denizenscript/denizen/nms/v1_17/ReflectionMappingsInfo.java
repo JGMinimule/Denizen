@@ -2,7 +2,7 @@ package com.denizenscript.denizen.nms.v1_17;
 
 public class ReflectionMappingsInfo {
 
-    // Contents gathered via https://minidigger.github.io/MiniMappingViewer/#/mojang/server/1.17
+    // Contents gathered via https://minidigger.github.io/MiniMappingViewer/#/mojang/server/1.17.1
 
     public static String AdvancementList_roots = "c";
     public static String AdvancementList_tasks = "d";
@@ -23,7 +23,9 @@ public class ReflectionMappingsInfo {
 
     public static String ServerPlayer_respawnForced = "cS";
 
-    public static String EnderMan_DATA_CREEPY = "bU";
+    public static String EnderMan_DATA_CREEPY = "bV";
+
+    public static String Zombie_inWaterTime = "cc";
 
     public static String Item_maxStackSize = "c";
 
@@ -36,6 +38,8 @@ public class ReflectionMappingsInfo {
     public static String Biome_climateSettings = "k";
     public static String Biome_ClimateSettings_temperature = "c";
     public static String Biome_ClimateSettings_downfall = "e";
+    public static String Biome_ClimateSettings_precipitation = "b";
+    public static String BiomeSpecialEffects_foliageColorOverride = "f";
 
     public static String ThreadedLevelLightEngine_Update_PRE_UPDATE = "a";
 
@@ -78,4 +82,6 @@ public class ReflectionMappingsInfo {
     public static String FishingHook_nibble = "aq";
     public static String FishingHook_timeUntilLured = "ar";
     public static String FishingHook_timeUntilHooked = "as";
+
+    public static String ServerLevel_sleepStatus = "H";
 }

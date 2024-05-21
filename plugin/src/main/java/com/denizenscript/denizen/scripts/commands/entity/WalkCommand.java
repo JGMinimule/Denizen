@@ -2,7 +2,7 @@ package com.denizenscript.denizen.scripts.commands.entity;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.depends.Depends;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizen.nms.NMSHandler;
@@ -12,8 +12,6 @@ import com.denizenscript.denizen.objects.NPCTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
-import com.denizenscript.denizencore.objects.notable.Notable;
-import com.denizenscript.denizencore.objects.notable.NoteManager;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.scripts.commands.Holdable;
@@ -21,7 +19,6 @@ import com.denizenscript.denizencore.scripts.commands.Holdable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class WalkCommand extends AbstractCommand implements Holdable {
 
@@ -95,10 +92,8 @@ public class WalkCommand extends AbstractCommand implements Holdable {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (Notable note : NoteManager.notesByType.get(LocationTag.class)) {
-            addOne.accept(NoteManager.getSavedId(note));
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.addNotesOfType(LocationTag.class);
     }
 
     @Override
@@ -175,7 +170,7 @@ public class WalkCommand extends AbstractCommand implements Holdable {
                 NPCTag npc = entity.getDenizenNPC();
                 npcs.add(npc);
                 if (!npc.isSpawned()) {
-                    Debug.echoError(scriptEntry.getResidingQueue(), "NPC " + npc.identify() + " is not spawned!");
+                    Debug.echoError(scriptEntry, "NPC " + npc.identify() + " is not spawned!");
                     continue;
                 }
                 if (shouldStop) {
@@ -200,24 +195,23 @@ public class WalkCommand extends AbstractCommand implements Holdable {
                 }
             }
             else if (shouldStop) {
-                NMSHandler.getEntityHelper().stopWalking(entity.getBukkitEntity());
+                NMSHandler.entityHelper.stopWalking(entity.getBukkitEntity());
             }
             else {
                 waitForEntities.add(entity);
-                NMSHandler.getEntityHelper().walkTo(entity.getLivingEntity(), loc, speed != null ? speed.asDouble() : null,
+                NMSHandler.entityHelper.walkTo(entity.getLivingEntity(), loc, speed != null ? speed.asDouble() : null,
                         () -> checkHeld(entity));
             }
         }
         if (scriptEntry.shouldWaitFor()) {
             held.add(scriptEntry);
-            if (!npcs.isEmpty()) {
+            if (!npcs.isEmpty()) { // TODO: de-jank this
                 scriptEntry.addObject("tally", npcs);
             }
             if (!waitForEntities.isEmpty()) {
                 scriptEntry.addObject("entities", waitForEntities);
             }
         }
-
     }
 
     // Held script entries

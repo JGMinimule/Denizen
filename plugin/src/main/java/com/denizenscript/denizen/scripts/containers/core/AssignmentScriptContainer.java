@@ -1,9 +1,9 @@
 package com.denizenscript.denizen.scripts.containers.core;
 
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.scripts.ScriptRegistry;
 import com.denizenscript.denizencore.scripts.containers.ScriptContainer;
-import com.denizenscript.denizencore.utilities.Deprecations;
+import com.denizenscript.denizen.utilities.BukkitImplDeprecations;
 import com.denizenscript.denizencore.utilities.YamlConfiguration;
 
 import java.util.List;
@@ -25,30 +25,30 @@ public class AssignmentScriptContainer extends ScriptContainer {
     // interact scripts can provide more functionality.
     // See also <@link language interact script containers>
     //
+    // Assignments scripts can be automatically disabled by adding "enabled: false" as a root key (supports any load-time-parseable tags).
+    // This will disable any "actions" on the script (but not interact scripts steps - disable the interact for that).
+    //
     // Basic structure of an assignment script:
     // <code>
     // Assignment_Script_Name:
     //
-    //   type: assignment
+    //     type: assignment
     //
-    //   # | All assignment scripts MUST have this key!
-    //   actions:
-    //     on <action>:
-    //     - ...
+    //     # | All assignment scripts MUST have this key!
+    //     actions:
+    //         on <action>:
+    //         - ...
     //
-    //   # | Most assignment scripts should exclude this key, but it's available.
-    //   default constants:
-    //     <constant_name>: <value>
-    //     <constant_list>:
-    //     - ...
+    //     # | Most assignment scripts should exclude this key, but it's available.
+    //     default constants:
+    //         <constant_name>: <value>
+    //         <constant_list>:
+    //         - ...
     //
-    //   # | MOST assignment scripts should have this key!
-    //   interact scripts:
-    //   - <interact_script_name>
-    //   </code>
-    //
-    // All part of an assignment script are optional. The three features provided can be
-    // used together, but do not require one another.
+    //     # | MOST assignment scripts should have this key!
+    //     interact scripts:
+    //     - <interact_script_name>
+    // </code>
     //
     // Though note that almost always you should include the 'actions:' key, usually with the 'on assignment:' action (if using triggers).
     // Refer to <@link action assignment>.
@@ -66,7 +66,7 @@ public class AssignmentScriptContainer extends ScriptContainer {
                 String name = names.get(0);
                 int space = name.indexOf(' ');
                 if (space != -1 && Character.isDigit(name.charAt(0))) {
-                    Deprecations.interactScriptPriority.warn(this);
+                    BukkitImplDeprecations.interactScriptPriority.warn(this);
                     name = name.substring(space + 1).replace("^", "");
                 }
                 interactName = name;
@@ -80,7 +80,7 @@ public class AssignmentScriptContainer extends ScriptContainer {
 
     public InteractScriptContainer getInteract() {
         if (interact == null && interactName != null) {
-            interact = ScriptRegistry.getScriptContainerAs(interactName, InteractScriptContainer.class);
+            interact = ScriptRegistry.getScriptContainer(interactName);
             if (interact == null) {
                 Debug.echoError("'" + interactName + "' is not a valid Interact Script. Is there a duplicate script by this name, or is it missing?");
             }

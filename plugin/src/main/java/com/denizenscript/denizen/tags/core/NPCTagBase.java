@@ -144,7 +144,7 @@ public class NPCTagBase implements Listener {
                 npc.action("attack", player);
 
                 npc.action("attack on "
-                        + entity.getType().toString(), player);
+                        + entity.getType(), player);
             }
             previousLocations.put(event.getNPC().getId(), npc.getLocation());
         }
@@ -246,11 +246,11 @@ public class NPCTagBase implements Listener {
                     if (shooter instanceof Player) {
                         player = PlayerTag.mirrorBukkitPlayer((Player) shooter);
                     }
-                    npc.action("death by " + ((LivingEntity) shooter).getType().toString(), player, context);
+                    npc.action("death by " + ((LivingEntity) shooter).getType(), player, context);
                 }
             }
             npc.action("death by entity", player, context);
-            npc.action("death by " + killerEntity.getType().toString(), player, context);
+            npc.action("death by " + killerEntity.getType(), player, context);
         }
         else if (event instanceof EntityDamageByBlockEvent) {
             npc.action("death by block", null, context);
@@ -283,7 +283,7 @@ public class NPCTagBase implements Listener {
     // -->
     @EventHandler(priority = EventPriority.MONITOR)
     public void onHit(EntityDamageByEntityEvent event) {
-        NPC citizen = CitizensAPI.getNPCRegistry().getNPC(event.getEntity());
+        NPC citizen = CitizensAPI.getNPCRegistry().getNPC(event.getDamager());
         if (citizen == null) {
             if (event.getDamager() instanceof Projectile) {
                 if (((Projectile) event.getDamager()).getShooter() instanceof Entity) {

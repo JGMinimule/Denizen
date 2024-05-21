@@ -3,56 +3,81 @@ package com.denizenscript.denizen.objects.properties.material;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.nms.NMSVersion;
 import com.denizenscript.denizen.objects.MaterialTag;
-import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.Mechanism;
-import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.objects.properties.Property;
+import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.properties.PropertyParser;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Brushable;
 import org.bukkit.block.data.Levelled;
-import org.bukkit.block.data.type.Cake;
 import org.bukkit.block.data.type.Beehive;
+import org.bukkit.block.data.type.Cake;
+import org.bukkit.block.data.type.Farmland;
 import org.bukkit.block.data.type.Snow;
 
-public class MaterialLevel implements Property {
+public class MaterialLevel extends MaterialProperty<ElementTag> {
 
-    public static boolean describes(ObjectTag material) {
-        return material instanceof MaterialTag
-                && ((MaterialTag) material).hasModernData()
-                && (((MaterialTag) material).getModernData() instanceof Levelled
-                || ((MaterialTag) material).getModernData() instanceof Cake
-                || ((MaterialTag) material).getModernData() instanceof Snow
-                || (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_15) && ((MaterialTag) material).getModernData() instanceof Beehive));
+    // <--[property]
+    // @object MaterialTag
+    // @name level
+    // @input ElementTag(Number)
+    // @description
+    // Controls the current level for a Levelled material, cake, beehives, snow, farmland, or brushable blocks.
+    // "Levelled" materials include: water, lava, cauldrons, composters, light blocks, brushable blocks, and any other future Levelled implementing types.
+    // For light blocks, this is the brightness of the light.
+    // For water/lava this is the height of the liquid block.
+    // For cauldrons, this is the amount of liquid contained.
+    // For cake, this is the number of bites left.
+    // For beehives/bee nests, this is the amount of honey contained.
+    // For snow, this is the number of partial layers, or the height, of a snow block.
+    // For farmland, this is the moisture level.
+    // For composters, this is the amount of compost.
+    // For brushable blocks (also referred to as "suspicious blocks"), this is the level of dusting. 1.20+ only.
+    // See also <@link tag MaterialTag.maximum_level> and <@link tag MaterialTag.minimum_level>.
+    // -->
+
+    public static boolean describes(MaterialTag material) {
+        BlockData data = material.getModernData();
+        return data instanceof Levelled 
+                || data instanceof Cake 
+                || data instanceof Snow 
+                || data instanceof Farmland 
+                || data instanceof Beehive 
+                || (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_20) && data instanceof Brushable);
     }
 
-    public static MaterialLevel getFrom(ObjectTag _material) {
-        if (!describes(_material)) {
-            return null;
+    @Override
+    public ElementTag getPropertyValue() {
+        return new ElementTag(getCurrent());
+    }
+
+    @Override
+    public String getPropertyId() {
+        return "level";
+    }
+
+    @Override
+    public void setPropertyValue(ElementTag value, Mechanism mechanism) {
+        if (!mechanism.requireInteger()) {
+            return;
         }
-        else {
-            return new MaterialLevel((MaterialTag) _material);
+        int level = value.asInt();
+        if (level < getMin() || level > getMax()) {
+            mechanism.echoError("Level value '" + level + "' is not valid. Must be between " + getMin() + " and " + getMax() + " for material '" + getBlockData().getMaterial().name() + "'.");
+            return;
         }
+        setCurrent(level);
     }
 
-    public static final String[] handledMechs = new String[] {
-            "level"
-    };
-
-    private MaterialLevel(MaterialTag _material) {
-        material = _material;
-    }
-
-    MaterialTag material;
-
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.maximum_level>
         // @returns ElementTag(Number)
         // @group properties
         // @description
-        // Returns the maximum level for a Levelled material (like water, lava, and cauldrons), cake, beehives, and snow.
+        // Returns the maximum level for a Levelled material (like water, lava, and cauldrons), cake, beehives, snow, or farmland.
         // -->
-        PropertyParser.<MaterialLevel, ElementTag>registerStaticTag(ElementTag.class, "maximum_level", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialLevel.class, ElementTag.class, "maximum_level", (attribute, material) -> {
             return new ElementTag(material.getMax());
         });
 
@@ -61,60 +86,54 @@ public class MaterialLevel implements Property {
         // @returns ElementTag(Number)
         // @group properties
         // @description
-        // Returns the minimum level for a Levelled material (like water, lava, and cauldrons), cake, beehives, and snow.
+        // Returns the minimum level for a Levelled material (like water, lava, and cauldrons), cake, beehives, snow, or farmland.
         // This will return 0 for all valid materials aside from snow.
         // -->
-        PropertyParser.<MaterialLevel, ElementTag>registerStaticTag(ElementTag.class, "minimum_level", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialLevel.class, ElementTag.class, "minimum_level", (attribute, material) -> {
             return new ElementTag(material.getMin());
         });
 
-        // <--[tag]
-        // @attribute <MaterialTag.level>
-        // @returns ElementTag(Number)
-        // @mechanism MaterialTag.level
-        // @group properties
-        // @description
-        // Returns the current level for a Levelled material (like water, lava, and cauldrons), cake, beehives, and snow.
-        // -->
-        PropertyParser.<MaterialLevel, ElementTag>registerStaticTag(ElementTag.class, "level", (attribute, material) -> {
-            return new ElementTag(material.getCurrent());
-        });
+        autoRegister("level", MaterialLevel.class, ElementTag.class, false);
     }
 
     public Levelled getLevelled() {
-        return (Levelled) material.getModernData();
+        return (Levelled) getBlockData();
     }
 
     public boolean isCake() {
-        return material.getModernData() instanceof Cake;
+        return getBlockData() instanceof Cake;
     }
 
     public Cake getCake() {
-        return (Cake) material.getModernData();
+        return (Cake) getBlockData();
     }
 
     public boolean isSnow() {
-        return material.getModernData() instanceof Snow;
+        return getBlockData() instanceof Snow;
     }
 
     public Snow getSnow() {
-        return (Snow) material.getModernData();
+        return (Snow) getBlockData();
     }
 
     public boolean isHive() {
-        return (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_15) && material.getModernData() instanceof Beehive);
+        return getBlockData() instanceof Beehive;
     }
 
-    public int getHoneyLevel() {
-        return ((Beehive) material.getModernData()).getHoneyLevel();
+    public Beehive getHive() {
+        return (Beehive) getBlockData();
     }
 
-    public int getMaxHoneyLevel() {
-        return ((Beehive) material.getModernData()).getMaximumHoneyLevel();
+    public boolean isFarmland() {
+        return getBlockData() instanceof Farmland;
     }
 
-    public void setHoneyLevel(int level) {
-        ((Beehive) material.getModernData()).setHoneyLevel(level);
+    public Farmland getFarmland() {
+        return (Farmland) getBlockData();
+    }
+
+    public boolean isBrushable() {
+        return NMSHandler.getVersion().isAtLeast(NMSVersion.v1_20) && getBlockData() instanceof Brushable;
     }
 
     public int getCurrent() {
@@ -125,7 +144,13 @@ public class MaterialLevel implements Property {
             return getSnow().getLayers();
         }
         else if (isHive()) {
-            return getHoneyLevel();
+            return getHive().getHoneyLevel();
+        }
+        else if (isFarmland()) {
+            return getFarmland().getMoisture();
+        }
+        else if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_20) && isBrushable()) {
+            return ((Brushable) getBlockData()).getDusted();
         }
         return getLevelled().getLevel();
     }
@@ -138,7 +163,13 @@ public class MaterialLevel implements Property {
             return getSnow().getMaximumLayers();
         }
         else if (isHive()) {
-            return getMaxHoneyLevel();
+            return getHive().getMaximumHoneyLevel();
+        }
+        else if (isFarmland()) {
+            return getFarmland().getMaximumMoisture();
+        }
+        else if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_20) && isBrushable()) {
+            return ((Brushable) getBlockData()).getMaximumDusted();
         }
         return getLevelled().getMaximumLevel();
     }
@@ -160,43 +191,17 @@ public class MaterialLevel implements Property {
             return;
         }
         else if (isHive()) {
-            setHoneyLevel(level);
+            getHive().setHoneyLevel(level);
+            return;
+        }
+        else if (isFarmland()) {
+            getFarmland().setMoisture(level);
+            return;
+        }
+        else if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_20) && isBrushable()) {
+            ((Brushable) getBlockData()).setDusted(level);
             return;
         }
         getLevelled().setLevel(level);
-    }
-
-    @Override
-    public String getPropertyString() {
-        return String.valueOf(getCurrent());
-    }
-
-    @Override
-    public String getPropertyId() {
-        return "level";
-    }
-
-    @Override
-    public void adjust(Mechanism mechanism) {
-
-        // <--[mechanism]
-        // @object MaterialTag
-        // @name level
-        // @input ElementTag(Number)
-        // @description
-        // Sets the current level for a Levelled material (like water, lava, and cauldrons), cake, beehives, and snow.
-        // @tags
-        // <MaterialTag.level>
-        // <MaterialTag.maximum_level>
-        // <MaterialTag.minimum_level>
-        // -->
-        if (mechanism.matches("level") && mechanism.requireInteger()) {
-            int level = mechanism.getValue().asInt();
-            if (level < getMin() || level > getMax()) {
-                mechanism.echoError("Level value '" + level + "' is not valid. Must be between " + getMin() + " and " + getMax() + " for material '" + material.name() + "'.");
-                return;
-            }
-            setCurrent(level);
-        }
     }
 }

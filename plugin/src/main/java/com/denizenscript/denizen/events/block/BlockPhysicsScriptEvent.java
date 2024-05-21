@@ -3,7 +3,7 @@ package com.denizenscript.denizen.events.block;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.MaterialTag;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.utilities.ReflectionHelper;
 import org.bukkit.Material;
@@ -27,7 +27,7 @@ public class BlockPhysicsScriptEvent extends BukkitScriptEvent implements Listen
     //
     // @Warning This event may fire very rapidly.
     //
-    // @Switch adjacent:<block> to only process the event if the block or an immediately adjacent block (up/down/n/e/s/w) matches the material matcher specified. This can be useful to prevent blocks from breaking.
+    // @Switch adjacent:<block> to only process the event if the block or an immediately adjacent block (up/down/n/e/s/w) matches the LocationTag matcher specified. This can be useful to prevent blocks from breaking.
     //
     // @Cancellable true
     //
@@ -40,12 +40,10 @@ public class BlockPhysicsScriptEvent extends BukkitScriptEvent implements Listen
     // -->
 
     public BlockPhysicsScriptEvent() {
-        instance = this;
         registerCouldMatcher("<block> physics");
         registerSwitches("adjacent");
     }
 
-    public static BlockPhysicsScriptEvent instance;
 
     public LocationTag location;
     public MaterialTag material;
@@ -56,29 +54,24 @@ public class BlockPhysicsScriptEvent extends BukkitScriptEvent implements Listen
         if (!runInCheck(path, location)) {
             return false;
         }
-        if (!tryMaterial(material, path.eventArgLowerAt(0))) {
+        if (!path.tryArgObject(0, material)) {
             return false;
         }
         String adjacent = path.switches.get("adjacent");
         if (adjacent != null) {
-            if (!tryMaterial(material, adjacent)) {
+            if (!material.tryAdvancedMatcher(adjacent)) {
                 Block block = location.getBlock();
-                if (!tryMaterial(block.getRelative(0, 1, 0).getType(), adjacent)
-                        && !tryMaterial(block.getRelative(0, -1, 0).getType(), adjacent)
-                        && !tryMaterial(block.getRelative(1, 0, 0).getType(), adjacent)
-                        && !tryMaterial(block.getRelative(-1, 0, 0).getType(), adjacent)
-                        && !tryMaterial(block.getRelative(0, 0, 1).getType(), adjacent)
-                        && !tryMaterial(block.getRelative(0, 0, -1).getType(), adjacent)) {
+                if (!new LocationTag(block.getRelative(0, 1, 0).getLocation()).tryAdvancedMatcher(adjacent)
+                        && !new LocationTag(block.getRelative(0, -1, 0).getLocation()).tryAdvancedMatcher(adjacent)
+                        && !new LocationTag(block.getRelative(1, 0, 0).getLocation()).tryAdvancedMatcher(adjacent)
+                        && !new LocationTag(block.getRelative(-1, 0, 0).getLocation()).tryAdvancedMatcher(adjacent)
+                        && !new LocationTag(block.getRelative(0, 0, 1).getLocation()).tryAdvancedMatcher(adjacent)
+                        && !new LocationTag(block.getRelative(0, 0, -1).getLocation()).tryAdvancedMatcher(adjacent)) {
                     return false;
                 }
             }
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "BlockPhysics";
     }
 
     public static Field PHYSICS_EVENT_DATA = ReflectionHelper.getFields(BlockPhysicsEvent.class).getFirstOfType(BlockData.class);

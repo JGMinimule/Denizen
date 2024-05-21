@@ -30,11 +30,9 @@ public class PlayerChangesGamemodeScriptEvent extends BukkitScriptEvent implemen
     // -->
 
     public PlayerChangesGamemodeScriptEvent() {
-        instance = this;
         registerCouldMatcher("player changes gamemode (to <'gamemode'>)");
     }
 
-    public static PlayerChangesGamemodeScriptEvent instance;
     public ElementTag gamemode;
     public PlayerGameModeChangeEvent event;
 
@@ -47,11 +45,6 @@ public class PlayerChangesGamemodeScriptEvent extends BukkitScriptEvent implemen
             }
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerChangesGamemode";
     }
 
     @Override
@@ -72,7 +65,7 @@ public class PlayerChangesGamemodeScriptEvent extends BukkitScriptEvent implemen
         if (EntityTag.isNPC(event.getPlayer())) {
             return;
         }
-        gamemode = new ElementTag(event.getNewGameMode().name());
+        gamemode = new ElementTag(event.getNewGameMode());
         this.event = event;
         fire(event);
     }

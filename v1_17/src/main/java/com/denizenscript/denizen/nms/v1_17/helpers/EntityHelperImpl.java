@@ -2,31 +2,27 @@ package com.denizenscript.denizen.nms.v1_17.helpers;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.v1_17.ReflectionMappingsInfo;
-import com.denizenscript.denizen.objects.EntityTag;
-import com.denizenscript.denizencore.utilities.ReflectionHelper;
-import com.denizenscript.denizen.nms.v1_17.impl.jnbt.CompoundTagImpl;
 import com.denizenscript.denizen.nms.interfaces.EntityHelper;
-import com.denizenscript.denizen.nms.util.BoundingBox;
 import com.denizenscript.denizen.nms.util.jnbt.CompoundTag;
+import com.denizenscript.denizen.nms.v1_17.ReflectionMappingsInfo;
+import com.denizenscript.denizen.nms.v1_17.impl.jnbt.CompoundTagImpl;
+import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.ReflectionHelper;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
 import net.minecraft.network.syncher.EntityDataAccessor;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerPlayerConnection;
-import net.minecraft.stats.RecipeBook;
-import net.minecraft.stats.ServerRecipeBook;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.CombatRules;
 import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.MobType;
+import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
@@ -42,12 +38,10 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
-import org.bukkit.block.BlockFace;
 import org.bukkit.block.CreatureSpawner;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.craftbukkit.v1_17_R1.CraftWorld;
@@ -58,14 +52,10 @@ import org.bukkit.craftbukkit.v1_17_R1.entity.*;
 import org.bukkit.craftbukkit.v1_17_R1.event.CraftEventFactory;
 import org.bukkit.craftbukkit.v1_17_R1.inventory.CraftItemStack;
 import org.bukkit.entity.*;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityTargetEvent;
-import org.bukkit.event.player.PlayerFishEvent;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
 import java.lang.invoke.MethodHandle;
@@ -74,9 +64,7 @@ import java.util.*;
 
 public class EntityHelperImpl extends EntityHelper {
 
-    public static final Field RECIPE_BOOK_DISCOVERED_SET = ReflectionHelper.getFields(RecipeBook.class).get(ReflectionMappingsInfo.RecipeBook_known);
-
-    public static final MethodHandle ENTITY_ONGROUND_SETTER = ReflectionHelper.getFinalSetter(net.minecraft.world.entity.Entity.class, ReflectionMappingsInfo.Entity_onGround);
+    public static final MethodHandle ENTITY_ONGROUND_SETTER = ReflectionHelper.getFinalSetter(net.minecraft.world.entity.Entity.class, ReflectionMappingsInfo.Entity_onGround, boolean.class);
 
     public static final EntityDataAccessor<Boolean> ENTITY_ENDERMAN_DATAWATCHER_SCREAMING = ReflectionHelper.getFieldValue(EnderMan.class, ReflectionMappingsInfo.EnderMan_DATA_CREEPY, null);
 
@@ -86,22 +74,13 @@ public class EntityHelperImpl extends EntityHelper {
     }
 
     @Override
-    public double getAbsorption(LivingEntity entity) {
-        return entity.getAbsorptionAmount();
+    public boolean isInvisible(Entity entity) {
+        return ((CraftEntity) entity).getHandle().isInvisible();
     }
 
     @Override
-    public void setAbsorption(LivingEntity entity, double value) {
-        entity.setAbsorptionAmount(value);
-    }
-
-    @Override
-    public void setSneaking(Entity player, boolean sneak) {
-        if (player instanceof Player) {
-            ((Player) player).setSneaking(sneak);
-        }
-        Pose pose = sneak ? Pose.CROUCHING : Pose.STANDING;
-        ((CraftEntity) player).getHandle().setPose(pose);
+    public void setPose(Entity entity, Pose pose) {
+        ((CraftEntity) entity).getHandle().setPose(net.minecraft.world.entity.Pose.values()[pose.ordinal()]);
     }
 
     @Override
@@ -150,79 +129,8 @@ public class EntityHelperImpl extends EntityHelper {
     }
 
     @Override
-    public String getRawHoverText(Entity entity) {
-        throw new UnsupportedOperationException();
-    }
-
-    public List<String> getDiscoveredRecipes(Player player) {
-        try {
-            ServerRecipeBook book = ((CraftPlayer) player).getHandle().getRecipeBook();
-            Set<ResourceLocation> set = (Set<ResourceLocation>) RECIPE_BOOK_DISCOVERED_SET.get(book);
-            List<String> output = new ArrayList<>();
-            for (ResourceLocation key : set) {
-                output.add(key.toString());
-            }
-            return output;
-        }
-        catch (Throwable ex) {
-            Debug.echoError(ex);
-        }
-        return null;
-    }
-
-    @Override
-    public String getArrowPickupStatus(Entity entity) {
-        return ((Arrow) entity).getPickupStatus().name();
-    }
-
-    @Override
-    public void setArrowPickupStatus(Entity entity, String status) {
-        ((Arrow) entity).setPickupStatus(AbstractArrow.PickupStatus.valueOf(status));
-    }
-
-    @Override
-    public double getArrowDamage(Entity arrow) {
-        return ((Arrow) arrow).getDamage();
-    }
-
-    @Override
-    public void setArrowDamage(Entity arrow, double damage) {
-        ((Arrow) arrow).setDamage(damage);
-    }
-
-    @Override
-    public void setCarriedItem(Enderman entity, ItemStack item) {
-        entity.setCarriedBlock(Bukkit.createBlockData(item.getType()));
-    }
-
-    @Override
     public void setRiptide(Entity entity, boolean state) {
         ((CraftLivingEntity) entity).getHandle().startAutoSpinAttack(state ? 0 : 1);
-    }
-
-    @Override
-    public int getBodyArrows(Entity entity) {
-        return ((CraftLivingEntity) entity).getHandle().getArrowCount();
-    }
-
-    @Override
-    public void setBodyArrows(Entity entity, int numArrows) {
-        ((CraftLivingEntity) entity).getHandle().setArrowCount(numArrows);
-    }
-
-    @Override
-    public Entity getFishHook(PlayerFishEvent event) {
-        return event.getHook();
-    }
-
-    @Override
-    public ItemStack getItemFromTrident(Entity entity) {
-        return CraftItemStack.asBukkitCopy(((CraftTrident) entity).getHandle().tridentItem);
-    }
-
-    @Override
-    public void setItemForTrident(Entity entity, ItemStack item) {
-        ((CraftTrident) entity).getHandle().tridentItem = CraftItemStack.asNMSCopy(item);
     }
 
     @Override
@@ -232,19 +140,6 @@ public class EntityHelperImpl extends EntityHelper {
         ((CraftBlock) location.getBlock()).getNMS().use(((CraftWorld) location.getWorld()).getHandle(),
                 craftPlayer != null ? craftPlayer.getHandle() : null, InteractionHand.MAIN_HAND,
                 new BlockHitResult(new Vec3(0, 0, 0), null, pos, false));
-    }
-
-    @Override
-    public Entity getEntity(World world, UUID uuid) {
-        net.minecraft.world.entity.Entity entity = ((CraftWorld) world).getHandle().getEntity(uuid);
-        return entity == null ? null : entity.getBukkitEntity();
-    }
-
-    @Override
-    public void setTarget(Creature entity, LivingEntity target) {
-        net.minecraft.world.entity.LivingEntity nmsTarget = target != null ? ((CraftLivingEntity) target).getHandle() : null;
-        ((CraftCreature) entity).getHandle().setGoalTarget(nmsTarget, EntityTargetEvent.TargetReason.CUSTOM, true);
-        entity.setTarget(target);
     }
 
     @Override
@@ -283,26 +178,6 @@ public class EntityHelperImpl extends EntityHelper {
             return;
         }
         ((Mob) nmsEntity).getNavigation().stop();
-    }
-
-    @Override
-    public double getSpeed(Entity entity) {
-        net.minecraft.world.entity.Entity nmsEntityEntity = ((CraftEntity) entity).getHandle();
-        if (!(nmsEntityEntity instanceof Mob)) {
-            return 0.0;
-        }
-        Mob nmsEntity = (Mob) nmsEntityEntity;
-        return nmsEntity.getAttribute(Attributes.MOVEMENT_SPEED).getBaseValue();
-    }
-
-    @Override
-    public void setSpeed(Entity entity, double speed) {
-        net.minecraft.world.entity.Entity nmsEntityEntity = ((CraftEntity) entity).getHandle();
-        if (!(nmsEntityEntity instanceof Mob)) {
-            return;
-        }
-        Mob nmsEntity = (Mob) nmsEntityEntity;
-        nmsEntity.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(speed);
     }
 
     @Override
@@ -525,9 +400,8 @@ public class EntityHelperImpl extends EntityHelper {
     }
 
     @Override
-    public float getBaseYaw(Entity entity) {
-        net.minecraft.world.entity.Entity handle = ((CraftEntity) entity).getHandle();
-        return ((net.minecraft.world.entity.LivingEntity) handle).yBodyRot;
+    public float getBaseYaw(LivingEntity entity) {
+        return ((CraftLivingEntity) entity).getHandle().yBodyRot;
     }
 
     @Override
@@ -558,13 +432,13 @@ public class EntityHelperImpl extends EntityHelper {
 
     private static HitResult rayTrace(World world, Vector start, Vector end) {
         try {
-            NMSHandler.getChunkHelper().changeChunkServerThread(world);
+            NMSHandler.chunkHelper.changeChunkServerThread(world);
             return ((CraftWorld) world).getHandle().clip(new ClipContext(new Vec3(start.getX(), start.getY(), start.getZ()),
                     new Vec3(end.getX(), end.getY(), end.getZ()),
                     ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, null));
         }
         finally {
-            NMSHandler.getChunkHelper().restoreServerThread(world);
+            NMSHandler.chunkHelper.restoreServerThread(world);
         }
     }
 
@@ -575,41 +449,6 @@ public class EntityHelperImpl extends EntityHelper {
             return true;
         }
         return pos.getType() == HitResult.Type.MISS;
-    }
-
-    @Override
-    public MapTraceResult mapTrace(LivingEntity from, double range) {
-        Location start = from.getEyeLocation();
-        Vector startVec = start.toVector();
-        double xzLen = Math.cos((start.getPitch() % 360) * (Math.PI / 180));
-        double nx = xzLen * Math.sin(-start.getYaw() * (Math.PI / 180));
-        double ny = Math.sin(start.getPitch() * (Math.PI / 180));
-        double nz = xzLen * Math.cos(start.getYaw() * (Math.PI / 180));
-        Vector endVec = startVec.clone().add(new Vector(nx, -ny, nz).multiply(range));
-        HitResult l = rayTrace(start.getWorld(), startVec, endVec);
-        if (!(l instanceof BlockHitResult) || l.getLocation() == null) {
-            return null;
-        }
-        Vector finalVec = new Vector(l.getLocation().x, l.getLocation().y, l.getLocation().z);
-        MapTraceResult mtr = new MapTraceResult();
-        switch (((BlockHitResult) l).getDirection()) {
-            case NORTH:
-                mtr.angle = BlockFace.NORTH;
-                break;
-            case SOUTH:
-                mtr.angle = BlockFace.SOUTH;
-                break;
-            case EAST:
-                mtr.angle = BlockFace.EAST;
-                break;
-            case WEST:
-                mtr.angle = BlockFace.WEST;
-                break;
-        }
-        // wallPosition - ((end - start).normalize() * 0.072)
-        Vector hit = finalVec.clone().subtract((endVec.clone().subtract(startVec)).normalize().multiply(0.072));
-        mtr.hitLocation = new Location(start.getWorld(), hit.getX(), hit.getY(), hit.getZ());
-        return mtr;
     }
 
     @Override
@@ -634,35 +473,8 @@ public class EntityHelperImpl extends EntityHelper {
     }
 
     @Override
-    public BoundingBox getBoundingBox(Entity entity) {
-        AABB boundingBox = ((CraftEntity) entity).getHandle().getBoundingBox();
-        Vector position = new Vector(boundingBox.minX, boundingBox.minY, boundingBox.minZ);
-        Vector size = new Vector(boundingBox.maxX, boundingBox.maxY, boundingBox.maxZ);
-        return new BoundingBox(position, size);
-    }
-
-    @Override
-    public void setBoundingBox(Entity entity, BoundingBox boundingBox) {
-        Vector low = boundingBox.getLow();
-        Vector high = boundingBox.getHigh();
-        ((CraftEntity) entity).getHandle().setBoundingBox(new AABB(low.getX(), low.getY(), low.getZ(), high.getX(), high.getY(), high.getZ()));
-    }
-
-    @Override
-    public boolean isChestedHorse(Entity horse) {
-        return horse instanceof ChestedHorse;
-    }
-
-    @Override
-    public boolean isCarryingChest(Entity horse) {
-        return horse instanceof ChestedHorse && ((ChestedHorse) horse).isCarryingChest();
-    }
-
-    @Override
-    public void setCarryingChest(Entity horse, boolean carrying) {
-        if (horse instanceof ChestedHorse) {
-            ((ChestedHorse) horse).setCarryingChest(carrying);
-        }
+    public void setBoundingBox(Entity entity, BoundingBox box) {
+        ((CraftEntity) entity).getHandle().setBoundingBox(new AABB(box.getMinX(), box.getMinY(), box.getMinZ(), box.getMaxX(), box.getMaxY(), box.getMaxZ()));
     }
 
     @Override
@@ -678,30 +490,20 @@ public class EntityHelperImpl extends EntityHelper {
     }
 
     @Override
-    public int getShulkerPeek(Entity entity) {
-        return ((CraftShulker) entity).getHandle().getRawPeekAmount();
-    }
-
-    @Override
-    public void setShulkerPeek(Entity entity, int peek) {
-        ((CraftShulker) entity).getHandle().setRawPeekAmount(peek);
-    }
-
-    @Override
-    public void setHeadAngle(Entity entity, float angle) {
+    public void setHeadAngle(LivingEntity entity, float angle) {
         net.minecraft.world.entity.LivingEntity handle = ((CraftLivingEntity) entity).getHandle();
         handle.yHeadRot = angle;
         handle.setYHeadRot(angle);
     }
 
     @Override
-    public void setGhastAttacking(Entity entity, boolean attacking) {
-        ((CraftGhast) entity).getHandle().setCharging(attacking);
+    public void setGhastAttacking(Ghast ghast, boolean attacking) {
+        ((CraftGhast) ghast).getHandle().setCharging(attacking);
     }
 
     @Override
-    public void setEndermanAngry(Entity entity, boolean angry) {
-        ((CraftEnderman) entity).getHandle().getEntityData().set(ENTITY_ENDERMAN_DATAWATCHER_SCREAMING, angry);
+    public void setEndermanAngry(Enderman enderman, boolean angry) {
+        ((CraftEnderman) enderman).getHandle().getEntityData().set(ENTITY_ENDERMAN_DATAWATCHER_SCREAMING, angry);
     }
 
     public static class FakeDamageSrc extends DamageSource { public DamageSource real; public FakeDamageSrc(DamageSource src) { super("fake"); real = src; } }
@@ -730,7 +532,7 @@ public class EntityHelperImpl extends EntityHelper {
                 }
                 return src;
             case PROJECTILE:
-                return DamageSource.thrown(nmsSource, nmsSource.getBukkitEntity() instanceof Projectile
+                return DamageSource.thrown(nmsSource, nmsSource != null && nmsSource.getBukkitEntity() instanceof Projectile
                         && ((Projectile) nmsSource.getBukkitEntity()).getShooter() instanceof Entity ? ((CraftEntity) ((Projectile) nmsSource.getBukkitEntity()).getShooter()).getHandle() : null);
             case SUFFOCATION:
                 return DamageSource.IN_WALL;
@@ -785,18 +587,19 @@ public class EntityHelperImpl extends EntityHelper {
     }
 
     @Override
-    public void damage(LivingEntity target, float amount, Entity source, EntityDamageEvent.DamageCause cause) {
+    public void damage(LivingEntity target, float amount, EntityTag source, Location sourceLoc, EntityDamageEvent.DamageCause cause) {
         if (target == null) {
             return;
         }
         net.minecraft.world.entity.LivingEntity nmsTarget = ((CraftLivingEntity) target).getHandle();
-        net.minecraft.world.entity.Entity nmsSource = source == null ? null : ((CraftEntity) source).getHandle();
+        net.minecraft.world.entity.Entity nmsSource = source == null ? null : ((CraftEntity) source.getBukkitEntity()).getHandle();
         CraftEventFactory.entityDamage = nmsSource;
+        CraftEventFactory.blockDamage = sourceLoc == null ? null : sourceLoc.getBlock();
         try {
             DamageSource src = getSourceFor(nmsSource, cause);
             if (src instanceof FakeDamageSrc) {
                 src = ((FakeDamageSrc) src).real;
-                EntityDamageEvent ede = fireFakeDamageEvent(target, source, cause, amount);
+                EntityDamageEvent ede = fireFakeDamageEvent(target, source, sourceLoc, cause, amount);
                 if (ede.isCancelled()) {
                     return;
                 }
@@ -805,6 +608,7 @@ public class EntityHelperImpl extends EntityHelper {
         }
         finally {
             CraftEventFactory.entityDamage = null;
+            CraftEventFactory.blockDamage = null;
         }
     }
 
@@ -816,9 +620,9 @@ public class EntityHelperImpl extends EntityHelper {
     public static final MethodHandle FALLINGBLOCK_TYPE_SETTER = ReflectionHelper.getFinalSetterForFirstOfType(net.minecraft.world.entity.item.FallingBlockEntity.class, BlockState.class);
 
     @Override
-    public void setFallingBlockType(FallingBlock entity, BlockData block) {
+    public void setFallingBlockType(FallingBlock fallingBlock, BlockData block) {
         BlockState state = ((CraftBlockData) block).getState();
-        FallingBlockEntity nmsEntity = ((CraftFallingBlock) entity).getHandle();
+        FallingBlockEntity nmsEntity = ((CraftFallingBlock) fallingBlock).getHandle();
         try {
             FALLINGBLOCK_TYPE_SETTER.invoke(nmsEntity, state);
         }
@@ -842,5 +646,58 @@ public class EntityHelperImpl extends EntityHelper {
     @Override
     public int getFireworkLifetime(Firework firework) {
         return ((CraftFirework) firework).getHandle().lifetime;
+    }
+
+    public static final Field ZOMBIE_INWATERTIME = ReflectionHelper.getFields(net.minecraft.world.entity.monster.Zombie.class).get(ReflectionMappingsInfo.Zombie_inWaterTime, int.class);
+
+    @Override
+    public int getInWaterTime(Zombie zombie) {
+        try {
+            return ZOMBIE_INWATERTIME.getInt(((CraftZombie) zombie).getHandle());
+        }
+        catch (Throwable ex) {
+            Debug.echoError(ex);
+            return 0;
+        }
+    }
+
+    @Override
+    public void setInWaterTime(Zombie zombie, int ticks) {
+        try {
+            ZOMBIE_INWATERTIME.setInt(((CraftZombie) zombie).getHandle(), ticks);
+        }
+        catch (Throwable ex) {
+            Debug.echoError(ex);
+        }
+    }
+
+    public static final MethodHandle TRACKING_RANGE_SETTER = ReflectionHelper.getFinalSetterForFirstOfType(ChunkMap.TrackedEntity.class, int.class);
+
+    @Override
+    public void setTrackingRange(Entity entity, int range) {
+        try {
+            ChunkMap map = ((CraftWorld) entity.getWorld()).getHandle().getChunkProvider().chunkMap;
+            ChunkMap.TrackedEntity entry = map.G.get(entity.getEntityId());
+            TRACKING_RANGE_SETTER.invoke(entry, range);
+        }
+        catch (Throwable ex) {
+            Debug.echoError(ex);
+        }
+    }
+
+    @Override
+    public boolean isAggressive(org.bukkit.entity.Mob mob) {
+        return ((CraftMob) mob).getHandle().isAggressive();
+    }
+
+    @Override
+    public void setAggressive(org.bukkit.entity.Mob mob, boolean aggressive) {
+        ((CraftMob) mob).getHandle().setAggressive(aggressive);
+    }
+
+    @Override
+    public void openHorseInventory(Player player, AbstractHorse horse) {
+        net.minecraft.world.entity.animal.horse.AbstractHorse nmsHorse = ((CraftAbstractHorse) horse).getHandle();
+        ((CraftPlayer) player).getHandle().openHorseInventory(nmsHorse, nmsHorse.inventory);
     }
 }

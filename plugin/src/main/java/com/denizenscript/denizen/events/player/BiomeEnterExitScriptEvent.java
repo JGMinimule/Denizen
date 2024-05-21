@@ -44,12 +44,10 @@ public class BiomeEnterExitScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public BiomeEnterExitScriptEvent() {
-        instance = this;
         registerCouldMatcher("player enters|exits <biome>");
         registerSwitches("biome");
     }
 
-    public static BiomeEnterExitScriptEvent instance;
 
     public LocationTag from;
     public LocationTag to;
@@ -90,11 +88,6 @@ public class BiomeEnterExitScriptEvent extends BukkitScriptEvent implements List
     }
 
     @Override
-    public String getName() {
-        return "BiomeEnterExit";
-    }
-
-    @Override
     public ScriptEntryData getScriptEntryData() {
         return new BukkitScriptEntryData(EntityTag.getPlayerFrom(event.getPlayer()), null);
     }
@@ -124,8 +117,8 @@ public class BiomeEnterExitScriptEvent extends BukkitScriptEvent implements List
         }
         from = new LocationTag(event.getFrom());
         to = new LocationTag(event.getTo());
-        old_biome = new BiomeTag(NMSHandler.getInstance().getBiomeAt(from.getBlock()));
-        new_biome = new BiomeTag(NMSHandler.getInstance().getBiomeAt(to.getBlock()));
+        old_biome = new BiomeTag(NMSHandler.instance.getBiomeAt(from.getBlock()));
+        new_biome = new BiomeTag(NMSHandler.instance.getBiomeAt(to.getBlock()));
         if (old_biome.identify().equals(new_biome.identify())) {
             return;
         }

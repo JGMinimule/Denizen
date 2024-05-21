@@ -34,18 +34,16 @@ public class PlayerSwapsItemsScriptEvent extends BukkitScriptEvent implements Li
     // <context.offhand> returns the ItemTag switched to the off hand.
     //
     // @Determine
-    // "MAIN:" + ItemTag to set the item in the main hand.
-    // "OFFHAND:" + ItemTag to set the item in the off hand.
+    // "MAIN:<ItemTag>" to set the item in the main hand.
+    // "OFFHAND:<ItemTag>" to set the item in the off hand.
     //
     // @Player Always.
     //
     // -->
 
     public PlayerSwapsItemsScriptEvent() {
-        instance = this;
     }
 
-    public static PlayerSwapsItemsScriptEvent instance;
     public PlayerTag player;
     public PlayerSwapHandItemsEvent event;
 
@@ -56,18 +54,13 @@ public class PlayerSwapsItemsScriptEvent extends BukkitScriptEvent implements Li
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (path.switches.containsKey("main") && !tryItem(new ItemTag(event.getMainHandItem()), path.switches.get("main"))) {
+        if (!path.tryObjectSwitch("main", new ItemTag(event.getMainHandItem()))) {
             return false;
         }
-        if (path.switches.containsKey("offhand") && !tryItem(new ItemTag(event.getOffHandItem()), path.switches.get("offhand"))) {
+        if (!path.tryObjectSwitch("offhand", new ItemTag(event.getOffHandItem()))) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerSwapsItems";
     }
 
     @Override

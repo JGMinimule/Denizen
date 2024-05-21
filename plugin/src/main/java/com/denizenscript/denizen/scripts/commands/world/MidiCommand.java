@@ -2,7 +2,7 @@ package com.denizenscript.denizen.scripts.commands.world;
 
 import com.denizenscript.denizen.Denizen;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.utilities.midi.MidiUtil;
 import com.denizenscript.denizen.utilities.midi.NoteBlockReceiver;
 import com.denizenscript.denizen.objects.EntityTag;
@@ -37,10 +37,10 @@ public class MidiCommand extends AbstractCommand implements Holdable {
     // @Group world
     //
     // @Description
-    // This will fully load a midi song file stored in the '../plugins/Denizen/midi/' folder. The file
-    // must be a valid midi file with the extension '.mid'. It will continuously play the song as
-    // noteblock songs at the given location or group of players until the song ends. If no location or
-    // entity is specified, by default this will play for the attached player.
+    // This will fully load a midi song file stored in the '../plugins/Denizen/midi/' folder.
+    // The file must be a valid midi file with the extension '.mid'.
+    // It will continuously play the song as noteblock songs at the given location or group of players until the song ends.
+    // If no location or entity is specified, by default this will play for the attached player.
     //
     // Also, an example Midi song file has been included: "Denizen" by Black Coyote. He made it just for us!
     // Check out more of his amazing work at: http://www.youtube.com/user/BlaCoyProductions
@@ -68,7 +68,7 @@ public class MidiCommand extends AbstractCommand implements Holdable {
         for (Argument arg : scriptEntry) {
             if (!scriptEntry.hasObject("cancel")
                     && (arg.matches("cancel") || arg.matches("stop"))) {
-                scriptEntry.addObject("cancel", "");
+                scriptEntry.addObject("cancel", "true");
             }
             else if (!scriptEntry.hasObject("location") &&
                     arg.matchesArgumentType(LocationTag.class)) {
@@ -88,15 +88,7 @@ public class MidiCommand extends AbstractCommand implements Holdable {
                 scriptEntry.addObject("tempo", arg.asElement());
             }
             else if (!scriptEntry.hasObject("file")) {
-
-                String path = Denizen.getInstance().getDataFolder() +
-                        File.separator + "midi" +
-                        File.separator + arg.getValue();
-                if (!path.endsWith(".mid")) {
-                    path = path + ".mid";
-                }
-
-                scriptEntry.addObject("file", new ElementTag(path));
+                scriptEntry.addObject("file", arg.asElement());
             }
             else {
                 arg.reportUnhandled();
@@ -115,24 +107,29 @@ public class MidiCommand extends AbstractCommand implements Holdable {
     @Override
     public void execute(final ScriptEntry scriptEntry) {
         boolean cancel = scriptEntry.hasObject("cancel");
-        File file = !cancel ? new File(scriptEntry.getElement("file").asString()) : null;
-        if (!cancel && !Utilities.canReadFile(file)) {
-            Debug.echoError("Cannot read from that file path due to security settings in Denizen/config.yml.");
-            return;
-        }
-        if (!cancel && !file.exists()) {
-            Debug.echoError(scriptEntry.getResidingQueue(), "Invalid file " + scriptEntry.getElement("file").asString());
-            return;
-        }
+        ElementTag filePath = scriptEntry.getElement("file");
         List<EntityTag> entities = (List<EntityTag>) scriptEntry.getObject("entities");
         LocationTag location = scriptEntry.getObjectTag("location");
         float tempo = scriptEntry.getElement("tempo").asFloat();
         float volume = scriptEntry.getElement("volume").asFloat();
         if (scriptEntry.dbCallShouldDebug()) {
-            Debug.report(scriptEntry, getName(), (cancel ? db("cancel", true) : ""), db("file", file.getPath()), db("entities", entities), location, db("tempo", tempo), db("volume", volume));
+            Debug.report(scriptEntry, getName(), (cancel ? db("cancel", true) : ""), filePath, db("entities", entities), location, db("tempo", tempo), db("volume", volume));
         }
         // Play the midi
         if (!cancel) {
+            String fName = scriptEntry.getElement("file").asString();
+            if (!fName.endsWith(".mid")) {
+                fName += ".mid";
+            }
+            File file = new File(Denizen.getInstance().getDataFolder(), "/midi/" + fName);
+            if (!Utilities.canReadFile(file)) {
+                Debug.echoError("Cannot read from that file path due to security settings in Denizen/config.yml.");
+                return;
+            }
+            if (!file.exists()) {
+                Debug.echoError(scriptEntry, "Invalid file " + filePath.asString());
+                return;
+            }
             NoteBlockReceiver rec;
             if (location != null) {
                 rec = MidiUtil.playMidi(file, tempo, volume, location);
@@ -141,7 +138,7 @@ public class MidiCommand extends AbstractCommand implements Holdable {
                 rec = MidiUtil.playMidi(file, tempo, volume, entities);
             }
             if (rec == null) {
-                Debug.echoError(scriptEntry.getResidingQueue(), "Something went wrong playing a midi!");
+                Debug.echoError(scriptEntry, "Something went wrong playing a midi!");
                 scriptEntry.setFinished(true);
             }
             else {

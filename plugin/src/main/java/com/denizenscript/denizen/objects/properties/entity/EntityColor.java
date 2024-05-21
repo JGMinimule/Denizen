@@ -2,28 +2,39 @@ package com.denizenscript.denizen.objects.properties.entity;
 
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.nms.NMSVersion;
-import com.denizenscript.denizen.objects.ColorTag;
 import com.denizenscript.denizen.objects.EntityTag;
-import com.denizenscript.denizen.utilities.entity.ColorHelper1_17;
+import com.denizenscript.denizen.objects.properties.bukkit.BukkitColorExtensions;
+import com.denizenscript.denizen.utilities.MultiVersionHelper1_19;
+import com.denizenscript.denizencore.objects.core.ColorTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.core.ListTag;
-import com.denizenscript.denizencore.objects.ObjectTag;
-import com.denizenscript.denizencore.objects.properties.Property;
-import com.denizenscript.denizencore.tags.Attribute;
+import com.denizenscript.denizencore.objects.properties.PropertyParser;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
+import org.bukkit.Color;
 import org.bukkit.DyeColor;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.entity.*;
 
 import java.util.Arrays;
 
-public class EntityColor implements Property {
+public class EntityColor extends EntityProperty<ElementTag> {
 
-    public static boolean describes(ObjectTag entity) {
-        if (!(entity instanceof EntityTag)) {
-            return false;
-        }
-        EntityType type = ((EntityTag) entity).getBukkitEntityType();
+    // <--[property]
+    // @object EntityTag
+    // @name color
+    // @input ElementTag
+    // @description
+    // If the entity can have a color, controls the entity's color.
+    // For the available color options, refer to <@link language Entity Color Types>.
+    // -->
+
+    // TODO once 1.20 is the minimum supported version, can reference the enum directly
+    public static final EntityType MOOSHROOM_ENTITY_TYPE = Registry.ENTITY_TYPE.get(NamespacedKey.minecraft("mooshroom"));
+
+    public static boolean describes(EntityTag entity) {
+        EntityType type = entity.getBukkitEntityType();
         return type == EntityType.SHEEP ||
                 type == EntityType.HORSE ||
                 type == EntityType.WOLF ||
@@ -32,170 +43,24 @@ public class EntityColor implements Property {
                 type == EntityType.LLAMA ||
                 type == EntityType.PARROT ||
                 type == EntityType.SHULKER ||
-                type == EntityType.MUSHROOM_COW ||
+                type == MOOSHROOM_ENTITY_TYPE ||
                 type == EntityType.CAT ||
                 type == EntityType.FOX ||
                 type == EntityType.PANDA ||
                 type == EntityType.ARROW ||
                 type == EntityType.VILLAGER ||
+                type == EntityType.ZOMBIE_VILLAGER ||
                 type == EntityType.TRADER_LLAMA ||
                 type == EntityType.TROPICAL_FISH ||
-                (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_17) && ColorHelper1_17.colorIsApplicable(type));
-    }
-
-    public static EntityColor getFrom(ObjectTag entity) {
-        if (!describes(entity)) {
-            return null;
-        }
-        else {
-            return new EntityColor((EntityTag) entity);
-        }
-    }
-
-    public static final String[] handledTags = new String[] {
-            "color", "allowed_colors"
-    };
-
-    public static final String[] handledMechs = new String[] {
-            "color"
-    };
-
-    private EntityColor(EntityTag entity) {
-        colored = entity;
-    }
-
-    EntityTag colored;
-
-    public String getColor(boolean includeDeprecated) {
-        EntityType type = colored.getBukkitEntityType();
-        if (type == EntityType.HORSE) {
-            Horse horse = (Horse) colored.getBukkitEntity();
-            return horse.getColor().name() + "|" + horse.getStyle().name();
-        }
-        else if (type == EntityType.SHEEP) {
-            return ((Sheep) colored.getBukkitEntity()).getColor().name();
-        }
-        else if (type == EntityType.WOLF) {
-            return ((Wolf) colored.getBukkitEntity()).getCollarColor().name();
-        }
-        else if (type == EntityType.OCELOT && includeDeprecated) {
-            return ((Ocelot) colored.getBukkitEntity()).getCatType().name();
-        }
-        else if (type == EntityType.RABBIT) {
-            return ((Rabbit) colored.getBukkitEntity()).getRabbitType().name();
-        }
-        else if (type == EntityType.LLAMA || type == EntityType.TRADER_LLAMA) {
-            return ((Llama) colored.getBukkitEntity()).getColor().name();
-        }
-        else if (type == EntityType.PARROT) {
-            return ((Parrot) colored.getBukkitEntity()).getVariant().name();
-        }
-        else if (type == EntityType.SHULKER) {
-            DyeColor color = ((Shulker) colored.getBukkitEntity()).getColor();
-            return color == null ? null : color.name();
-        }
-        else if (type == EntityType.MUSHROOM_COW) {
-            return ((MushroomCow) colored.getBukkitEntity()).getVariant().name();
-        }
-        else if (type == EntityType.TROPICAL_FISH) {
-            TropicalFish fish = ((TropicalFish) colored.getBukkitEntity());
-            return new ListTag(Arrays.asList(fish.getPattern().name(), fish.getBodyColor().name(), fish.getPatternColor().name())).identify();
-        }
-        else if (type == EntityType.FOX) {
-            return ((Fox) colored.getBukkitEntity()).getFoxType().name();
-        }
-        else if (type == EntityType.CAT) {
-            Cat cat = (Cat) colored.getBukkitEntity();
-            return cat.getCatType().name() + "|" + cat.getCollarColor().name();
-        }
-        else if (type == EntityType.PANDA) {
-            Panda panda = (Panda) colored.getBukkitEntity();
-            return panda.getMainGene().name() + "|" + panda.getHiddenGene().name();
-        }
-        else if (type == EntityType.VILLAGER) {
-            return ((Villager) colored.getBukkitEntity()).getVillagerType().name();
-        }
-        else if (type == EntityType.ARROW) {
-            try {
-                return new ColorTag(((Arrow) colored.getBukkitEntity()).getColor()).identify();
-            }
-            catch (Exception e) {
-                return null;
-            }
-        }
-        else if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_17) && ColorHelper1_17.colorIsApplicable(type)) {
-            return ColorHelper1_17.getColor(colored.getBukkitEntity());
-        }
-        else {
-            return null;
-        }
-    }
-
-    public static ListTag listForEnum(Enum<?>[] values) {
-        ListTag list = new ListTag(values.length);
-        for (Enum<?> obj : values) {
-            list.addObject(new ElementTag(obj.name()));
-        }
-        return list;
-    }
-
-    public ListTag getAllowedColors() {
-        EntityType type = colored.getBukkitEntityType();
-        if (type == EntityType.HORSE) {
-            ListTag toRet = listForEnum(Horse.Color.values());
-            toRet.addAll(listForEnum(Horse.Style.values()));
-            return toRet;
-        }
-        else if (type == EntityType.SHEEP) {
-            return listForEnum(DyeColor.values());
-        }
-        else if (type == EntityType.WOLF) {
-            return listForEnum(DyeColor.values());
-        }
-        else if (type == EntityType.RABBIT) {
-            return listForEnum(Rabbit.Type.values());
-        }
-        else if (type == EntityType.LLAMA || type == EntityType.TRADER_LLAMA) {
-            return listForEnum(Llama.Color.values());
-        }
-        else if (type == EntityType.PARROT) {
-            return listForEnum(Parrot.Variant.values());
-        }
-        else if (type == EntityType.SHULKER) {
-            return listForEnum(DyeColor.values());
-        }
-        else if (type == EntityType.MUSHROOM_COW) {
-            return listForEnum(MushroomCow.Variant.values());
-        }
-        else if (type == EntityType.TROPICAL_FISH) {
-            ListTag toRet = listForEnum(TropicalFish.Pattern.values());
-            toRet.addAll(listForEnum(DyeColor.values()));
-            return toRet;
-        }
-        else if (type == EntityType.FOX) {
-            return listForEnum(Fox.Type.values());
-        }
-        else if (type == EntityType.CAT) {
-            return listForEnum(Cat.Type.values());
-        }
-        else if (type == EntityType.PANDA) {
-            return listForEnum(Panda.Gene.values());
-        }
-        else if (type == EntityType.VILLAGER) {
-            return listForEnum(Villager.Type.values());
-        }
-        else if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_17) && ColorHelper1_17.colorIsApplicable(type)) {
-            return ColorHelper1_17.getAllowedColors(type);
-        }
-        else { // includes Ocelot (deprecated) and arrow (ColorTag)
-            return null;
-        }
+                type == EntityType.GOAT ||
+                type == EntityType.AXOLOTL ||
+                (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19) && MultiVersionHelper1_19.colorIsApplicable(type));
     }
 
     @Override
-    public String getPropertyString() {
-        String color = getColor(false);
-        return color == null ? null : CoreUtilities.toLowerCase(color);
+    public ElementTag getPropertyValue() {
+        String color = getColor(true);
+        return color == null ? null : new ElementTag(CoreUtilities.toLowerCase(color));
     }
 
     @Override
@@ -203,12 +68,253 @@ public class EntityColor implements Property {
         return "color";
     }
 
+    @Override
+    public void setPropertyValue(ElementTag color, Mechanism mechanism) {
+        EntityType type = getType();
+        if (type == EntityType.HORSE && mechanism.requireObject(ListTag.class)) {
+            ListTag list = mechanism.valueAsType(ListTag.class);
+            Horse horse = as(Horse.class);
+            ElementTag horseColor = new ElementTag(list.get(0));
+            if (horseColor.matchesEnum(Horse.Color.class)) {
+                horse.setColor(horseColor.asEnum(Horse.Color.class));
+            }
+            else {
+                mechanism.echoError("Invalid horse color specified: " + horseColor);
+            }
+            if (list.size() > 1) {
+                ElementTag style = new ElementTag(list.get(1));
+                if (style.matchesEnum(Horse.Style.class)) {
+                    horse.setStyle(style.asEnum(Horse.Style.class));
+                }
+                else {
+                    mechanism.echoError("Invalid horse style specified: " + style);
+                }
+            }
+        }
+        else if (type == EntityType.SHEEP && mechanism.requireEnum(DyeColor.class)) {
+            as(Sheep.class).setColor(color.asEnum(DyeColor.class));
+        }
+        else if (type == EntityType.WOLF && mechanism.requireEnum(DyeColor.class)) {
+            as(Wolf.class).setCollarColor(color.asEnum(DyeColor.class));
+        }
+        else if (type == EntityType.OCELOT && mechanism.requireEnum(Ocelot.Type.class)) { // TODO: Deprecate?
+            as(Ocelot.class).setCatType(color.asEnum(Ocelot.Type.class));
+        }
+        else if (type == EntityType.RABBIT && mechanism.requireEnum(Rabbit.Type.class)) {
+            as(Rabbit.class).setRabbitType(color.asEnum(Rabbit.Type.class));
+        }
+        else if ((type == EntityType.LLAMA || type == EntityType.TRADER_LLAMA) && mechanism.requireEnum(Llama.Color.class)) {
+            as(Llama.class).setColor(color.asEnum(Llama.Color.class));
+        }
+        else if (type == EntityType.PARROT && mechanism.requireEnum(Parrot.Variant.class)) {
+            as(Parrot.class).setVariant(color.asEnum(Parrot.Variant.class));
+        }
+        else if (type == EntityType.SHULKER && mechanism.requireEnum(DyeColor.class)) {
+            as(Shulker.class).setColor(color.asEnum(DyeColor.class));
+        }
+        else if (type == MOOSHROOM_ENTITY_TYPE && mechanism.requireEnum(MushroomCow.Variant.class)) {
+            as(MushroomCow.class).setVariant(color.asEnum(MushroomCow.Variant.class));
+        }
+        else if (type == EntityType.TROPICAL_FISH && mechanism.requireObject(ListTag.class)) {
+            ListTag list = mechanism.valueAsType(ListTag.class);
+            TropicalFish fish = as(TropicalFish.class);
+            ElementTag pattern = new ElementTag(list.get(0));
+            if (pattern.matchesEnum(TropicalFish.Pattern.class)) {
+                fish.setPattern(pattern.asEnum(TropicalFish.Pattern.class));
+            }
+            else {
+                mechanism.echoError("Invalid tropical fish pattern specified: " + pattern);
+            }
+            if (list.size() > 1) {
+                ElementTag fishColor = new ElementTag(list.get(1));
+                if (fishColor.matchesEnum(DyeColor.class)) {
+                    fish.setBodyColor(fishColor.asEnum(DyeColor.class));
+                }
+                else {
+                    mechanism.echoError("Invalid color specified: " + fishColor);
+                }
+            }
+            if (list.size() > 2) {
+                ElementTag patternColor = new ElementTag(list.get(2));
+                if (patternColor.matchesEnum(DyeColor.class)) {
+                    fish.setPatternColor(patternColor.asEnum(DyeColor.class));
+                }
+                else {
+                    mechanism.echoError("Invalid pattern color specified: " + patternColor);
+                }
+            }
+        }
+        else if (type == EntityType.FOX && mechanism.requireEnum(Fox.Type.class)) {
+            as(Fox.class).setFoxType(color.asEnum(Fox.Type.class));
+        }
+        else if (type == EntityType.CAT && mechanism.requireObject(ListTag.class)) {
+            Cat cat = as(Cat.class);
+            ListTag list = mechanism.valueAsType(ListTag.class);
+            ElementTag catType = new ElementTag(list.get(0));
+            if (catType.matchesEnum(Cat.Type.class)) {
+                cat.setCatType(catType.asEnum(Cat.Type.class));
+            }
+            else {
+                mechanism.echoError("Invalid cat type specified: " + catType);
+            }
+            if (list.size() > 1) {
+                ElementTag collarColor = new ElementTag(list.get(1));
+                if (collarColor.matchesEnum(DyeColor.class)) {
+                    cat.setCollarColor(collarColor.asEnum(DyeColor.class));
+                }
+                else {
+                    mechanism.echoError("Invalid color specified: " + collarColor);
+                }
+            }
+        }
+        else if (type == EntityType.PANDA && mechanism.requireObject(ListTag.class)) {
+            Panda panda = as(Panda.class);
+            ListTag list = mechanism.valueAsType(ListTag.class);
+            ElementTag mainGene = new ElementTag(list.get(0));
+            if (mainGene.matchesEnum(Panda.Gene.class)) {
+                panda.setMainGene(mainGene.asEnum(Panda.Gene.class));
+            }
+            else {
+                mechanism.echoError("Invalid panda gene specified: " + mainGene);
+            }
+            if (list.size() > 1) {
+                ElementTag hiddenGene = new ElementTag(list.get(1));
+                if (hiddenGene.matchesEnum(Panda.Gene.class)) {
+                    panda.setHiddenGene(hiddenGene.asEnum(Panda.Gene.class));
+                }
+                else {
+                    mechanism.echoError("Invalid panda hidden gene specified: " + hiddenGene);
+                }
+            }
+        }
+        else if (type == EntityType.VILLAGER && mechanism.requireEnum(Villager.Type.class)) {
+            as(Villager.class).setVillagerType(color.asEnum(Villager.Type.class));
+        }
+        else if (type == EntityType.ZOMBIE_VILLAGER && mechanism.requireEnum(Villager.Type.class)) {
+            as(ZombieVillager.class).setVillagerType(color.asEnum(Villager.Type.class));
+        }
+        else if (type == EntityType.ARROW && mechanism.requireObject(ColorTag.class)) {
+            as(Arrow.class).setColor(BukkitColorExtensions.getColor(mechanism.valueAsType(ColorTag.class)));
+        }
+        else if (type == EntityType.GOAT) {
+            as(Goat.class).setScreaming(color.asLowerString().equals("screaming"));
+        }
+        else if (type == EntityType.AXOLOTL && mechanism.requireEnum(Axolotl.Variant.class)) {
+            as(Axolotl.class).setVariant(color.asEnum(Axolotl.Variant.class));
+        }
+        else if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19) && MultiVersionHelper1_19.colorIsApplicable(type)) {
+            MultiVersionHelper1_19.setColor(getEntity(), mechanism);
+        }
+    }
+
+    public String getColor(boolean includeDeprecated) {
+        EntityType type = getType();
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19) && MultiVersionHelper1_19.colorIsApplicable(type)) {
+            return MultiVersionHelper1_19.getColor(getEntity());
+        }
+        if (getEntity() instanceof MushroomCow mushroomCow) {
+            return mushroomCow.getVariant().name();
+        }
+        return switch (type) {
+            case HORSE -> {
+                Horse horse = as(Horse.class);
+                yield horse.getColor().name() + "|" + horse.getStyle().name();
+            }
+            case SHEEP -> as(Sheep.class).getColor().name();
+            case WOLF -> as(Wolf.class).getCollarColor().name();
+            case OCELOT -> {
+                if (includeDeprecated) {
+                    yield as(Ocelot.class).getCatType().name();
+                }
+                yield null;
+            }
+            case RABBIT -> as(Rabbit.class).getRabbitType().name();
+            case LLAMA, TRADER_LLAMA -> as(Llama.class).getColor().name();
+            case PARROT -> as(Parrot.class).getVariant().name();
+            case SHULKER -> {
+                DyeColor color = as(Shulker.class).getColor();
+                yield  color == null ? null : color.name();
+            }
+            case TROPICAL_FISH -> {
+                TropicalFish fish = as(TropicalFish.class);
+                yield new ListTag(Arrays.asList(fish.getPattern().name(), fish.getBodyColor().name(), fish.getPatternColor().name())).identify();
+            }
+            case FOX -> as(Fox.class).getFoxType().name();
+            case CAT -> {
+                Cat cat = as(Cat.class);
+                yield cat.getCatType().name() + "|" + cat.getCollarColor().name();
+            }
+            case PANDA -> {
+                Panda panda = as(Panda.class);
+                yield panda.getMainGene().name() + "|" + panda.getHiddenGene().name();
+            }
+            case VILLAGER -> as(Villager.class).getVillagerType().name();
+            case ZOMBIE_VILLAGER -> as(ZombieVillager.class).getVillagerType().name();
+            case ARROW -> {
+                try {
+                    yield BukkitColorExtensions.fromColor(as(Arrow.class).getColor()).identify();
+                }
+                catch (Exception e) {
+                    yield null;
+                }
+            }
+            case GOAT -> as(Goat.class).isScreaming() ? "screaming" : "normal";
+            case AXOLOTL -> as(Axolotl.class).getVariant().name();
+            default -> null;
+        };
+    }
+
+    public static ListTag listForEnum(Enum<?>[] values) {
+        ListTag list = new ListTag(values.length);
+        for (Enum<?> obj : values) {
+            list.addObject(new ElementTag(obj));
+        }
+        return list;
+    }
+
+    public ListTag getAllowedColors() {
+        EntityType type = getType();
+        if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_19) && MultiVersionHelper1_19.colorIsApplicable(type)) {
+            return MultiVersionHelper1_19.getAllowedColors(type);
+        }
+        if (type == MOOSHROOM_ENTITY_TYPE) {
+            return listForEnum(MushroomCow.Variant.values());
+        }
+        return switch (type) {
+            case HORSE -> {
+                ListTag horseColors = listForEnum(Horse.Color.values());
+                horseColors.addAll(listForEnum(Horse.Style.values()));
+                yield horseColors;
+            }
+            case SHEEP, WOLF, SHULKER -> listForEnum(DyeColor.values());
+            case RABBIT -> listForEnum(Rabbit.Type.values());
+            case LLAMA, TRADER_LLAMA -> listForEnum(Llama.Color.values());
+            case PARROT -> listForEnum(Parrot.Variant.values());
+            case TROPICAL_FISH -> {
+                ListTag patterns = listForEnum(TropicalFish.Pattern.values());
+                patterns.addAll(listForEnum(DyeColor.values()));
+                yield patterns;
+            }
+            case FOX -> listForEnum(Fox.Type.values());
+            case CAT -> listForEnum(Cat.Type.values());
+            case PANDA -> listForEnum(Panda.Gene.values());
+            case VILLAGER, ZOMBIE_VILLAGER -> listForEnum(Villager.Type.values());
+            case GOAT -> {
+                ListTag result = new ListTag();
+                result.add("screaming");
+                result.add("normal");
+                yield result;
+            }
+            case AXOLOTL -> EntityColor.listForEnum(Axolotl.Variant.values());
+            default -> null; // includes Ocelot (deprecated) and arrow (ColorTag)
+        };
+    }
+
     // <--[language]
     // @name Entity Color Types
     // @group Properties
     // @description
-    // This is a quick rundown of the styling information used to handle the coloration of a mob,
-    // in both <@link tag EntityTag.color> and <@link mechanism EntityTag.color>.
+    // This is a quick rundown of the styling information used to handle the coloration of a mob in <@link property EntityTag.color>.
     // The list of values can be gotten in-script via <@link tag EntityTag.allowed_colors>.
     //
     // For horses, the format is COLOR|STYLE,
@@ -223,23 +329,22 @@ public class EntityColor implements Property {
     // For foxes, the types are RED and SNOW.
     // For pandas, the format is MAIN_GENE|HIDDEN_GENE.
     //          The gene types are NORMAL, LAZY, WORRIED, PLAYFUL, BROWN, WEAK, and AGGRESSIVE.
-    // For villagers, the types are DESERT, JUNGLE, PLAINS, SAVANNA, SNOW, SWAMP, and TAIGA.
+    // For villagers and zombie_villagers, the types are DESERT, JUNGLE, PLAINS, SAVANNA, SNOW, SWAMP, and TAIGA.
     // For tropical_fish, the input is PATTERN|BODYCOLOR|PATTERNCOLOR, where BodyColor and PatterenColor are both DyeColor (see below),
     //          and PATTERN is KOB, SUNSTREAK, SNOOPER, DASHER, BRINELY, SPOTTY, FLOPPER, STRIPEY, GLITTER, BLOCKFISH, BETTY, is CLAYFISH.
     // For sheep, wolf, and shulker entities, the input is a Dye Color.
     // For Tipped Arrow entities, the input is a ColorTag.
     // For goats, the input is SCREAMING or NORMAL.
-    // For axolotl, the input is BLUE, CYAN, GOLD, LUCY, or WILD.
+    // For axolotl, the types are BLUE, CYAN, GOLD, LUCY, or WILD.
+    // For frogs, the types are TEMPERATE, WARM, or COLD.
+    // For boats, type types are ACACIA, BAMBOO, BIRCH, CHERRY, DARK_OAK, JUNGLE, MANGROVE, OAK, or SPRUCE.
     //
     // For all places where a DyeColor is needed, the options are:
     // BLACK, BLUE, BROWN, CYAN, GRAY, GREEN, LIGHT_BLUE, LIGHT_GRAY, LIME, MAGENTA, ORANGE, PINK, PURPLE, RED, WHITE, or YELLOW.
     // -->
-    @Override
-    public ObjectTag getObjectAttribute(Attribute attribute) {
 
-        if (attribute == null) {
-            return null;
-        }
+    public static void register() {
+        autoRegister("color", EntityColor.class, ElementTag.class, false);
 
         // <--[tag]
         // @attribute <EntityTag.allowed_colors>
@@ -250,129 +355,8 @@ public class EntityColor implements Property {
         // If the entity can have a color, returns the list of allowed colors.
         // See also <@link language Entity Color Types>.
         // -->
-        if (attribute.startsWith("allowed_colors")) {
-            ListTag colors = getAllowedColors();
-            if (colors == null) {
-                return null;
-            }
-            return colors
-                    .getObjectAttribute(attribute.fulfill(1));
-        }
-
-        // <--[tag]
-        // @attribute <EntityTag.color>
-        // @returns ElementTag
-        // @mechanism EntityTag.color
-        // @group properties
-        // @description
-        // If the entity can have a color, returns the entity's color.
-        // For the available color options, refer to <@link language Entity Color Types>.
-        // -->
-        if (attribute.startsWith("color")) {
-            String color = CoreUtilities.toLowerCase(getColor(true));
-            if (color == null) {
-                return null;
-            }
-            return new ElementTag(color)
-                    .getObjectAttribute(attribute.fulfill(1));
-        }
-
-        return null;
-    }
-
-    @Override
-    public void adjust(Mechanism mechanism) {
-
-        // <--[mechanism]
-        // @object EntityTag
-        // @name color
-        // @input ElementTag
-        // @description
-        // Changes the entity's color.
-        // For the available color options, refer to <@link language Entity Color Types>.
-        // @tags
-        // <EntityTag.color>
-        // <EntityTag.colorable>
-        // -->
-        if (mechanism.matches("color")) {
-            EntityType type = colored.getBukkitEntityType();
-
-            if (type == EntityType.HORSE) {
-                ListTag horse_info = mechanism.valueAsType(ListTag.class);
-                if (horse_info.size() > 0 && new ElementTag(horse_info.get(0)).matchesEnum(Horse.Color.values())) {
-                    ((Horse) colored.getBukkitEntity())
-                            .setColor(Horse.Color.valueOf(horse_info.get(0).toUpperCase()));
-                }
-                if (horse_info.size() > 1 && new ElementTag(horse_info.get(1)).matchesEnum(Horse.Style.values())) {
-                    ((Horse) colored.getBukkitEntity())
-                            .setStyle(Horse.Style.valueOf(horse_info.get(1).toUpperCase()));
-                }
-            }
-            else if (type == EntityType.SHEEP && mechanism.getValue().matchesEnum(DyeColor.values())) {
-                ((Sheep) colored.getBukkitEntity()).setColor(DyeColor.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if (type == EntityType.WOLF && mechanism.getValue().matchesEnum(DyeColor.values())) {
-                ((Wolf) colored.getBukkitEntity()).setCollarColor(DyeColor.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if (type == EntityType.OCELOT && mechanism.getValue().matchesEnum(Ocelot.Type.values())) { // TODO: Deprecate?
-                ((Ocelot) colored.getBukkitEntity()).setCatType(Ocelot.Type.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if (type == EntityType.RABBIT && mechanism.getValue().matchesEnum(Rabbit.Type.values())) {
-                ((Rabbit) colored.getBukkitEntity()).setRabbitType(Rabbit.Type.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if ((type == EntityType.LLAMA || type == EntityType.TRADER_LLAMA) && mechanism.getValue().matchesEnum(Llama.Color.values())) {
-                ((Llama) colored.getBukkitEntity()).setColor(Llama.Color.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if (type == EntityType.PARROT && mechanism.getValue().matchesEnum(Parrot.Variant.values())) {
-                ((Parrot) colored.getBukkitEntity()).setVariant(Parrot.Variant.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if (type == EntityType.SHULKER && mechanism.getValue().matchesEnum(DyeColor.values())) {
-                ((Shulker) colored.getBukkitEntity()).setColor(DyeColor.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if (type == EntityType.MUSHROOM_COW) {
-                ((MushroomCow) colored.getBukkitEntity()).setVariant(MushroomCow.Variant.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if (type == EntityType.TROPICAL_FISH) {
-                ListTag list = ListTag.valueOf(mechanism.getValue().asString(), CoreUtilities.basicContext);
-                TropicalFish fish = ((TropicalFish) colored.getBukkitEntity());
-                fish.setPattern(TropicalFish.Pattern.valueOf(list.get(0).toUpperCase()));
-                if (list.size() > 1) {
-                    fish.setBodyColor(DyeColor.valueOf(list.get(1).toUpperCase()));
-                }
-                if (list.size() > 2) {
-                    fish.setPatternColor(DyeColor.valueOf(list.get(2).toUpperCase()));
-                }
-            }
-            else if (type == EntityType.FOX) {
-                ((Fox) colored.getBukkitEntity()).setFoxType(Fox.Type.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if (type == EntityType.CAT) {
-                Cat cat = (Cat) colored.getBukkitEntity();
-                ListTag list = ListTag.valueOf(mechanism.getValue().asString(), CoreUtilities.basicContext);
-                cat.setCatType(Cat.Type.valueOf(list.get(0).toUpperCase()));
-                if (list.size() > 1) {
-                    cat.setCollarColor(DyeColor.valueOf(list.get(1).toUpperCase()));
-                }
-            }
-            else if (type == EntityType.PANDA) {
-                Panda panda = (Panda) colored.getBukkitEntity();
-                ListTag list = ListTag.valueOf(mechanism.getValue().asString(), CoreUtilities.basicContext);
-                panda.setMainGene(Panda.Gene.valueOf(list.get(0).toUpperCase()));
-                panda.setHiddenGene(Panda.Gene.valueOf(list.get(1).toUpperCase()));
-            }
-            else if (type == EntityType.VILLAGER) {
-                ((Villager) colored.getBukkitEntity()).setVillagerType(Villager.Type.valueOf(mechanism.getValue().asString().toUpperCase()));
-            }
-            else if (type == EntityType.ARROW) {
-                ((Arrow) colored.getBukkitEntity()).setColor(mechanism.valueAsType(ColorTag.class).getColor());
-            }
-            else if (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_17) && ColorHelper1_17.colorIsApplicable(type)) {
-                ColorHelper1_17.setColor(colored.getBukkitEntity(), mechanism);
-            }
-            else { // Should never happen
-                mechanism.echoError("Could not apply color '" + mechanism.getValue().toString() + "' to entity of type " + type.name() + ".");
-            }
-
-        }
+        PropertyParser.registerTag(EntityColor.class, ListTag.class, "allowed_colors", (attribute, object) -> {
+            return object.getAllowedColors();
+        });
     }
 }

@@ -29,13 +29,13 @@ public class MaterialPower implements Property {
             "power"
     };
 
-    private MaterialPower(MaterialTag _material) {
+    public MaterialPower(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.power>
@@ -45,7 +45,7 @@ public class MaterialPower implements Property {
         // @description
         // Returns the redstone power level of an analogue-powerable block.
         // -->
-        PropertyParser.<MaterialPower, ElementTag>registerStaticTag(ElementTag.class, "power", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialPower.class, ElementTag.class, "power", (attribute, material) -> {
             return new ElementTag(((AnaloguePowerable) material.material.getModernData()).getPower());
         });
 
@@ -57,7 +57,7 @@ public class MaterialPower implements Property {
         // @description
         // Returns the maximum redstone power an analogue-powerable block can have.
         // -->
-        PropertyParser.<MaterialPower, ElementTag>registerStaticTag(ElementTag.class, "max_power", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialPower.class, ElementTag.class, "max_power", (attribute, material) -> {
             return new ElementTag(((AnaloguePowerable) material.material.getModernData()).getMaximumPower());
         });
     }

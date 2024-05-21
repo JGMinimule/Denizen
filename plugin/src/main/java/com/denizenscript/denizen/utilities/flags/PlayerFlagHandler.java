@@ -1,11 +1,14 @@
 package com.denizenscript.denizen.utilities.flags;
 
 import com.denizenscript.denizen.Denizen;
+import com.denizenscript.denizencore.DenizenCore;
+import com.denizenscript.denizencore.utilities.CoreConfiguration;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.flags.AbstractFlagTracker;
 import com.denizenscript.denizencore.flags.SavableMapFlagTracker;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
@@ -20,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class PlayerFlagHandler implements Listener {
 
@@ -27,15 +31,15 @@ public class PlayerFlagHandler implements Listener {
 
     public static boolean asyncPreload = false;
 
+    public static boolean saveOnlyWhenWorldSaveOn = false;
+
     public static class CachedPlayerFlag {
 
         public long lastAccessed;
 
         public SavableMapFlagTracker tracker;
 
-        public boolean savingNow = false;
-
-        public boolean loadingNow = false;
+        public AtomicBoolean savingNow = new AtomicBoolean(false), loadingNow = new AtomicBoolean(false);
 
         public boolean shouldExpire() {
             if (cacheTimeoutSeconds == -1) {
@@ -44,7 +48,7 @@ public class PlayerFlagHandler implements Listener {
             if (cacheTimeoutSeconds == 0) {
                 return true;
             }
-            return lastAccessed + (cacheTimeoutSeconds * 1000) < System.currentTimeMillis();
+            return lastAccessed + (cacheTimeoutSeconds * 1000) < CoreUtilities.monotonicMillis();
         }
     }
 
@@ -78,7 +82,7 @@ public class PlayerFlagHandler implements Listener {
         if (secondaryCleanTicker++ > 10) {
             cleanSecondaryCache();
         }
-        long timeNow = System.currentTimeMillis();
+        long timeNow = CoreUtilities.monotonicMillis();
         for (Map.Entry<UUID, CachedPlayerFlag> entry : playerFlagTrackerCache.entrySet()) {
             if (cacheTimeoutSeconds > 0 && entry.getValue().lastAccessed + (cacheTimeoutSeconds * 1000) < timeNow) {
                 continue;
@@ -92,6 +96,9 @@ public class PlayerFlagHandler implements Listener {
     }
 
     public static void saveThenExpire(UUID id, CachedPlayerFlag cache) {
+        if (saveOnlyWhenWorldSaveOn && !Bukkit.getWorlds().get(0).isAutoSave()) {
+            return;
+        }
         BukkitRunnable expireTask = new BukkitRunnable() {
             @Override
             public void run() {
@@ -101,7 +108,7 @@ public class PlayerFlagHandler implements Listener {
                 }
             }
         };
-        if (cache.savingNow || cache.loadingNow) {
+        if (cache.savingNow.get() || cache.loadingNow.get()) {
             new BukkitRunnable() {
                 @Override
                 public void run() {
@@ -119,7 +126,7 @@ public class PlayerFlagHandler implements Listener {
         }
         cache.tracker.modified = false;
         String text = cache.tracker.toString();
-        cache.savingNow = true;
+        cache.savingNow.set(true);
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -129,7 +136,7 @@ public class PlayerFlagHandler implements Listener {
                 catch (Throwable ex) {
                     Debug.echoError(ex);
                 }
-                cache.savingNow = false;
+                cache.savingNow.set(false);
                 expireTask.runTaskLater(Denizen.getInstance(), 1);
             }
         }.runTaskAsynchronously(Denizen.getInstance());
@@ -137,10 +144,10 @@ public class PlayerFlagHandler implements Listener {
 
     public static void loadFlags(UUID id, CachedPlayerFlag cache) {
         try {
-            cache.tracker = SavableMapFlagTracker.loadFlagFile(new File(dataFolder, id.toString()).getPath());
+            cache.tracker = SavableMapFlagTracker.loadFlagFile(new File(dataFolder, id.toString()).getPath(), false);
         }
         finally {
-            cache.loadingNow = false;
+            cache.loadingNow.set(false);
         }
     }
 
@@ -151,9 +158,9 @@ public class PlayerFlagHandler implements Listener {
             if (softRef != null) {
                 cache = softRef.get();
                 if (cache != null) {
-                    cache.lastAccessed = System.currentTimeMillis();
-                    if (Debug.verbose) {
-                        Debug.echoError("Verbose - flag tracker updated for " + id);
+                    cache.lastAccessed = CoreUtilities.monotonicMillis();
+                    if (CoreConfiguration.debugVerbose) {
+                        Debug.echoError("Verbose - (getTrackerFor) flag tracker updated from soft to main for " + id);
                     }
                     playerFlagTrackerCache.put(id, cache);
                     secondaryPlayerFlagTrackerCache.remove(id);
@@ -161,19 +168,28 @@ public class PlayerFlagHandler implements Listener {
                 }
             }
             cache = new CachedPlayerFlag();
-            cache.lastAccessed = System.currentTimeMillis();
-            cache.loadingNow = true;
-            if (Debug.verbose) {
-                Debug.echoError("Verbose - flag tracker updated for " + id);
+            cache.lastAccessed = CoreUtilities.monotonicMillis();
+            cache.loadingNow.set(true);
+            if (CoreConfiguration.debugVerbose) {
+                Debug.echoError("Verbose - (getTrackerFor) flag tracker created for " + id);
             }
             playerFlagTrackerCache.put(id, cache);
             loadFlags(id, cache);
+            if (cache.tracker != null && !CoreConfiguration.skipAllFlagCleanings) {
+                cache.tracker.doTotalClean();
+            }
         }
         else {
-            if (cache.loadingNow) {
-                long start = System.currentTimeMillis();
-                while (cache.loadingNow) {
-                    if (System.currentTimeMillis() - start > 15 * 1000) {
+            if (CoreConfiguration.debugVerbose) {
+                Debug.echoError("Verbose - (getTrackerFor) flag tracker was cached for " + id);
+            }
+            if (cache.loadingNow.get()) {
+                long start = CoreUtilities.monotonicMillis();
+                while (cache.loadingNow.get()) {
+                    if (CoreConfiguration.debugVerbose) {
+                        Debug.echoError("Verbose - (getTrackerFor) flag tracker is loading, so waiting, for " + id + " ... at " + (CoreUtilities.monotonicMillis() - start) + "ms");
+                    }
+                    if (CoreUtilities.monotonicMillis() - start > 15 * 1000) {
                         Debug.echoError("Flag loading timeout, errors may follow");
                         playerFlagTrackerCache.remove(id);
                         return null;
@@ -195,15 +211,18 @@ public class PlayerFlagHandler implements Listener {
         try {
             CachedPlayerFlag cache = playerFlagTrackerCache.get(id);
             if (cache != null) {
+                if (CoreConfiguration.debugVerbose) {
+                    Debug.echoError("Verbose - (loadAsync) flag tracker ignored due to cache for " + id);
+                }
                 return null;
             }
             SoftReference<CachedPlayerFlag> softRef = secondaryPlayerFlagTrackerCache.get(id);
             if (softRef != null) {
                 cache = softRef.get();
                 if (cache != null) {
-                    cache.lastAccessed = System.currentTimeMillis();
-                    if (Debug.verbose) {
-                        Debug.echoError("Verbose - flag tracker updated for " + id);
+                    cache.lastAccessed = CoreUtilities.monotonicMillis();
+                    if (CoreConfiguration.debugVerbose) {
+                        Debug.echoError("Verbose - (loadAsync) flag tracker updated from softref to main for " + id);
                     }
                     playerFlagTrackerCache.put(id, cache);
                     secondaryPlayerFlagTrackerCache.remove(id);
@@ -211,10 +230,10 @@ public class PlayerFlagHandler implements Listener {
                 }
             }
             CachedPlayerFlag newCache = new CachedPlayerFlag();
-            newCache.lastAccessed = System.currentTimeMillis();
-            newCache.loadingNow = true;
-            if (Debug.verbose) {
-                Debug.echoError("Verbose - flag tracker updated for " + id);
+            newCache.lastAccessed = CoreUtilities.monotonicMillis();
+            newCache.loadingNow.set(true);
+            if (CoreConfiguration.debugVerbose) {
+                Debug.echoError("Verbose - (loadAsync) flag tracker created " + id);
             }
             playerFlagTrackerCache.put(id, newCache);
             CompletableFuture future = new CompletableFuture();
@@ -222,6 +241,14 @@ public class PlayerFlagHandler implements Listener {
                 @Override
                 public void run() {
                     loadFlags(id, newCache);
+                    Bukkit.getScheduler().scheduleSyncDelayedTask(Denizen.instance, () -> {
+                        if (CoreConfiguration.debugVerbose) {
+                            Debug.echoError("Verbose - flag tracker async loaded " + id);
+                        }
+                        if (newCache.tracker != null && !CoreConfiguration.skipAllFlagCleanings) {
+                            newCache.tracker.doTotalClean();
+                        }
+                    });
                     future.complete(null);
                 }
             }.runTaskAsynchronously(Denizen.getInstance());
@@ -233,13 +260,14 @@ public class PlayerFlagHandler implements Listener {
         }
     }
 
-    public static void saveAllNow(boolean canSleep) {
+    public static void saveAllNow(boolean lockUntilDone) {
         for (Map.Entry<UUID, CachedPlayerFlag> entry : playerFlagTrackerCache.entrySet()) {
-            if (entry.getValue().tracker.modified) {
-                if (!canSleep && entry.getValue().savingNow || entry.getValue().loadingNow) {
+            CachedPlayerFlag flags = entry.getValue();
+            if (flags.tracker.modified) {
+                if (!lockUntilDone && flags.savingNow.get() || flags.loadingNow.get()) {
                     continue;
                 }
-                while (entry.getValue().savingNow || entry.getValue().loadingNow) {
+                while (flags.savingNow.get() || flags.loadingNow.get()) {
                     try {
                         Thread.sleep(10);
                     }
@@ -247,8 +275,20 @@ public class PlayerFlagHandler implements Listener {
                         Debug.echoError(ex);
                     }
                 }
-                entry.getValue().tracker.modified = false;
-                saveFlags(entry.getKey(), entry.getValue().tracker.toString());
+                flags.savingNow.set(true);
+                flags.tracker.modified = false;
+                final UUID id = entry.getKey();
+                final String data = flags.tracker.toString();
+                Runnable doSave = () -> {
+                    saveFlags(id, data);
+                    flags.savingNow.set(false);
+                };
+                if (lockUntilDone) {
+                    doSave.run();
+                }
+                else {
+                    DenizenCore.runAsync(doSave);
+                }
             }
         }
     }
@@ -260,6 +300,9 @@ public class PlayerFlagHandler implements Listener {
     @EventHandler
     public void onPlayerLogin(AsyncPlayerPreLoginEvent event) {
         if (!asyncPreload) {
+            return;
+        }
+        if (!Denizen.hasTickedOnce) {
             return;
         }
         UUID id = event.getUniqueId();
@@ -276,6 +319,14 @@ public class PlayerFlagHandler implements Listener {
             catch (Throwable ex) {
                 Debug.echoError(ex);
             }
+        }
+    }
+
+    public static void reloadAllFlagsNow() {
+        playerFlagTrackerCache.clear();
+        secondaryPlayerFlagTrackerCache.clear();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            getTrackerFor(player.getUniqueId());
         }
     }
 }

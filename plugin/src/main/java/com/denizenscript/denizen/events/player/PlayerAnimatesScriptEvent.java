@@ -1,6 +1,7 @@
 package com.denizenscript.denizen.events.player;
 
 import com.denizenscript.denizen.objects.EntityTag;
+import com.denizenscript.denizen.objects.ItemTag;
 import com.denizenscript.denizen.utilities.implementation.BukkitScriptEntryData;
 import com.denizenscript.denizen.events.BukkitScriptEvent;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -21,6 +22,8 @@ public class PlayerAnimatesScriptEvent extends BukkitScriptEvent implements List
     //
     // @Location true
     //
+    // @Switch with:<item> to only run if an item being swung by a swing animation matches the item-matcher.
+    //
     // @Cancellable true
     //
     // @Triggers when a player performs an animation.
@@ -33,12 +36,10 @@ public class PlayerAnimatesScriptEvent extends BukkitScriptEvent implements List
     // -->
 
     public PlayerAnimatesScriptEvent() {
-        instance = this;
         registerCouldMatcher("player animates (<'animation'>)");
+        registerSwitches("with");
     }
 
-    public static PlayerAnimatesScriptEvent instance;
-    public String animation;
     public PlayerAnimationEvent event;
 
     @Override
@@ -58,15 +59,23 @@ public class PlayerAnimatesScriptEvent extends BukkitScriptEvent implements List
             return false;
         }
         String ani = path.eventArgLowerAt(2);
-        if (ani.length() > 0 && !ani.equals("in") && !runGenericCheck(ani, animation)) {
+        if (ani.length() > 0 && !ani.equals("in") && !runGenericCheck(ani, event.getAnimationType().name())) {
             return false;
         }
+        String with = path.switches.get("with");
+        if (with != null) {
+            if (event.getAnimationType() == PlayerAnimationType.ARM_SWING) {
+                if (!new ItemTag(event.getPlayer().getEquipment().getItemInMainHand()).tryAdvancedMatcher(with)) {
+                    return false;
+                }
+            }
+            else if (event.getAnimationType() == PlayerAnimationType.OFF_ARM_SWING) {
+                if (!new ItemTag(event.getPlayer().getEquipment().getItemInOffHand()).tryAdvancedMatcher(with)) {
+                    return false;
+                }
+            }
+        }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "PlayerAnimates";
     }
 
     @Override
@@ -76,8 +85,8 @@ public class PlayerAnimatesScriptEvent extends BukkitScriptEvent implements List
 
     @Override
     public ObjectTag getContext(String name) {
-        if (name.equals("animation")) {
-            return new ElementTag(animation);
+        switch (name) {
+            case "animation": return new ElementTag(event.getAnimationType().name());
         }
         return super.getContext(name);
     }
@@ -87,7 +96,6 @@ public class PlayerAnimatesScriptEvent extends BukkitScriptEvent implements List
         if (EntityTag.isNPC(event.getPlayer())) {
             return;
         }
-        animation = event.getAnimationType().name();
         this.event = event;
         fire(event);
     }

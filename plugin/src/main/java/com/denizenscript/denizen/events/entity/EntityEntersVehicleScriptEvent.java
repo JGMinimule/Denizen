@@ -17,11 +17,7 @@ public class EntityEntersVehicleScriptEvent extends BukkitScriptEvent implements
     // <--[event]
     // @Events
     // entity enters vehicle
-    // entity enters <vehicle>
-    // <entity> enters vehicle
-    // <entity> enters <vehicle>
-    //
-    // @Regex ^on [^\s]+ enters [^\s]+$
+    // <entity> enters <entity>
     //
     // @Group Entity
     //
@@ -42,28 +38,22 @@ public class EntityEntersVehicleScriptEvent extends BukkitScriptEvent implements
     // -->
 
     public EntityEntersVehicleScriptEvent() {
-        instance = this;
+        registerCouldMatcher("<entity> enters <entity>");
     }
 
-    public static EntityEntersVehicleScriptEvent instance;
     public EntityTag vehicle;
     public EntityTag entity;
+    // TODO: 1.20.6: EntityMountEvent changed packages, might need to register in version-specific modules? or reflection?
     public EntityMountEvent event;
 
     public static HashSet<String> notRelevantEnterables = new HashSet<>(Arrays.asList("notable", "cuboid", "biome", "bed", "portal"));
 
     @Override
     public boolean couldMatch(ScriptPath path) {
-        if (!path.eventArgLowerAt(1).equals("enters")) {
+        if (!super.couldMatch(path)) {
             return false;
         }
         if (notRelevantEnterables.contains(path.eventArgLowerAt(2))) {
-            return false;
-        }
-        if (!couldMatchEntity(path.eventArgLowerAt(0))) {
-            return false;
-        }
-        if (!couldMatchEntity(path.eventArgLowerAt(2))) {
             return false;
         }
         return true;
@@ -71,19 +61,17 @@ public class EntityEntersVehicleScriptEvent extends BukkitScriptEvent implements
 
     @Override
     public boolean matches(ScriptPath path) {
-        if (!tryEntity(entity, path.eventArgLowerAt(0))
-                || !tryEntity(vehicle, path.eventArgLowerAt(2))) {
+        if (!path.tryArgObject(0, entity)) {
+            return false;
+        }
+        String vehicleLabel = path.eventArgLowerAt(2);
+        if (!vehicleLabel.equals("vehicle") && !vehicle.tryAdvancedMatcher(vehicleLabel)) {
             return false;
         }
         if (!runInCheck(path, vehicle.getLocation())) {
             return false;
         }
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "EntityEntersVehicle";
     }
 
     @Override
@@ -94,10 +82,10 @@ public class EntityEntersVehicleScriptEvent extends BukkitScriptEvent implements
     @Override
     public ObjectTag getContext(String name) {
         if (name.equals("vehicle")) {
-            return vehicle;
+            return vehicle.getDenizenObject();
         }
         else if (name.equals("entity")) {
-            return entity;
+            return entity.getDenizenObject();
         }
         return super.getContext(name);
     }

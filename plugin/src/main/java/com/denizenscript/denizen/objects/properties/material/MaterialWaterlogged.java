@@ -29,13 +29,13 @@ public class MaterialWaterlogged implements Property {
             "waterlogged"
     };
 
-    private MaterialWaterlogged(MaterialTag _material) {
+    public MaterialWaterlogged(MaterialTag _material) {
         material = _material;
     }
 
     MaterialTag material;
 
-    public static void registerTags() {
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.waterlogged>
@@ -45,7 +45,7 @@ public class MaterialWaterlogged implements Property {
         // @description
         // Returns whether this block is waterlogged or not.
         // -->
-        PropertyParser.<MaterialWaterlogged, ElementTag>registerStaticTag(ElementTag.class, "waterlogged", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialWaterlogged.class, ElementTag.class, "waterlogged", (attribute, material) -> {
             return new ElementTag(material.isWaterlogged());
         });
     }

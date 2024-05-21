@@ -2,7 +2,7 @@ package com.denizenscript.denizen.scripts.commands.player;
 
 import com.denizenscript.denizen.tags.BukkitTagContext;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizen.nms.NMSHandler;
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsException;
@@ -130,7 +130,7 @@ public class TitleCommand extends AbstractCommand {
                     personalTitle = TagManager.tag(personalTitle, context);
                     personalSubtitle = TagManager.tag(personalSubtitle, context);
                 }
-                NMSHandler.getPacketHelper().showTitle(player.getPlayerEntity(), personalTitle, personalSubtitle, fade_in.getTicksAsInt(), stay.getTicksAsInt(), fade_out.getTicksAsInt());
+                NMSHandler.packetHelper.showTitle(player.getPlayerEntity(), personalTitle, personalSubtitle, fade_in.getTicksAsInt(), stay.getTicksAsInt(), fade_out.getTicksAsInt());
             }
             else {
                 Debug.echoError("Sent title to non-existent player!?");

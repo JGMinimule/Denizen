@@ -16,7 +16,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 public class AdjustBlockCommand extends AbstractCommand {
 
@@ -60,10 +59,8 @@ public class AdjustBlockCommand extends AbstractCommand {
     // -->
 
     @Override
-    public void addCustomTabCompletions(String arg, Consumer<String> addOne) {
-        for (String mech : PropertyParser.propertiesByClass.get(MaterialTag.class).propertiesByMechanism.keySet()) {
-            addOne.accept(mech);
-        }
+    public void addCustomTabCompletions(TabCompletionsBuilder tab) {
+        tab.add(PropertyParser.propertiesByClass.get(MaterialTag.class).propertiesByMechanism.keySet());
     }
 
     @Override
@@ -126,12 +123,12 @@ public class AdjustBlockCommand extends AbstractCommand {
     }
 
     public static void applyPhysicsAt(Location location) {
-        NMSHandler.getBlockHelper().applyPhysics(location);
-        NMSHandler.getBlockHelper().applyPhysics(location.clone().add(1, 0, 0));
-        NMSHandler.getBlockHelper().applyPhysics(location.clone().add(-1, 0, 0));
-        NMSHandler.getBlockHelper().applyPhysics(location.clone().add(0, 0, 1));
-        NMSHandler.getBlockHelper().applyPhysics(location.clone().add(0, 0, -1));
-        NMSHandler.getBlockHelper().applyPhysics(location.clone().add(0, 1, 0));
-        NMSHandler.getBlockHelper().applyPhysics(location.clone().add(0, -1, 0));
+        NMSHandler.blockHelper.applyPhysics(location);
+        NMSHandler.blockHelper.applyPhysics(location.clone().add(1, 0, 0));
+        NMSHandler.blockHelper.applyPhysics(location.clone().add(-1, 0, 0));
+        NMSHandler.blockHelper.applyPhysics(location.clone().add(0, 0, 1));
+        NMSHandler.blockHelper.applyPhysics(location.clone().add(0, 0, -1));
+        NMSHandler.blockHelper.applyPhysics(location.clone().add(0, 1, 0));
+        NMSHandler.blockHelper.applyPhysics(location.clone().add(0, -1, 0));
     }
 }

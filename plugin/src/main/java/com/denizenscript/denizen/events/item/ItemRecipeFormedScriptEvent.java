@@ -14,16 +14,14 @@ import org.bukkit.Material;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
-import org.bukkit.inventory.ItemStack;
+
+import java.util.Arrays;
 
 public class ItemRecipeFormedScriptEvent extends BukkitScriptEvent implements Listener {
 
     // <--[event]
     // @Events
-    // item recipe formed
     // <item> recipe formed
-    //
-    // @Regex ^on [^\s]+ recipe formed$
     //
     // @Group Item
     //
@@ -35,6 +33,7 @@ public class ItemRecipeFormedScriptEvent extends BukkitScriptEvent implements Li
     // <context.item> returns the ItemTag to be formed in the result slot.
     // <context.recipe> returns a ListTag of ItemTags in the recipe.
     // <context.recipe_id> returns the ID of the recipe that was formed.
+    // <context.is_repair> returns an ElementTag(Boolean) of whether the event was triggered by a tool repair operation rather than a crafting recipe.
     //
     // @Determine
     // ItemTag to change the item that is formed in the result slot.
@@ -44,54 +43,27 @@ public class ItemRecipeFormedScriptEvent extends BukkitScriptEvent implements Li
     // -->
 
     public ItemRecipeFormedScriptEvent() {
-        instance = this;
+        registerCouldMatcher("<item> recipe formed");
+        this.<ItemRecipeFormedScriptEvent, ObjectTag>registerOptionalDetermination(null, ObjectTag.class, (evt, context, determination) -> {
+            if (determination.canBeType(ItemTag.class)) {
+                ItemTag result = determination.asType(ItemTag.class, context);
+                evt.event.getInventory().setResult(result.getItemStack());
+                return true;
+            }
+            return false;
+        });
     }
 
-    public static ItemRecipeFormedScriptEvent instance;
 
     public PrepareItemCraftEvent event;
     public ItemTag result;
 
     @Override
-    public boolean couldMatch(ScriptPath path) {
-        if (path.eventArgLowerAt(1).equals("crafted")) {
-            return true;
-        }
-        if (!path.eventArgsLowEqualStartingAt(1, "recipe", "formed")) {
-            return false;
-        }
-        if (!couldMatchItem(path.eventArgLowerAt(0))) {
-            return false;
-        }
-        return true;
-    }
-
-    @Override
     public boolean matches(ScriptPath path) {
-        String eItem = path.eventArgLowerAt(0);
-
-        if (!tryItem(result, eItem)) {
+        if (!path.tryArgObject(0, result)) {
             return false;
         }
-
         return super.matches(path);
-    }
-
-    @Override
-    public String getName() {
-        return "ItemRecipeFormed";
-    }
-
-    @Override
-    public boolean applyDetermination(ScriptPath path, ObjectTag determinationObj) {
-        if (determinationObj.canBeType(ItemTag.class)) {
-            ItemTag result = determinationObj.asType(ItemTag.class, getTagContext(path));
-            event.getInventory().setResult(result.getItemStack());
-            return true;
-        }
-        else {
-            return super.applyDetermination(path, determinationObj);
-        }
     }
 
     @Override
@@ -101,28 +73,14 @@ public class ItemRecipeFormedScriptEvent extends BukkitScriptEvent implements Li
 
     @Override
     public ObjectTag getContext(String name) {
-        switch (name) {
-            case "item": return result;
-            case "inventory": return InventoryTag.mirrorBukkitInventory(event.getInventory());
-            case "recipe": {
-                ListTag recipe = new ListTag();
-                for (ItemStack itemStack : event.getInventory().getMatrix()) {
-                    if (itemStack != null && itemStack.getType() != Material.AIR) {
-                        recipe.addObject(new ItemTag(itemStack));
-                    }
-                    else {
-                        recipe.addObject(new ItemTag(Material.AIR));
-                    }
-                }
-                return recipe;
-            }
-            case "recipe_id":
-                if (event.getRecipe() instanceof Keyed) {
-                    return new ElementTag(((Keyed) event.getRecipe()).getKey().toString());
-                }
-                break;
-        }
-        return super.getContext(name);
+        return switch (name) {
+            case "item" -> result;
+            case "inventory" -> InventoryTag.mirrorBukkitInventory(event.getInventory());
+            case "recipe" -> new ListTag(Arrays.asList(event.getInventory().getMatrix()), ItemTag::new);
+            case "recipe_id" -> event.getRecipe() instanceof Keyed keyed ? new ElementTag(keyed.getKey().toString(), true): null;
+            case "is_repair" -> new ElementTag(event.isRepair());
+            default -> super.getContext(name);
+        };
     }
 
     @Override

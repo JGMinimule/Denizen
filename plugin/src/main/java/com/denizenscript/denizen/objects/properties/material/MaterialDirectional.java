@@ -1,9 +1,7 @@
 package com.denizenscript.denizen.objects.properties.material;
 
-import com.denizenscript.denizen.nms.NMSHandler;
-import com.denizenscript.denizen.nms.NMSVersion;
 import com.denizenscript.denizen.objects.MaterialTag;
-import com.denizenscript.denizen.utilities.debugging.Debug;
+import com.denizenscript.denizencore.utilities.debugging.Debug;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.Mechanism;
 import com.denizenscript.denizencore.objects.core.ListTag;
@@ -14,6 +12,7 @@ import org.bukkit.Axis;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.*;
 import org.bukkit.block.data.type.PointedDripstone;
+import org.bukkit.block.data.type.Jigsaw;
 import org.bukkit.util.Vector;
 
 public class MaterialDirectional implements Property {
@@ -27,11 +26,12 @@ public class MaterialDirectional implements Property {
             return false;
         }
         BlockData data = mat.getModernData();
-        if (!(data instanceof Directional || data instanceof Orientable || data instanceof Rotatable || data instanceof Rail
-                || (NMSHandler.getVersion().isAtLeast(NMSVersion.v1_17) && data instanceof PointedDripstone))) {
-            return false;
-        }
-        return true;
+        return data instanceof Directional
+                || data instanceof Orientable
+                || data instanceof Rotatable
+                || data instanceof Rail
+                || data instanceof Jigsaw
+                || data instanceof PointedDripstone;
     }
 
     public static MaterialDirectional getFrom(ObjectTag _material) {
@@ -47,13 +47,19 @@ public class MaterialDirectional implements Property {
             "direction"
     };
 
-    private MaterialDirectional(MaterialTag _material) {
+    public MaterialDirectional(MaterialTag _material) {
         material = _material;
     }
 
-    MaterialTag material;
+    public MaterialTag material;
 
-    public static void registerTags() {
+    public static BlockFace[] rotatableValidFaces = new BlockFace[] {
+            BlockFace.SOUTH, BlockFace.SOUTH_SOUTH_WEST, BlockFace.SOUTH_WEST, BlockFace.WEST_SOUTH_WEST, BlockFace.WEST,
+            BlockFace.WEST_NORTH_WEST, BlockFace.NORTH_WEST, BlockFace.NORTH_NORTH_WEST, BlockFace.NORTH, BlockFace.NORTH_NORTH_EAST,
+            BlockFace.NORTH_EAST, BlockFace.EAST_NORTH_EAST, BlockFace.EAST, BlockFace.EAST_SOUTH_EAST, BlockFace.SOUTH_EAST, BlockFace.SOUTH_SOUTH_EAST
+    };
+
+    public static void register() {
 
         // <--[tag]
         // @attribute <MaterialTag.valid_directions>
@@ -64,7 +70,7 @@ public class MaterialDirectional implements Property {
         // Returns a list of directions that are valid for a directional material.
         // See also <@link tag MaterialTag.direction>
         // -->
-        PropertyParser.<MaterialDirectional, ListTag>registerStaticTag(ListTag.class, "valid_directions", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialDirectional.class, ListTag.class, "valid_directions", (attribute, material) -> {
             ListTag toReturn = new ListTag();
             if (material.isOrientable()) {
                 for (Axis axis : material.getOrientable().getAxes()) {
@@ -81,12 +87,22 @@ public class MaterialDirectional implements Property {
                     toReturn.add(face.name());
                 }
             }
+            else if (material.isRotatable()) {
+                for (BlockFace face : rotatableValidFaces) {
+                    toReturn.add(face.name());
+                }
+            }
             else if (material.isDripstone()) {
                 for (BlockFace face : material.getDripstone().getVerticalDirections()) {
                     toReturn.add(face.name());
                 }
             }
-            else { // applies to rotatable
+            else if (material.isJigsaw()) {
+                for (Jigsaw.Orientation orientation : Jigsaw.Orientation.values()) {
+                    toReturn.add(orientation.name());
+                }
+            }
+            else { // Unreachable
                 return null;
             }
             return toReturn;
@@ -99,9 +115,10 @@ public class MaterialDirectional implements Property {
         // @group properties
         // @description
         // Returns the current facing direction for a directional material (like a door or a bed).
+        // This includes materials that Spigot classifies as "directional", "orientable", or "rotatable", as well as rails, dripstone, and jigsaw blocks.
         // Output is a direction name like "NORTH", or an axis like "X", or a rail direction like "ASCENDING_NORTH".
         // -->
-        PropertyParser.<MaterialDirectional, ElementTag>registerStaticTag(ElementTag.class, "direction", (attribute, material) -> {
+        PropertyParser.registerStaticTag(MaterialDirectional.class, ElementTag.class, "direction", (attribute, material) -> {
             return new ElementTag(material.getDirectionName());
         });
     }
@@ -151,6 +168,30 @@ public class MaterialDirectional implements Property {
         else if (isDripstone()) {
             return getDripstone().getVerticalDirection().getDirection();
         }
+        else if (isJigsaw()) {
+            switch (getJigsaw().getOrientation()) {
+                case DOWN_EAST:
+                    return new Vector(1, -1, 0);
+                case DOWN_NORTH:
+                    return new Vector(0, -1, -1);
+                case DOWN_SOUTH:
+                    return new Vector(0, -1, 1);
+                case DOWN_WEST:
+                    return new Vector(-1, -1, 0);
+                case EAST_UP:
+                case UP_EAST:
+                    return new Vector(1, 1, 0);
+                case NORTH_UP:
+                case UP_NORTH:
+                    return new Vector(0, 1, -1);
+                case SOUTH_UP:
+                case UP_SOUTH:
+                    return new Vector(0, 1, 1);
+                case WEST_UP:
+                case UP_WEST:
+                    return new Vector(-1, 1, 0);
+            }
+        }
         return null; // Unreachable.
     }
 
@@ -170,6 +211,9 @@ public class MaterialDirectional implements Property {
         else if (isDripstone()) {
             return getDripstone().getVerticalDirection().name();
         }
+        else if (isJigsaw()) {
+            return getJigsaw().getOrientation().name();
+        }
         return null; // Unreachable
     }
 
@@ -186,11 +230,15 @@ public class MaterialDirectional implements Property {
     }
 
     public boolean isDripstone() {
-        return NMSHandler.getVersion().isAtLeast(NMSVersion.v1_17) && material.getModernData() instanceof PointedDripstone;
+        return material.getModernData() instanceof PointedDripstone;
     }
 
     public boolean isRail() {
         return material.getModernData() instanceof Rail;
+    }
+
+    public boolean isJigsaw() {
+        return material.getModernData() instanceof Jigsaw;
     }
 
     public Orientable getOrientable() {
@@ -205,6 +253,10 @@ public class MaterialDirectional implements Property {
         return (Directional) material.getModernData();
     }
 
+    public Jigsaw getJigsaw() {
+        return (Jigsaw) material.getModernData();
+    }
+
     public PointedDripstone getDripstone() {
         return (PointedDripstone) material.getModernData();
     }
@@ -217,10 +269,10 @@ public class MaterialDirectional implements Property {
         if (isOrientable()) {
             Axis axis;
             Vector vec = face.getDirection();
-            if (vec.getX() >= 0.5) {
+            if (Math.abs(vec.getX()) >= 0.5) {
                 axis = Axis.X;
             }
-            else if (vec.getY() >= 0.5) {
+            else if (Math.abs(vec.getY()) >= 0.5) {
                 axis = Axis.Y;
             }
             else {
@@ -283,13 +335,16 @@ public class MaterialDirectional implements Property {
         // <MaterialTag.valid_directions>
         // -->
         if (mechanism.matches("direction")) {
-            if (isOrientable() && mechanism.requireEnum(false, Axis.values())) {
+            if (isOrientable() && mechanism.requireEnum(Axis.class)) {
                 getOrientable().setAxis(Axis.valueOf(mechanism.getValue().asString().toUpperCase()));
             }
-            else if (isRail() && mechanism.requireEnum(false, Rail.Shape.values())) {
+            else if (isRail() && mechanism.requireEnum(Rail.Shape.class)) {
                 getRail().setShape(Rail.Shape.valueOf(mechanism.getValue().asString().toUpperCase()));
             }
-            else if (mechanism.requireEnum(false, BlockFace.values())) {
+            else if (isJigsaw() && mechanism.requireEnum(Jigsaw.Orientation.class)) {
+                getJigsaw().setOrientation(Jigsaw.Orientation.valueOf(mechanism.getValue().asString().toUpperCase()));
+            }
+            else if (!isJigsaw() && mechanism.requireEnum(BlockFace.class)) {
                 setFacing(BlockFace.valueOf(mechanism.getValue().asString().toUpperCase()));
             }
             else {

@@ -33,7 +33,7 @@ public class EntityPainting implements Property {
             "painting"
     };
 
-    private EntityPainting(EntityTag entity) {
+    public EntityPainting(EntityTag entity) {
         painting = entity;
     }
 
@@ -92,7 +92,7 @@ public class EntityPainting implements Property {
         // See also <@link tag server.art_types>.
         // -->
         if (attribute.startsWith("painting")) {
-            return new ElementTag(((Painting) painting.getBukkitEntity()).getArt().name())
+            return new ElementTag(((Painting) painting.getBukkitEntity()).getArt())
                     .getObjectAttribute(attribute.fulfill(1));
         }
 
@@ -112,7 +112,7 @@ public class EntityPainting implements Property {
         // <EntityTag.painting>
         // <server.art_types>
         // -->
-        if (mechanism.matches("painting") && mechanism.requireEnum(false, Art.values())) {
+        if (mechanism.matches("painting") && mechanism.requireEnum(Art.class)) {
             Art art = Art.valueOf(mechanism.getValue().asString().toUpperCase());
             if (((Painting) painting.getBukkitEntity()).getArt() != art) {
                 ((Painting) painting.getBukkitEntity()).setArt(art, true);
